@@ -19,6 +19,20 @@ You can install the development version of lazymatrix from
 pak::pak("vsegersall/lazymatrix")
 ```
 
+Note: Once the package is accepted to CRAN, you can also install it via:
+
+``` r
+
+install.packages("lazymatrix")
+#> Installing package into 'C:/Users/vikto/AppData/Local/Temp/Rtmp4yD82T/temp_libpath969c781e6602'
+#> (as 'lib' is unspecified)
+#> Warning: package 'lazymatrix' is not available for this version of R
+#> 
+#> A version of this package for your version of R might be available elsewhere,
+#> see the ideas at
+#> https://cran.r-project.org/doc/manuals/r-patched/R-admin.html#Installing-packages
+```
+
 ## Example
 
 This is a basic example which shows you how to solve a common problem:
@@ -26,6 +40,11 @@ This is a basic example which shows you how to solve a common problem:
 ``` r
 
 library(lazymatrix)
+#> 
+#> Attaching package: 'lazymatrix'
+#> The following object is masked from 'package:base':
+#> 
+#>     norm
 set.seed(123)
 sparse_matrix <- Matrix::Matrix(0, 5, 3)
 sparse_matrix[sample(length(sparse_matrix), 5)] <- rnorm(5)
@@ -63,10 +82,10 @@ lazy_matrix %*% b
 #> [5,]  1.896092
 ```
 
-## Contribution
+## Development Status
 
-As this is part of a university project and the fact that the project
-does not have a stable version yet, the project is closed for
-contributions. We are however happy to discuss ideas for the future so
-feel free to contact the authors or make an issue for functionalities
-you would like to see within `lazymatrix`.
+This package is currently in active development. While the core
+functionality is stable, the API may evolve as the project matures.
+Contributions are currently closed while the package is prepared for its
+first CRAN release. However, bug reports and feature requests are
+welcome via the GitHub Issue Tracker.

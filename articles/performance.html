@@ -5,12 +5,12 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Performance of LazyMatrix • lazymatrix</title>
+<title>performance • lazymatrix</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Performance of LazyMatrix">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="performance">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">lazymatrix</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -34,10 +34,11 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started with LazyMatrix</a></li>
-    <li><a class="dropdown-item" href="../articles/performance.html">Performance of LazyMatrix</a></li>
+    <li><a class="dropdown-item" href="../articles/performance.html">performance</a></li>
     <li><a class="dropdown-item" href="../articles/use-cases.html">Use Cases for LazyMatrix: Statistical Algorithms</a></li>
   </ul>
 </li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
 <li class="nav-item"><form class="form-inline" role="search">
@@ -56,7 +57,7 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Performance of LazyMatrix</h1>
+      <h1>performance</h1>
             
       
 
@@ -65,362 +66,442 @@
 
     
     
-<div class="section level2">
-<h2 id="why-lazy-computation">Why Lazy Computation?<a class="anchor" aria-label="anchor" href="#why-lazy-computation"></a>
-</h2>
-<p>A legitimate question when implementing a new framework in a
-programming language is how well it performs compared to already
-existing solutions. The goal here is to show that using
-<code>lazymatrix</code> improves performance and is especially effective
-the larger and sparser the original matrix is. We compare the proposed
-method aganinst the existing solution such as materializing the sparse
-matrix with <code><a href="https://rdrr.io/r/base/scale.html" class="external-link">base::scale()</a></code> and we will note that this
-solution is not scaleable when sparsity and dimensionality is high
-enough. Benchmarking is done using the package <code>bench</code>.</p>
-</div>
-<div class="section level2">
-<h2 id="parametrized-benchmark">Parametrized Benchmark<a class="anchor" aria-label="anchor" href="#parametrized-benchmark"></a>
-</h2>
-<p>We start by defining a function which allows us to create sparse
-matrices with different dimensions and sparsity, parameters being
-<code>n</code> as the number of rows, <code>p</code> as the number of
-columns and <code>sparsity</code> as the density of non-zero values.
-These values are generated from a standard normal distribution.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://vsegersall.github.io/lazymatrix/">lazymatrix</a></span><span class="op">)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Attaching package: 'lazymatrix'</span></span>
 <span><span class="co">#&gt; The following object is masked from 'package:base':</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;     norm</span></span>
-<span><span class="va">create_sparsematrix</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">n</span>, <span class="va">p</span>, <span class="va">sparsity</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">n_nonzero</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">sparsity</span> <span class="op">*</span> <span class="va">n</span> <span class="op">*</span> <span class="va">p</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">i</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">n</span>, <span class="va">n_nonzero</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span>  <span class="va">j</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">p</span>, <span class="va">n_nonzero</span>, replace <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="va">pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>i <span class="op">=</span> <span class="va">i</span>, j <span class="op">=</span> <span class="va">j</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">i</span> <span class="op">&lt;-</span> <span class="va">pairs</span><span class="op">$</span><span class="va">i</span></span>
-<span>  <span class="va">j</span> <span class="op">&lt;-</span> <span class="va">pairs</span><span class="op">$</span><span class="va">j</span></span>
-<span></span>
-<span>  <span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">i</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">A</span> <span class="op">&lt;-</span> <span class="fu">Matrix</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/sparseMatrix.html" class="external-link">sparseMatrix</a></span><span class="op">(</span>i <span class="op">=</span> <span class="va">i</span>, j <span class="op">=</span> <span class="va">j</span>, x <span class="op">=</span> <span class="va">x</span>, dims <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">n</span>, <span class="va">p</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">A</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-</div>
+<span><span class="co">#&gt;     norm</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="benchmarking-lazy-multiplication">Benchmarking: Lazy Multiplication<a class="anchor" aria-label="anchor" href="#benchmarking-lazy-multiplication"></a>
+<h2 id="performance-of-lazymatrix">Performance of <code>lazymatrix</code><a class="anchor" aria-label="anchor" href="#performance-of-lazymatrix"></a>
 </h2>
-<p>We start by comparing the matrix multiplication method
-<code>%*%</code>. We define a function which takes in the sparse matrix
-as the first argument, computes the scaled dense version <code>A</code>
-and defines the <code>LazyMatrix</code>-object <code>X</code> of the
-same matrix. Then, we use <code><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">bench::mark()</a></code> to mesaure the
-performance of computing the product regularly or lazily.</p>
+<p>In this vignette, we discuss the main reason for lazy computation,
+namely the increase in performance. Assume <code>X</code> as the sparse
+data matrix containing fetures, <code>lazy_X</code> the
+<code>LazyMatrix</code> object and <code>A</code> is the normalized
+version obtained using <code>base::scale(X)</code>. We use the package
+<code>bench</code> to microbenchmark the computation time of
+matrix-vector multiplication, hence comparing the operation
+<code>lazy_X%*%b</code> against <code>A%*%b</code>. Thereafter, we look
+at memory allocation, where we compare storing the
+<code>LazyMatrix</code> object and the normalized object.</p>
+<div class="section level3">
+<h3 id="helper-functions">Helper Functions<a class="anchor" aria-label="anchor" href="#helper-functions"></a>
+</h3>
+<p>For these experiment, we need a set of helper functions. As the main
+use-case is working with sparse data, we define a helper forgenerating
+sparse matrices <code>create_sparse_matrix_col()</code> which allows for
+adjusting the parameter <code>sparsity_col</code> so the proportion of
+elements that are non-zero within each column. For simplicity, this
+parameter will be called
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>,
+Then, we use the helper <code>bench_multiply()</code> where we define
+the <code>LazyMatrix</code> object for the input matrix, normalize it
+and then we benchmark matrix-vector multiplication. The function
+<code>benchmark_memory()</code> is written in a similar way, though it
+uses <code><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">utils::object.size()</a></code> to measure memory allocation of
+an object, the lazy and the dense. Lastly, two helper functions which
+are used for using consistent themes for <code>ggplot2</code> throughout
+the vignette.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bench.r-lib.org/" class="external-link">bench</a></span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://Matrix.R-forge.R-project.org" class="external-link">Matrix</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://bench.r-lib.org/" class="external-link">bench</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dplyr.tidyverse.org" class="external-link">dplyr</a></span><span class="op">)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Attaching package: 'dplyr'</span></span>
+<span><span class="co">#&gt; The following objects are masked from 'package:stats':</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     filter, lag</span></span>
+<span><span class="co">#&gt; The following objects are masked from 'package:base':</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt;     intersect, setdiff, setequal, union</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Sparse matrix generator</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">create_sparsematrix_col</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">n</span>, <span class="va">p</span>, <span class="va">sparsity_col</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="co"># sparsity_col = fraction of non-zeros PER COLUMN</span></span>
+<span>  <span class="co"># So each column has round(sparsity_col * n) non-zero entries</span></span>
+<span>  <span class="va">n_nonzero_col</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">sparsity_col</span> <span class="op">*</span> <span class="va">n</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">i_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="va">j_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">col</span> <span class="kw">in</span> <span class="fl">1</span><span class="op">:</span><span class="va">p</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="va">i_col</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="va">n</span>, <span class="va">n_nonzero_col</span>, replace <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span>    <span class="va">i_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">i_all</span>, <span class="va">i_col</span><span class="op">)</span></span>
+<span>    <span class="va">j_all</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">j_all</span>, <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="va">col</span>, <span class="va">n_nonzero_col</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span></span>
+<span>  <span class="va">pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>i <span class="op">=</span> <span class="va">i_all</span>, j <span class="op">=</span> <span class="va">j_all</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="va">x</span>     <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">pairs</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu">Matrix</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/Matrix/man/sparseMatrix.html" class="external-link">sparseMatrix</a></span><span class="op">(</span></span>
+<span>    i    <span class="op">=</span> <span class="va">pairs</span><span class="op">$</span><span class="va">i</span>,</span>
+<span>    j    <span class="op">=</span> <span class="va">pairs</span><span class="op">$</span><span class="va">j</span>,</span>
+<span>    x    <span class="op">=</span> <span class="va">x</span>,</span>
+<span>    dims <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">n</span>, <span class="va">p</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Benchmark function Computation Time</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
 <span><span class="va">bench_multiply</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">sparse_matrix</span>, <span class="va">b</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">A</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="va">sparse_matrix</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span>  <span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/LazyMatrix.html">LazyMatrix</a></span><span class="op">(</span><span class="va">sparse_matrix</span>, <span class="st">"sd"</span>, <span class="st">"mean"</span><span class="op">)</span></span>
-<span>  <span class="va">bm</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
-<span>    dense_product <span class="op">=</span> <span class="op">{</span></span>
-<span>      <span class="va">A</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">b</span></span>
-<span>    <span class="op">}</span>,</span>
-<span>    lazy_product <span class="op">=</span> <span class="op">{</span></span>
-<span>      <span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">b</span></span>
-<span>    <span class="op">}</span>,</span>
-<span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
+<span>    dense_product <span class="op">=</span> <span class="op">{</span> <span class="va">A</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">b</span> <span class="op">}</span>,</span>
+<span>    lazy_product  <span class="op">=</span> <span class="op">{</span> <span class="va">X</span> <span class="op"><a href="https://rdrr.io/r/base/matmult.html" class="external-link">%*%</a></span> <span class="va">b</span> <span class="op">}</span>,</span>
+<span>    check         <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>    min_iterations <span class="op">=</span> <span class="fl">20</span></span>
 <span>  <span class="op">)</span></span>
-<span>  <span class="va">bm</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Benchmark function for Memory Allocation</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span></span>
+<span><span class="va">benchmark_memory</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">M</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="va">dense_size</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="va">A_dense</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/scale.html" class="external-link">scale</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">M</span><span class="op">)</span>, center <span class="op">=</span> <span class="cn">TRUE</span>, scale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span>    <span class="va">mem</span>     <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu">utils</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">object.size</a></span><span class="op">(</span><span class="va">A_dense</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">A_dense</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"Dense"</span>, success <span class="op">=</span> <span class="cn">TRUE</span>, mem_MB <span class="op">=</span> <span class="va">mem</span><span class="op">)</span></span>
+<span>  <span class="op">}</span>, error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Dense error: "</span>, <span class="va">e</span><span class="op">$</span><span class="va">message</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"Dense"</span>, success <span class="op">=</span> <span class="cn">FALSE</span>, mem_MB <span class="op">=</span> <span class="cn">NA</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="va">lazy_size</span> <span class="op">&lt;-</span> <span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="op">{</span></span>
+<span>    <span class="va">X_lazy</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/LazyMatrix.html">LazyMatrix</a></span><span class="op">(</span><span class="va">M</span>, <span class="st">"sd"</span>, <span class="st">"mean"</span><span class="op">)</span></span>
+<span>    <span class="va">mem</span>    <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="fu">utils</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/utils/object.size.html" class="external-link">object.size</a></span><span class="op">(</span><span class="va">X_lazy</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">X_lazy</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"Lazy"</span>, success <span class="op">=</span> <span class="cn">TRUE</span>, mem_MB <span class="op">=</span> <span class="va">mem</span><span class="op">)</span></span>
+<span>  <span class="op">}</span>, error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/message.html" class="external-link">message</a></span><span class="op">(</span><span class="st">"Lazy error: "</span>, <span class="va">e</span><span class="op">$</span><span class="va">message</span><span class="op">)</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>method <span class="op">=</span> <span class="st">"Lazy"</span>, success <span class="op">=</span> <span class="cn">FALSE</span>, mem_MB <span class="op">=</span> <span class="cn">NA</span><span class="op">)</span></span>
+<span>  <span class="op">}</span><span class="op">)</span></span>
+<span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">bind_rows</a></span><span class="op">(</span><span class="va">dense_size</span>, <span class="va">lazy_size</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Plot Theme used throughout the thesis for ggplot2</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">thesis_theme</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">base_size</span> <span class="op">=</span> <span class="fl">12</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
+<span>    panel.background <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_rect</a></span><span class="op">(</span>fill <span class="op">=</span> <span class="st">"white"</span>, colour <span class="op">=</span> <span class="cn">NA</span><span class="op">)</span>,</span>
+<span>    plot.background  <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_rect</a></span><span class="op">(</span>fill <span class="op">=</span> <span class="st">"white"</span>, colour <span class="op">=</span> <span class="cn">NA</span><span class="op">)</span>,</span>
+<span>    panel.grid.major <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_line</a></span><span class="op">(</span>colour <span class="op">=</span> <span class="st">"grey85"</span><span class="op">)</span>,</span>
+<span>    panel.grid.minor <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_line</a></span><span class="op">(</span>colour <span class="op">=</span> <span class="st">"grey92"</span><span class="op">)</span>,</span>
+<span>    panel.border     <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_rect</a></span><span class="op">(</span>colour <span class="op">=</span> <span class="st">"black"</span>, fill <span class="op">=</span> <span class="cn">NA</span>, linewidth <span class="op">=</span> <span class="fl">0.8</span><span class="op">)</span>,</span>
+<span>    text             <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="va">base_size</span><span class="op">)</span>,</span>
+<span>    axis.text        <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">1.01</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    axis.text.x      <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">1.01</span><span class="op">)</span>, angle <span class="op">=</span> <span class="fl">45</span>, hjust <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Plot Theme used throughout vignettes for ggplot2</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span></span>
+<span><span class="va">vignette_theme</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">base_size</span> <span class="op">=</span> <span class="fl">12</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span>base_size <span class="op">=</span> <span class="va">base_size</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span></span>
+<span>    <span class="co"># Subtle background strip for facet labels</span></span>
+<span>    strip.background  <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_rect</a></span><span class="op">(</span>fill <span class="op">=</span> <span class="st">"#f0f0f0"</span>, colour <span class="op">=</span> <span class="cn">NA</span><span class="op">)</span>,</span>
+<span>    strip.text        <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>face <span class="op">=</span> <span class="st">"bold"</span>, size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.95</span><span class="op">)</span><span class="op">)</span>,</span>
+<span></span>
+<span>    <span class="co"># Thin, unobtrusive grid</span></span>
+<span>    panel.grid.major  <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_line</a></span><span class="op">(</span>colour <span class="op">=</span> <span class="st">"grey88"</span>, linewidth <span class="op">=</span> <span class="fl">0.4</span><span class="op">)</span>,</span>
+<span>    panel.grid.minor  <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_blank</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span></span>
+<span>    <span class="co"># Light border just around facet panels</span></span>
+<span>    panel.border      <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_rect</a></span><span class="op">(</span>colour <span class="op">=</span> <span class="st">"grey70"</span>, fill <span class="op">=</span> <span class="cn">NA</span>, linewidth <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span>,</span>
+<span>    panel.spacing     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/grid/unit.html" class="external-link">unit</a></span><span class="op">(</span><span class="fl">0.8</span>, <span class="st">"lines"</span><span class="op">)</span>,</span>
+<span></span>
+<span>    <span class="co"># Legend inside or on top saves horizontal space in HTML</span></span>
+<span>    legend.position   <span class="op">=</span> <span class="st">"top"</span>,</span>
+<span>    legend.key.width  <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/grid/unit.html" class="external-link">unit</a></span><span class="op">(</span><span class="fl">1.8</span>, <span class="st">"lines"</span><span class="op">)</span>,</span>
+<span></span>
+<span>    <span class="co"># Axis: no need to rotate if labels are short</span></span>
+<span>    axis.text.x       <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.9</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    axis.text.y       <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.9</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>    axis.title        <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">element_text</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">rel</a></span><span class="op">(</span><span class="fl">0.95</span><span class="op">)</span><span class="op">)</span>,</span>
+<span></span>
+<span>    plot.margin       <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html" class="external-link">margin</a></span><span class="op">(</span><span class="fl">8</span>, <span class="fl">12</span>, <span class="fl">8</span>, <span class="fl">8</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
-<p>As we can see, the function outputs a <code>bench</code> object where
-the parameters of interest are mainly the minimum time of the
-iterations, the median time, how many iterations per seconds can be done
-and the memory allocation of each of the operations.</p>
-<p>For a regularly small matrix, let
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>500</mn></mrow><annotation encoding="application/x-tex">n=500</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>=</mo><mn>50</mn></mrow><annotation encoding="application/x-tex">p=50</annotation></semantics></math>
-with a density of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>0.05</mn><annotation encoding="application/x-tex">0.05</annotation></semantics></math>,
-so
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>5</mn><annotation encoding="application/x-tex">5</annotation></semantics></math>
-% of the inputs
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><annotation encoding="application/x-tex">a_{ij}</annotation></semantics></math>
-are non-zero. We also generate a random normal vector
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi><mo>∈</mo><msup><mi>R</mi><mi>p</mi></msup></mrow><annotation encoding="application/x-tex">b\in R^p</annotation></semantics></math>.</p>
+</div>
+<div class="section level3">
+<h3 id="results-of-computation-time-benchmark">Results of Computation Time Benchmark<a class="anchor" aria-label="anchor" href="#results-of-computation-time-benchmark"></a>
+</h3>
+<p>We run the experiment as follows: let <code>n</code> be the number of
+rows of the sparse matrix which we let be constant for all matrices at
+<code>n &lt;- 10000</code>. In statistics, the number of rows usually
+denotes the number of observations and the columns the features. Hence,
+letting <code>n</code> be constant and augmenting the columns
+<code>p</code> reflects the experiment of adding features to an existing
+dataset. Apart from dimensionality, the experiment also depends on
+sparsity, so the proportion of non-zero elements for every column. We
+test for three levels of sparsity, 5 %, 0.1 % and 0.01 %. A rule of
+thumb when working with sparse matrices, is that the larger the
+dimensionality, the lesser the sparsity usually.</p>
+<p>Then, we run the benchmark function for matrix-vector multiplication
+defined above for every <code>p</code> and every <code>sparsity</code>.
+The results are therafter translated into seconds and we keep them in a
+tibble which is used to graph the result.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">m_small</span> <span class="op">&lt;-</span> <span class="fu">create_sparsematrix</span><span class="op">(</span>n <span class="op">=</span> <span class="fl">500</span>, p <span class="op">=</span> <span class="fl">50</span>, sparsity <span class="op">=</span> <span class="fl">0.05</span><span class="op">)</span></span>
-<span><span class="va">test_vector</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">m_small</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Parameters (smaller for testing)</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">n</span>              <span class="op">&lt;-</span> <span class="fl">10000</span></span>
+<span><span class="va">sparsity_cols</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.05</span>, <span class="fl">0.001</span>, <span class="fl">0.0001</span><span class="op">)</span></span>
+<span><span class="va">p_values</span>       <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">50</span>, <span class="fl">100</span>, <span class="fl">200</span>, <span class="fl">500</span>, <span class="fl">1000</span>, <span class="fl">2000</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">benchmark_small</span> <span class="op">&lt;-</span> <span class="fu">bench_multiply</span><span class="op">(</span><span class="va">m_small</span>, <span class="va">test_vector</span><span class="op">)</span></span>
-<span><span class="va">benchmark_small</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expression"</span>, <span class="st">"min"</span>, <span class="st">"median"</span>, <span class="st">"itr/sec"</span>, <span class="st">"mem_alloc"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 5</span></span></span>
-<span><span class="co">#&gt;   expression         min   median `itr/sec` mem_alloc</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> dense_product   13.2µs   15.7µs    <span style="text-decoration: underline;">62</span>451.    3.95KB</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> lazy_product    38.9µs   42.4µs    <span style="text-decoration: underline;">21</span>960.  122.82KB</span></span></code></pre></div>
-<p>For small matrices, we note that the lazy computation does not
-perform better than the dense computation, it is even slower. Moreover,
-it shows that the overhead from lazy evaluation remains modest even when
-it doesn’t provide a speedup compared to using a dense matrix. The real
-strength of lazy computation, however, is shown when the matrices gets
-bigger and sparsity more widespread.</p>
-<p>Hence, let
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>∈</mo><msup><mi>R</mi><mrow><mn>1000</mn><mo>×</mo><mn>100</mn></mrow></msup></mrow><annotation encoding="application/x-tex">A\in R^{1000\times 100}</annotation></semantics></math>
-be a sparse matrix with
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>1</mn><annotation encoding="application/x-tex">1</annotation></semantics></math>
-% of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>≠</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">a_{ij}\neq 0</annotation></semantics></math>.</p>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Run benchmarks</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">counter</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
+<span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">sc</span> <span class="kw">in</span> <span class="va">sparsity_cols</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Running sparsity_col ="</span>, <span class="va">sc</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">p</span> <span class="kw">in</span> <span class="va">p_values</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  p ="</span>, <span class="va">p</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span></span>
+<span>    <span class="va">M</span>  <span class="op">&lt;-</span> <span class="fu">create_sparsematrix_col</span><span class="op">(</span>n <span class="op">=</span> <span class="va">n</span>, p <span class="op">=</span> <span class="va">p</span>, sparsity_col <span class="op">=</span> <span class="va">sc</span><span class="op">)</span></span>
+<span>    <span class="va">b</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span>
+<span>    <span class="va">bm</span> <span class="op">&lt;-</span> <span class="fu">bench_multiply</span><span class="op">(</span><span class="va">M</span>, <span class="va">b</span><span class="op">)</span></span>
+<span></span>
+<span>    <span class="va">tmp</span> <span class="op">&lt;-</span> <span class="va">bm</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>      <span class="fu"><a href="https://dplyr.tidyverse.org/reference/select.html" class="external-link">select</a></span><span class="op">(</span><span class="va">expression</span>, <span class="va">min</span>, <span class="va">median</span>, <span class="va">mem_alloc</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>      <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>sparsity_col <span class="op">=</span> <span class="va">sc</span>, n <span class="op">=</span> <span class="va">n</span>, p <span class="op">=</span> <span class="va">p</span><span class="op">)</span></span>
+<span></span>
+<span>    <span class="va">results</span><span class="op">[[</span><span class="va">counter</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">tmp</span></span>
+<span>    <span class="va">counter</span> <span class="op">&lt;-</span> <span class="va">counter</span> <span class="op">+</span> <span class="fl">1</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">M</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; Running sparsity_col = 0.05 </span></span>
+<span><span class="co">#&gt;   p = 50 </span></span>
+<span><span class="co">#&gt;   p = 100 </span></span>
+<span><span class="co">#&gt;   p = 200 </span></span>
+<span><span class="co">#&gt;   p = 500 </span></span>
+<span><span class="co">#&gt;   p = 1000 </span></span>
+<span><span class="co">#&gt;   p = 2000 </span></span>
+<span><span class="co">#&gt; Running sparsity_col = 0.001 </span></span>
+<span><span class="co">#&gt;   p = 50 </span></span>
+<span><span class="co">#&gt;   p = 100 </span></span>
+<span><span class="co">#&gt;   p = 200 </span></span>
+<span><span class="co">#&gt;   p = 500 </span></span>
+<span><span class="co">#&gt;   p = 1000 </span></span>
+<span><span class="co">#&gt;   p = 2000 </span></span>
+<span><span class="co">#&gt; Running sparsity_col = 1e-04 </span></span>
+<span><span class="co">#&gt;   p = 50 </span></span>
+<span><span class="co">#&gt;   p = 100 </span></span>
+<span><span class="co">#&gt;   p = 200 </span></span>
+<span><span class="co">#&gt;   p = 500 </span></span>
+<span><span class="co">#&gt;   p = 1000 </span></span>
+<span><span class="co">#&gt;   p = 2000</span></span>
+<span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Process results</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">benchmark_results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">bind_rows</a></span><span class="op">(</span><span class="va">results</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span></span>
+<span>    method     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">expression</span><span class="op">)</span>,</span>
+<span>    median_sec <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">median</span><span class="op">)</span>,</span>
+<span>    min_sec    <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">min</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span></code></pre></div>
+<p>The results are presented in the following plot.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">m_medium</span> <span class="op">&lt;-</span> <span class="fu">create_sparsematrix</span><span class="op">(</span>n <span class="op">=</span> <span class="fl">1000</span>, p <span class="op">=</span> <span class="fl">100</span>, sparsity <span class="op">=</span> <span class="fl">0.01</span><span class="op">)</span></span>
-<span><span class="va">test_vector</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">m_medium</span><span class="op">)</span><span class="op">)</span></span>
-<span></span>
-<span><span class="va">benchmark_medium</span> <span class="op">&lt;-</span> <span class="fu">bench_multiply</span><span class="op">(</span><span class="va">m_medium</span>, <span class="va">test_vector</span><span class="op">)</span></span>
-<span><span class="va">benchmark_medium</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expression"</span>, <span class="st">"min"</span>, <span class="st">"median"</span>, <span class="st">"itr/sec"</span>, <span class="st">"mem_alloc"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 5</span></span></span>
-<span><span class="co">#&gt;   expression         min   median `itr/sec` mem_alloc</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> dense_product     49µs     54µs    <span style="text-decoration: underline;">18</span>061.    7.86KB</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> lazy_product    39.6µs     43µs    <span style="text-decoration: underline;">20</span>722.    18.2KB</span></span></code></pre></div>
-<p>We note that the computation time for the lazy computation remains
-more or less the same as for the smaller matrix, while the computation
-time for the dense computation rises dramatically. The lazy computation
-is on median
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>3.5</mn><annotation encoding="application/x-tex">3.5</annotation></semantics></math>
-times faster than working with dense matrices.</p>
-<p>Lastly, we will test a large matrix,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>∈</mo><msup><mi>R</mi><mrow><mn>1000</mn><mo>×</mo><mn>700</mn></mrow></msup></mrow><annotation encoding="application/x-tex">A\in R^{1000\times 700}</annotation></semantics></math>
-with only
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>0.1</mn><annotation encoding="application/x-tex">0.1</annotation></semantics></math>
-% of elements
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>≠</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">a_{ij}\neq 0</annotation></semantics></math>
-at this point.</p>
+<code class="sourceCode R"><span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Plot for computation time</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span></span>
+<span>  <span class="va">benchmark_results</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>    <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>sc_label <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"alpha = "</span>, <span class="va">sparsity_col</span><span class="op">)</span>,</span>
+<span>      levels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"alpha = "</span>, <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">sparsity_col</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="op">)</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">p</span>, y <span class="op">=</span> <span class="va">median_sec</span>, color <span class="op">=</span> <span class="va">method</span>, group <span class="op">=</span> <span class="va">method</span><span class="op">)</span></span>
+<span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_path.html" class="external-link">geom_line</a></span><span class="op">(</span>linewidth <span class="op">=</span> <span class="fl">1</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_y_log10</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span> <span class="va">sc_label</span>, nrow <span class="op">=</span> <span class="fl">1</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span></span>
+<span>    x     <span class="op">=</span> <span class="st">"Number of columns (p)"</span>,</span>
+<span>    y     <span class="op">=</span> <span class="st">"Median runtime (seconds, log scale)"</span>,</span>
+<span>    color <span class="op">=</span> <span class="st">"Method"</span></span>
+<span>  <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">vignette_theme</span><span class="op">(</span><span class="fl">13</span><span class="op">)</span></span></code></pre></div>
+<p><img src="performance_files/figure-html/unnamed-chunk-3-1.png" class="r-plt" alt="" width="768"></p>
+<p>Each facet corresponds to a sparsity level, with the logarithm of
+median runtime on the vertical axis and the number of features
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+on the horizontal axis. The red line represents the dense computation
+while the blue is the lazy computation. Looking at the figure, we note
+that dense computation requires
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(np)</annotation></semantics></math>
+operations for the centering step, regardless of sparsity, since every
+element must be explicitly centered. This is confirmed in the plot,
+where the dense curve is identical across all three facets, increasing
+only with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>.
+The blue line representing the lazy computation however, shows clearly
+that computation time decreases as
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>
+gets lower. For
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>=</mo><mn>0.05</mn></mrow><annotation encoding="application/x-tex">\alpha=0.05</annotation></semantics></math>,
+the trend is similar to that of the dense computation, in the sense that
+as dimensionality gets higher, so does computation time. This follows
+from the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>k</mi><mo>+</mo><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(k + p)</annotation></semantics></math>
+complexity of lazy computation, which approaches
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(np)</annotation></semantics></math>
+as
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>α</mi><annotation encoding="application/x-tex">\alpha</annotation></semantics></math>
+increases. Conversely, as sparsity decreases and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>≪</mo><mi>n</mi><mi>p</mi></mrow><annotation encoding="application/x-tex">k \ll np</annotation></semantics></math>,
+the computational advantage of lazy evaluation becomes clear. Lazy
+computation exploits sparsity by operating only over the
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>
+non-zero entries, avoiding the redundant computation on zero-valued
+elements that dense methods perform. Hence, the lazy computation gets
+better the sparser the matrix is, and also better the higher the
+dimensionality compared to dense methods.</p>
+</div>
+<div class="section level3">
+<h3 id="results-of-memory-benchmark">Results of Memory Benchmark<a class="anchor" aria-label="anchor" href="#results-of-memory-benchmark"></a>
+</h3>
+<p>The benchmark experiment is similar to that of computation time. We
+let
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>
+be constant, augment
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+and test for three levels of sparsity. Here, the measurements we make is
+the amount of memory used for storing the different objects.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">m_large</span><span class="op">&lt;-</span> <span class="fu">create_sparsematrix</span><span class="op">(</span>n <span class="op">=</span> <span class="fl">1000</span>, p <span class="op">=</span> <span class="fl">700</span>, sparsity <span class="op">=</span> <span class="fl">0.001</span><span class="op">)</span></span>
-<span><span class="va">test_vector</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">m_large</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Parameters</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">n</span>              <span class="op">&lt;-</span> <span class="fl">10000</span></span>
+<span><span class="va">sparsity_cols</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.05</span>, <span class="fl">0.001</span>, <span class="fl">0.0001</span><span class="op">)</span></span>
+<span><span class="va">p_values</span>       <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">50</span>, <span class="fl">100</span>, <span class="fl">200</span>, <span class="fl">500</span>, <span class="fl">1000</span>, <span class="fl">2000</span>, <span class="fl">5000</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">benchmark_large</span> <span class="op">&lt;-</span> <span class="fu">bench_multiply</span><span class="op">(</span><span class="va">m_large</span>, <span class="va">test_vector</span><span class="op">)</span></span>
-<span><span class="va">benchmark_large</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expression"</span>, <span class="st">"min"</span>, <span class="st">"median"</span>, <span class="st">"itr/sec"</span>, <span class="st">"mem_alloc"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 5</span></span></span>
-<span><span class="co">#&gt;   expression         min   median `itr/sec` mem_alloc</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span>    <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> dense_product  639.8µs  652.4µs     <span style="text-decoration: underline;">1</span>534.    7.86KB</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> lazy_product    43.9µs   47.6µs    <span style="text-decoration: underline;">20</span>190.   32.27KB</span></span></code></pre></div>
-<p>Now, the computation time is approximately
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>20</mn><annotation encoding="application/x-tex">20</annotation></semantics></math>
-times faster on the lazy object, allowing for performing around
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>18</mn><mo>,</mo><mn>500</mn></mrow><annotation encoding="application/x-tex">18,500</annotation></semantics></math>
-iterations per second rather than around
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mo>,</mo><mn>300</mn></mrow><annotation encoding="application/x-tex">1,300</annotation></semantics></math>
-for the dense computation. These performance differences are clearly
-shown in the plots below.</p>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Process results</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="va">results</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">counter</span> <span class="op">&lt;-</span> <span class="fl">1</span></span>
+<span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">sc</span> <span class="kw">in</span> <span class="va">sparsity_cols</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Running sparsity_col ="</span>, <span class="va">sc</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span>  <span class="kw">for</span> <span class="op">(</span><span class="va">p</span> <span class="kw">in</span> <span class="va">p_values</span><span class="op">)</span> <span class="op">{</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"  p ="</span>, <span class="va">p</span>, <span class="st">"\n"</span><span class="op">)</span></span>
+<span></span>
+<span>    <span class="va">M</span>       <span class="op">&lt;-</span> <span class="fu">create_sparsematrix_col</span><span class="op">(</span>n <span class="op">=</span> <span class="va">n</span>, p <span class="op">=</span> <span class="va">p</span>, sparsity_col <span class="op">=</span> <span class="va">sc</span><span class="op">)</span></span>
+<span>    <span class="va">mem_res</span> <span class="op">&lt;-</span> <span class="fu">benchmark_memory</span><span class="op">(</span><span class="va">M</span><span class="op">)</span></span>
+<span>    <span class="va">mem_res</span> <span class="op">&lt;-</span> <span class="va">mem_res</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>      <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>sparsity_col <span class="op">=</span> <span class="va">sc</span>, n <span class="op">=</span> <span class="va">n</span>, p <span class="op">=</span> <span class="va">p</span><span class="op">)</span></span>
+<span></span>
+<span>    <span class="va">results</span><span class="op">[[</span><span class="va">counter</span><span class="op">]</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">mem_res</span></span>
+<span>    <span class="va">counter</span> <span class="op">&lt;-</span> <span class="va">counter</span> <span class="op">+</span> <span class="fl">1</span></span>
+<span>    <span class="fu"><a href="https://rdrr.io/r/base/rm.html" class="external-link">rm</a></span><span class="op">(</span><span class="va">M</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/base/gc.html" class="external-link">gc</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="op">}</span></span>
+<span><span class="op">}</span></span>
+<span><span class="co">#&gt; Running sparsity_col = 0.05 </span></span>
+<span><span class="co">#&gt;   p = 50 </span></span>
+<span><span class="co">#&gt;   p = 100 </span></span>
+<span><span class="co">#&gt;   p = 200 </span></span>
+<span><span class="co">#&gt;   p = 500 </span></span>
+<span><span class="co">#&gt;   p = 1000 </span></span>
+<span><span class="co">#&gt;   p = 2000 </span></span>
+<span><span class="co">#&gt;   p = 5000 </span></span>
+<span><span class="co">#&gt; Running sparsity_col = 0.001 </span></span>
+<span><span class="co">#&gt;   p = 50 </span></span>
+<span><span class="co">#&gt;   p = 100 </span></span>
+<span><span class="co">#&gt;   p = 200 </span></span>
+<span><span class="co">#&gt;   p = 500 </span></span>
+<span><span class="co">#&gt;   p = 1000 </span></span>
+<span><span class="co">#&gt;   p = 2000 </span></span>
+<span><span class="co">#&gt;   p = 5000 </span></span>
+<span><span class="co">#&gt; Running sparsity_col = 1e-04 </span></span>
+<span><span class="co">#&gt;   p = 50 </span></span>
+<span><span class="co">#&gt;   p = 100 </span></span>
+<span><span class="co">#&gt;   p = 200 </span></span>
+<span><span class="co">#&gt;   p = 500 </span></span>
+<span><span class="co">#&gt;   p = 1000 </span></span>
+<span><span class="co">#&gt;   p = 2000 </span></span>
+<span><span class="co">#&gt;   p = 5000</span></span>
+<span></span>
+<span><span class="va">memory_results_col</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/bind_rows.html" class="external-link">bind_rows</a></span><span class="op">(</span><span class="va">results</span><span class="op">)</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>mem_GB <span class="op">=</span> <span class="va">mem_MB</span> <span class="op">/</span> <span class="fl">1024</span><span class="op">)</span></span></code></pre></div>
+<p>The results are presented in the following plot.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ggplot2"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ggbeeswarm"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"gridExtra"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span></span>
-<span>  <span class="va">p_m</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">benchmark_medium</span><span class="op">)</span></span>
-<span>  <span class="va">p_l</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">benchmark_large</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="fu">gridExtra</span><span class="fu">::</span><span class="fu">grid.arrange</span><span class="op">(</span></span>
-<span>  <span class="va">p_m</span>, <span class="va">p_l</span>,</span>
-<span>  ncol <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>  top <span class="op">=</span> <span class="st">"Microbenchmark for Medium(n=1000, p=100) and Large(n=1000, p=700) Sparse Matrices"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>In conclusion, we can say that lazy computation gets better the
-larger and sparser the matrices we work with are. While lazy evaluation
-has a slight overhead for small matrices, this becomes negligible as
-matrix size grows—maintaining consistent computation time regardless of
-dimensions, while dense operations degrade heavily. The trade-off
-between the added overhead in <code>lazymatrix</code> and computation
-time reduced tells us that when we work with large sparse matrices, lazy
-computation is the superior approach. While
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>131.7</mn><annotation encoding="application/x-tex">131.7</annotation></semantics></math>
-microseconds may seem small, we need to recall that for many statistical
-algorithm, for example iterative least square computations, the
-operation <code>A%*%b</code> may have to be perfomed hundreds or even
-thousands of times, implying that speed is crucial. Once a matrix gets
-large and sparse enough, it will not even be feasible to scale it,
-resulting in an advantage of the <code>lazymatrix</code>-approach.</p>
-</div>
-<div class="section level2">
-<h2 id="optimization-of-matrix-transpose-multiplication">Optimization of Matrix Transpose Multiplication<a class="anchor" aria-label="anchor" href="#optimization-of-matrix-transpose-multiplication"></a>
-</h2>
-<p>While many of <code>lazymatrx</code>’s methods depends on operations
-already optimized or in <code>base R</code> or in <code>Matrix</code>,
-the method for computing the product of the transpose of a
-<code>LazyMatrix</code> with a vector, i.e. <code>t(X) %*% b</code>, is
-implemented from scratch. This is done to ensure lazy computation of the
-product, and involves looping over the elements in the matrix. Loops in
-R are generally not as efficient as vectorized operations, so what we
-did was writing a method for <code><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">crossprod()</a></code> using
-<code>Rcpp</code> and <code>RcppArmadillo</code>. This allows us to
-compute the product of the transpose of a <code>LazyMatrix</code> with a
-vector much faster than if we were to use a loop in R. The method is
-implemented in C++ and is optimized for performance, allowing us to
-compute the product efficiently even for large matrices. We can compare
-the performance of this method against a naive implementation using
-loops in R, and we will see that the C++ implementation is significantly
-faster.</p>
-<p>To avoid premature optimization, the issue of the
-<code><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">lazymatrix::crossprod()</a></code> method was identified using the
-<code>profvis</code> package. We profiled particularly some of the
-statistical algorithms and found that the current implementation was a
-clear bottleneck in the performance of the computation.</p>
-<div class="section level3">
-<h3 id="microbenchmarking-crossprod">Microbenchmarking <code>crossprod()</code><a class="anchor" aria-label="anchor" href="#microbenchmarking-crossprod"></a>
-</h3>
-<p>Here we will present a microbenchmark for the old implementation of
-the matrix transpose multiplication compared to the current one. This
-showcases that especially when working with large sparse matrices, the
-obvious use-case of <code>lazymatrix</code>, the current implementation
-is much stronger. We start by defining the function that was used in
-R.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">crossprod_R_impl</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">y</span><span class="op">)</span> <span class="op">{</span></span>
-<span>    <span class="co"># t(X) %*% y</span></span>
-<span>    <span class="va">s</span> <span class="op">&lt;-</span> <span class="fl">1</span> <span class="op">/</span> <span class="va">x</span><span class="op">@</span><span class="va">col_scales</span></span>
-<span>    <span class="va">c_vec</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">@</span><span class="va">col_locations</span></span>
-<span></span>
-<span>    <span class="va">x_tb</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">x</span><span class="op">@</span><span class="va">data</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="va">sum_y</span> <span class="op">&lt;-</span> <span class="fu">base</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">y</span><span class="op">)</span></span>
-<span></span>
-<span>    <span class="kw">for</span> <span class="op">(</span><span class="va">j</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">ncol</a></span><span class="op">(</span><span class="va">x</span><span class="op">@</span><span class="va">data</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>      <span class="va">x_tb</span><span class="op">[</span><span class="va">j</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">s</span><span class="op">[</span><span class="va">j</span><span class="op">]</span> <span class="op">*</span> <span class="fu">base</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">x</span><span class="op">@</span><span class="va">data</span><span class="op">[</span>, <span class="va">j</span><span class="op">]</span> <span class="op">*</span> <span class="va">y</span><span class="op">)</span> <span class="op">-</span></span>
-<span>                 <span class="va">s</span><span class="op">[</span><span class="va">j</span><span class="op">]</span> <span class="op">*</span> <span class="va">c_vec</span><span class="op">[</span><span class="va">j</span><span class="op">]</span> <span class="op">*</span> <span class="va">sum_y</span></span>
-<span>    <span class="op">}</span></span>
-<span>    <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="va">x_tb</span>, ncol <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>The arguments for the function is the <code>LazyMatrix</code> object
-<code>x</code> and the vector <code>y</code> which we will use to
-perform the operation</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>x</mi><mi>T</mi></msup><mi>y</mi><mi>.</mi></mrow><annotation encoding="application/x-tex">
-x^Ty.
-</annotation></semantics></math></p>
-<p>Moreover, we need also to create a function for the benchmarking
-among the two methods. Note that both the old and the new
-implementations takes only the <code>LazyMatrix</code> object as
-argument and the benchmarking is therefore done only on the
-<code>LazyMatrix</code>. Compared to the previous benchmarking, the
-dimensions are changed as
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>X</mi><mi>T</mi></msup><mo>∈</mo><msup><mi>R</mi><mrow><mi>p</mi><mo>×</mo><mi>n</mi></mrow></msup></mrow><annotation encoding="application/x-tex">X^T\in R^{p\times n}</annotation></semantics></math>
-and hence we need
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi><mo>∈</mo><msup><mi>R</mi><mi>n</mi></msup></mrow><annotation encoding="application/x-tex">b\in R^n</annotation></semantics></math>.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">bench_crossprod</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">sparse_matrix</span>, <span class="va">b</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">X</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/LazyMatrix.html">LazyMatrix</a></span><span class="op">(</span><span class="va">sparse_matrix</span>, <span class="st">"sd"</span>, <span class="st">"mean"</span><span class="op">)</span></span>
-<span>  <span class="va">bm</span> <span class="op">&lt;-</span> <span class="fu">bench</span><span class="fu">::</span><span class="fu"><a href="https://bench.r-lib.org/reference/mark.html" class="external-link">mark</a></span><span class="op">(</span></span>
-<span>    r_cross_product <span class="op">=</span> <span class="op">{</span></span>
-<span>      <span class="fu">crossprod_R_impl</span><span class="op">(</span><span class="va">X</span>, <span class="va">b</span><span class="op">)</span></span>
-<span>    <span class="op">}</span>,</span>
-<span>    rcpp_cross_product <span class="op">=</span> <span class="op">{</span></span>
-<span>      <span class="fu"><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">crossprod</a></span><span class="op">(</span><span class="va">X</span>, <span class="va">b</span><span class="op">)</span></span>
-<span>    <span class="op">}</span>,</span>
-<span>    check <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>    min_iterations <span class="op">=</span> <span class="fl">20</span></span>
-<span>  <span class="op">)</span></span>
-<span>  <span class="va">bm</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-<p>We perform similar tests as the previous ones, starting with the
-smaller matrix defined above and then aumenting the dimensionality with
-further testing.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">test_vector</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">m_small</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">bm_cp_small</span> <span class="op">&lt;-</span> <span class="fu">bench_crossprod</span><span class="op">(</span><span class="va">m_small</span>, <span class="va">test_vector</span><span class="op">)</span></span>
-<span><span class="va">bm_cp_small</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expression"</span>, <span class="st">"min"</span>, <span class="st">"median"</span>, <span class="st">"itr/sec"</span>, <span class="st">"mem_alloc"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 5</span></span></span>
-<span><span class="co">#&gt;   expression              min   median `itr/sec` mem_alloc</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> r_cross_product      4.17ms   5.65ms      193.  632.67KB</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> rcpp_cross_product  16.77µs   18.5µs    <span style="text-decoration: underline;">49</span>795.    8.27KB</span></span></code></pre></div>
-<p>Already at this stage, we see that the implementation with
-<code>Rcpp</code> is around
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>65</mn><annotation encoding="application/x-tex">65</annotation></semantics></math>
-times faster than the previous old method. It has also smaller memory
-allocation.</p>
-<p>As many of the sparse algorithms implemented in
-<code>lazymatrix</code> are iterative due to the nature of sparse data,
-the <code><a href="https://rdrr.io/r/base/crossprod.html" class="external-link">crossprod()</a></code> method is many times done many times for an
-algorithm. This shows the importance of having efficient methods for
-these basic operations and we can compute an even larger matrix to
-acknowledge the power of optimization.</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">123</span><span class="op">)</span></span>
-<span><span class="va">large_vector</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">m_large</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">bm_cp_large</span> <span class="op">&lt;-</span> <span class="fu">bench_crossprod</span><span class="op">(</span><span class="va">m_large</span>, <span class="va">large_vector</span><span class="op">)</span></span>
-<span><span class="va">bm_cp_large</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"expression"</span>, <span class="st">"min"</span>, <span class="st">"median"</span>, <span class="st">"itr/sec"</span>, <span class="st">"mem_alloc"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 2 × 5</span></span></span>
-<span><span class="co">#&gt;   expression              min   median `itr/sec` mem_alloc</span></span>
-<span><span class="co">#&gt;   <span style="color: #949494; font-style: italic;">&lt;bch:expr&gt;</span>         <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:tm&gt;</span>     <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span> <span style="color: #949494; font-style: italic;">&lt;bch:byt&gt;</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">1</span> r_cross_product      59.7ms   60.9ms      16.4    10.9MB</span></span>
-<span><span class="co">#&gt; <span style="color: #BCBCBC;">2</span> rcpp_cross_product   21.3µs   22.9µs   <span style="text-decoration: underline;">41</span>824.       11KB</span></span></code></pre></div>
-<p>While computation with the old method with R gets slower the higher
-dimensionality of
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>X</mi><annotation encoding="application/x-tex">X</annotation></semantics></math>,
-the <code>Rcpp</code>method remains stable with around the same
-computation time, giving us a higher performance of about
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mn>600</mn><annotation encoding="application/x-tex">600</annotation></semantics></math>
-times faster than the original. These differences are shown in the plots
-below.</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ggplot2"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"ggbeeswarm"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;&amp;</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"gridExtra"</span>, quietly <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span></span>
-<span>  <span class="va">p1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">bm_cp_small</span><span class="op">)</span></span>
-<span>  <span class="va">p2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">bm_cp_large</span><span class="op">)</span></span>
-<span></span>
-<span>  <span class="fu">gridExtra</span><span class="fu">::</span><span class="fu">grid.arrange</span><span class="op">(</span></span>
-<span>  <span class="va">p1</span>, <span class="va">p2</span>,</span>
-<span>  ncol <span class="op">=</span> <span class="fl">2</span>,</span>
-<span>  top <span class="op">=</span> <span class="st">"Microbenchmark for Small(n=500, p=50) and Large(n=1000, p=700) Sparse Matrices"</span></span>
-<span><span class="op">)</span></span>
-<span><span class="op">}</span></span></code></pre></div>
-</div>
-<div class="section level3">
-<h3 id="some-notes-on-optimization">Some Notes on Optimization<a class="anchor" aria-label="anchor" href="#some-notes-on-optimization"></a>
-</h3>
-<p>The performance improvement here is not due entirely to asymptotic
-time complexity, but part of it can be described more rigorously.
-Namely, we note that the operation</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>X</mi><mi>T</mi></msup><mi>b</mi></mrow><annotation encoding="application/x-tex">
-X^T b
-</annotation></semantics></math></p>
-<p>where
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>X</mi><mi>T</mi></msup><mo>∈</mo><msup><mi>R</mi><mrow><mi>p</mi><mo>×</mo><mi>n</mi></mrow></msup></mrow><annotation encoding="application/x-tex">X^T \in R^{p \times n}</annotation></semantics></math>
-and
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi><mo>∈</mo><msup><mi>R</mi><mi>n</mi></msup></mrow><annotation encoding="application/x-tex">b \in R^n</annotation></semantics></math>
-requires</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">
-O(np)
-</annotation></semantics></math></p>
-<p>in time complexity. However, the R implementation performs additional
-allocations within its loop; each iteration involves operations over
-vectors of length
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>n</mi><annotation encoding="application/x-tex">n</annotation></semantics></math>,
-leading to
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math>
-work per iteration. The <code>Rcpp</code> implementation instead can be
-expressed as having a single output vector of size</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">
-O(p)
-</annotation></semantics></math></p>
-<p>and avoids repeated intermediate allocations during the computation.
-Hence, the improvement here is not fully due to time complexity but
-reduced constant factors and allocations within the R implementation. In
-particular, the R implementation allocates temporary vectors within each
-iteration of the loop, while the Rcpp implementation performs the
-computation in a single pass over memory without repeated allocation
-overhead. This leads to significantly improved performance in practice,
-especially for large-scale sparse matrices where the operation is
-invoked repeatedly within iterative algorithms.</p>
+<code class="sourceCode R"><span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="co"># Plot for Memory Allocation</span></span>
+<span><span class="co">#--------------------------------------------------</span></span>
+<span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span></span>
+<span>  <span class="va">memory_results_col</span> <span class="op"><a href="https://magrittr.tidyverse.org/reference/pipe.html" class="external-link">%&gt;%</a></span></span>
+<span>    <span class="fu"><a href="https://dplyr.tidyverse.org/reference/mutate.html" class="external-link">mutate</a></span><span class="op">(</span>sc_label <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span></span>
+<span>      <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"alpha = "</span>, <span class="va">sparsity_col</span><span class="op">)</span>,</span>
+<span>      levels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"alpha = "</span>, <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">sparsity_col</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>    <span class="op">)</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>x <span class="op">=</span> <span class="va">p</span>, y <span class="op">=</span> <span class="va">mem_GB</span>, color <span class="op">=</span> <span class="va">method</span>, group <span class="op">=</span> <span class="va">method</span><span class="op">)</span></span>
+<span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_path.html" class="external-link">geom_line</a></span><span class="op">(</span>linewidth <span class="op">=</span> <span class="fl">1</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span>size <span class="op">=</span> <span class="fl">2</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_y_log10</a></span><span class="op">(</span></span>
+<span>    labels <span class="op">=</span> <span class="fu">scales</span><span class="fu">::</span><span class="fu"><a href="https://scales.r-lib.org/reference/label_number.html" class="external-link">label_number</a></span><span class="op">(</span>suffix <span class="op">=</span> <span class="st">" GB"</span>, accuracy <span class="op">=</span> <span class="fl">0.0001</span><span class="op">)</span></span>
+<span>  <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span> <span class="va">sc_label</span>, nrow <span class="op">=</span> <span class="fl">1</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span></span>
+<span>    x        <span class="op">=</span> <span class="st">"Number of columns (p)"</span>,</span>
+<span>    y        <span class="op">=</span> <span class="st">"Allocated memory (GB, log scale)"</span>,</span>
+<span>    color    <span class="op">=</span> <span class="st">"Method"</span></span>
+<span>  <span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu">vignette_theme</span><span class="op">(</span><span class="fl">13</span><span class="op">)</span></span></code></pre></div>
+<p><img src="performance_files/figure-html/unnamed-chunk-5-1.png" class="r-plt" alt="" width="768">
+Each facet corresponds to a sparsity level, with the logarithm of median
+runtime on the vertical axis and the number of features
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+on the horizontal axis. The red line represents the dense memory
+consumption while the blue is the lazy object’s. A key motivation for
+<code>lazymatrix</code> is the memory inefficiency of explicitly
+materializing normalized matrices. We therefore construct a memory
+benchmark under the same experimental setting as above, measuring memory
+usage rather than computation time. The dense representation requires
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>n</mi><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(np)</annotation></semantics></math>
+memory regardless of sparsity, as centering destroys the sparse
+structure and forces a full materialization of the matrix. As expected,
+the dense representation grows linearly in memory with increasing
+dimensionality. The implication being that using dense methods is
+infeasible for larger-scale data. The lazy representation follows a
+similar growth pattern at
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>α</mi><mo>=</mo><mn>0.05</mn></mrow><annotation encoding="application/x-tex">\alpha = 0.05</annotation></semantics></math>,
+as the data matrix and its associated location and scale parameters
+together require
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false" form="prefix">(</mo><mi>k</mi><mo>+</mo><mi>p</mi><mo stretchy="false" form="postfix">)</mo></mrow><annotation encoding="application/x-tex">O(k + p)</annotation></semantics></math>
+memory, and
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>k</mi><annotation encoding="application/x-tex">k</annotation></semantics></math>
+remains large relative to
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mi>p</mi></mrow><annotation encoding="application/x-tex">np</annotation></semantics></math>
+at high sparsity levels. As sparsity increases, however,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>≪</mo><mi>n</mi><mi>p</mi></mrow><annotation encoding="application/x-tex">k \ll np</annotation></semantics></math>
+and the lazy representation retains significantly fewer bytes, directly
+reflecting the theoretical memory complexity established earlier. For
+the sparsest facet, memory consumption still grows with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>p</mi><annotation encoding="application/x-tex">p</annotation></semantics></math>
+but remains orders of magnitude smaller than the dense representation
+across all three dimensions. In applications, high dimensionality and
+high sparsity tend to be correlated, hence it is crucial for
+<code>LazyMatrix</code>to perform well with the two parameters
+considered.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

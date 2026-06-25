@@ -1,6 +1,6 @@
-# Given a LazyMatrix x, t returns the transpose of x.
+# Given a `LazyMatrix` x, t returns the transpose of x.
 
-Given a LazyMatrix x, t returns the transpose of x.
+Given a `LazyMatrix` x, t returns the transpose of x.
 
 ## Usage
 
@@ -13,11 +13,11 @@ t(x)
 
 - x:
 
-  A LazyMatrix object.
+  A `LazyMatrix` object.
 
 ## Value
 
-A LazyMatrix object with the transposed data matrix.
+A `LazyMatrix` object with the transposed data matrix.
 
 ## Examples
 

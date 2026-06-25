@@ -1,31 +1,19 @@
-# Computes the Frobenius norm of a LazyMatrix object.
+# Compute the norm of a LazyMatrix or LazyColumn
 
-Computes the Frobenius norm of a LazyMatrix object.
+Dispatches to the appropriate method based on the class of `x`.
 
 ## Usage
 
 ``` r
-norm(x)
-
-# S4 method for class 'LazyMatrix'
-norm(x)
+norm(x, ...)
 ```
 
 ## Arguments
 
 - x:
 
-  A LazyMatrix object.
+  A `LazyMatrix` or `LazyColumn` object.
 
-## Value
+- ...:
 
-A numeric scalar representing the Frobenius norm of the matrix.
-
-## Examples
-
-``` r
-mat_a <- base::matrix(rnorm(50), nrow = 10, ncol = 5)
-lazy_a <- LazyMatrix(mat_a, "sd", "mean")
-norm(lazy_a)
-#> [1] 6.708204
-```
+  Additional arguments passed to methods, such as `type`.

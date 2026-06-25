@@ -1,6 +1,6 @@
-# Matrix multiplication for vector and LazyMatrix
+# Matrix multiplication for vector and `LazyMatrix`
 
-Multiplies a LazyMatrix object by a vector.
+Multiplies a `LazyMatrix` object by a vector.
 
 ## Usage
 
@@ -17,7 +17,7 @@ x %*% y
 
 - y:
 
-  A LazyMatrix object.
+  A `LazyMatrix` object.
 
 ## Value
 
