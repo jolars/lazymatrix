@@ -24,7 +24,7 @@ Note: Once the package is accepted to CRAN, you can also install it via:
 ``` r
 
 install.packages("lazymatrix")
-#> Installing package into 'C:/Users/vikto/AppData/Local/Temp/Rtmp4yD82T/temp_libpath969c781e6602'
+#> Installing package into 'C:/Users/vikto/AppData/Local/Temp/RtmpwVz66U/temp_libpath492cbc974ec'
 #> (as 'lib' is unspecified)
 #> Warning: package 'lazymatrix' is not available for this version of R
 #> 
@@ -50,6 +50,7 @@ sparse_matrix <- Matrix::Matrix(0, 5, 3)
 sparse_matrix[sample(length(sparse_matrix), 5)] <- rnorm(5)
 b <- rnorm(3)
 lazy_matrix <- LazyMatrix(sparse_matrix, scale = "sd", location = "mean")
+
 print(lazy_matrix)
 #> An object of class "LazyMatrix"
 #> Slot "data":

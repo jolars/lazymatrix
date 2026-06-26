@@ -13,6 +13,7 @@
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Perform Complex Matrix Operations Symbolically on Sparse Matrices">
 <meta name="description" content="Provides a framework for symbolic computation on high-order sparse matrices. Enables lazy evaluation of normalized data matrices. Preserves sparsity throughout chained operations without materializing dense intermediate objects.">
 <meta property="og:description" content="Provides a framework for symbolic computation on high-order sparse matrices. Enables lazy evaluation of normalized data matrices. Preserves sparsity throughout chained operations without materializing dense intermediate objects.">
+<meta property="og:image" content="https://vsegersall.github.io/lazymatrix/logo.png">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -54,8 +55,11 @@
 </nav><div class="container template-home">
 <div class="row">
   <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="lazymatrix">lazymatrix<a class="anchor" aria-label="anchor" href="#lazymatrix"></a>
-</h1></div>
+<div class="page-header">
+<img src="logo.png" class="logo" alt=""><h1 id="lazymatrix-">lazymatrix 
+<a class="anchor" aria-label="anchor" href="#lazymatrix-"></a>
+</h1>
+</div>
 <!-- badges: start -->
 
 <p><code>lazymatrix</code> provides a framework for working with transformed sparse data matrices using <a href="https://en.wikipedia.org/wiki/Lazy_evaluation" class="external-link">lazy evaluation</a>. This approach is particularly useful for handling large sparse matrices where transformations (e.g., centering and scaling) would otherwise result in dense matrices, consuming significant memory and computational resources.</p>
@@ -69,7 +73,7 @@
 <p>Note: Once the package is accepted to CRAN, you can also install it via:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span><span class="st">"lazymatrix"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Installing package into 'C:/Users/vikto/AppData/Local/Temp/Rtmp4yD82T/temp_libpath969c781e6602'</span></span>
+<span><span class="co">#&gt; Installing package into 'C:/Users/vikto/AppData/Local/Temp/RtmpwVz66U/temp_libpath492cbc974ec'</span></span>
 <span><span class="co">#&gt; (as 'lib' is unspecified)</span></span>
 <span><span class="co">#&gt; Warning: package 'lazymatrix' is not available for this version of R</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -93,6 +97,7 @@
 <span><span class="va">sparse_matrix</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sample.html" class="external-link">sample</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">sparse_matrix</span><span class="op">)</span>, <span class="fl">5</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">b</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span></span>
 <span><span class="va">lazy_matrix</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/LazyMatrix.html">LazyMatrix</a></span><span class="op">(</span><span class="va">sparse_matrix</span>, scale <span class="op">=</span> <span class="st">"sd"</span>, location <span class="op">=</span> <span class="st">"mean"</span><span class="op">)</span></span>
+<span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">lazy_matrix</span><span class="op">)</span></span>
 <span><span class="co">#&gt; An object of class "LazyMatrix"</span></span>
 <span><span class="co">#&gt; Slot "data":</span></span>
