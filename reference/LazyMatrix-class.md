@@ -3,6 +3,13 @@
 An S4 class to represent a lazily transformed matrix with scaling and
 location parameters.
 
+## Value
+
+An object of class `LazyMatrix` with slots `data` (matrix, possibly
+sparse), `col_scales`, `row_scales`, `col_locations`, `row_locations`.
+Represents the original data matrix plus stored scaling/centering
+parameters used for lazy operations
+
 ## Slots
 
 - `data`:

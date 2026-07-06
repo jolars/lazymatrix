@@ -9,6 +9,8 @@
 <url><loc>https://vsegersall.github.io/lazymatrix/index.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/news/index.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/ANY-LazyColumn-method.html</loc></url>
+<url><loc>https://vsegersall.github.io/lazymatrix/reference/Compare-LazyColumn-numeric-method.html</loc></url>
+<url><loc>https://vsegersall.github.io/lazymatrix/reference/Compare-numeric-LazyColumn-method.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/LazyColumn-ANY-method.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/LazyColumn-LazyColumn-method.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/LazyColumn-class.html</loc></url>
@@ -37,6 +39,8 @@
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/plus-LazyColumn-ANY-method.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/plus-LazyColumn-LazyColumn-method.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/prcomp-LazyMatrix-method.html</loc></url>
+<url><loc>https://vsegersall.github.io/lazymatrix/reference/setNames-LazyColumn.html</loc></url>
+<url><loc>https://vsegersall.github.io/lazymatrix/reference/subset-LazyColumn.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/subset-LazyMatrix.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/svd-LazyMatrix-method.html</loc></url>
 <url><loc>https://vsegersall.github.io/lazymatrix/reference/t-LazyMatrix-method.html</loc></url>

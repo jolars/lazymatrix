@@ -3,6 +3,12 @@
 An S4 class to represent a column vector as a subset of a
 LazyMatrix-object
 
+## Value
+
+An object of class `LazyColumn` with slots `data` (numeric vector),
+`scale` (numeric scalar), and `location` (numeric scalar); represents a
+column of a `LazyMatrix` (scaled via scale and location).
+
 ## Slots
 
 - `data`:

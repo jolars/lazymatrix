@@ -7,6 +7,12 @@
 
   Vector Subtraction between regular vector and `LazyColumn`
 
+- [`Compare(`*`<LazyColumn>`*`,`*`<numeric>`*`)`](https://vsegersall.github.io/lazymatrix/reference/Compare-LazyColumn-numeric-method.md)
+  : Comparison operators for LazyColumn
+
+- [`Compare(`*`<numeric>`*`,`*`<LazyColumn>`*`)`](https://vsegersall.github.io/lazymatrix/reference/Compare-numeric-LazyColumn-method.md)
+  : Comparison operators for LazyColumn
+
 - [`` `-`( ``*`<LazyColumn>`*`,`*`<ANY>`*`)`](https://vsegersall.github.io/lazymatrix/reference/LazyColumn-ANY-method.md)
   :
 
@@ -110,6 +116,12 @@
 - [`prcomp(`*`<LazyMatrix>`*`)`](https://vsegersall.github.io/lazymatrix/reference/prcomp-LazyMatrix-method.md)
   : Performs a principal component analysis on the LazyMatrix object
   using irlba:s sparse svd.
+
+- [`setNames(`*`<LazyColumn>`*`,`*`<character>`*`)`](https://vsegersall.github.io/lazymatrix/reference/setNames-LazyColumn.md)
+  : Set names for a LazyColumn
+
+- [`` `[`( ``*`<LazyColumn>`*`,`*`<ANY>`*`,`*`<ANY>`*`,`*`<ANY>`*`)`](https://vsegersall.github.io/lazymatrix/reference/subset-LazyColumn.md)
+  : Subset a LazyColumn
 
 - [`` `[`( ``*`<LazyMatrix>`*`,`*`<ANY>`*`,`*`<ANY>`*`,`*`<ANY>`*`)`](https://vsegersall.github.io/lazymatrix/reference/subset-LazyMatrix.md)
   : Subset a LazyMatrix by columns

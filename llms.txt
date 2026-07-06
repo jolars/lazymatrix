@@ -24,13 +24,6 @@ Note: Once the package is accepted to CRAN, you can also install it via:
 ``` r
 
 install.packages("lazymatrix")
-#> Installing package into 'C:/Users/vikto/AppData/Local/Temp/RtmpwVz66U/temp_libpath492cbc974ec'
-#> (as 'lib' is unspecified)
-#> Warning: package 'lazymatrix' is not available for this version of R
-#> 
-#> A version of this package for your version of R might be available elsewhere,
-#> see the ideas at
-#> https://cran.r-project.org/doc/manuals/r-patched/R-admin.html#Installing-packages
 ```
 
 ## Example
@@ -99,6 +92,12 @@ welcome via the GitHub Issue Tracker.
   :
 
   Vector Subtraction between regular vector and `LazyColumn`
+
+- [`Compare(`*`<LazyColumn>`*`,`*`<numeric>`*`)`](https://vsegersall.github.io/lazymatrix/reference/Compare-LazyColumn-numeric-method.md)
+  : Comparison operators for LazyColumn
+
+- [`Compare(`*`<numeric>`*`,`*`<LazyColumn>`*`)`](https://vsegersall.github.io/lazymatrix/reference/Compare-numeric-LazyColumn-method.md)
+  : Comparison operators for LazyColumn
 
 - [`` `-`( ``*`<LazyColumn>`*`,`*`<ANY>`*`)`](https://vsegersall.github.io/lazymatrix/reference/LazyColumn-ANY-method.md)
   :
@@ -203,6 +202,12 @@ welcome via the GitHub Issue Tracker.
 - [`prcomp(`*`<LazyMatrix>`*`)`](https://vsegersall.github.io/lazymatrix/reference/prcomp-LazyMatrix-method.md)
   : Performs a principal component analysis on the LazyMatrix object
   using irlba:s sparse svd.
+
+- [`setNames(`*`<LazyColumn>`*`,`*`<character>`*`)`](https://vsegersall.github.io/lazymatrix/reference/setNames-LazyColumn.md)
+  : Set names for a LazyColumn
+
+- [`` `[`( ``*`<LazyColumn>`*`,`*`<ANY>`*`,`*`<ANY>`*`,`*`<ANY>`*`)`](https://vsegersall.github.io/lazymatrix/reference/subset-LazyColumn.md)
+  : Subset a LazyColumn
 
 - [`` `[`( ``*`<LazyMatrix>`*`,`*`<ANY>`*`,`*`<ANY>`*`,`*`<ANY>`*`)`](https://vsegersall.github.io/lazymatrix/reference/subset-LazyMatrix.md)
   : Subset a LazyMatrix by columns
