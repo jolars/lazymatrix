@@ -244,10 +244,13 @@ system still requires O(p^2) storage.
     inputs, with backend-independent reusable output. See
     `examples/weighted_gram.rs` and `benches/weighted_gram.md`.
 
-- [ ] Reduce centered CSC Gram overhead at very low densities.
-  - Benchmarks show that repeated operator products remain faster at 0.1% and
-    1% density. Preserve direct centering and IEEE behavior when optimizing the
-    sparse pair and bounded-panel kernels.
+- [x] Reduce centered CSC Gram overhead at very low densities.
+  - Sparse pairs now use a subtraction-free disjoint range-sum table for
+    implicit rows and cache normalized stored values on sparse input. Direct
+    centering, IEEE fallbacks, and bounded-panel kernels remain in place.
+  - Pinned 10,000 by 128 benchmarks improved from 10.37 to 2.08 ms at 0.1%
+    density and from 31.84 to 19.28 ms at 1% density. See
+    `benches/weighted_gram.md`.
 
 - [ ] Demonstrate compatible weighted normalization in the consuming crate.
   - ndarray-glm uses weighted means and sample standard deviations, including an

@@ -47,8 +47,12 @@ used by the Gram kernels.
 For `f64`, the dense kernel's explicit panels and coefficient block occupy at
 most 136 KiB, plus the multiplication library's workspace. Centered CSC uses
 24 KiB of panels for sufficiently populated, canonical inputs with at least
-16 predictors. Sparser inputs use two scalar entries per row for a weight-sum
-tree. Both paths need O(p) column bookkeeping.
+16 predictors. Below 2% density, centered canonical columns can use a
+subtraction-free disjoint range-sum table. It answers implicit-zero weight
+ranges in O(1) time after O(n log n) preparation, with table storage capped at
+64 MiB. Larger inputs use the O(n) weight-sum tree. The sparse-pair path can
+also cache normalized stored values, bounded to sparse input. Both paths need
+O(p) column bookkeeping.
 Uncentered CSC does not allocate the tree. Sparse fallback evaluation can
 add two working columns for unsorted or duplicate indices and nonfinite
 arithmetic. Every method needs the O(p²) output.
@@ -89,8 +93,38 @@ OpenBLAS:
 | 100% | 11.5 | 29.6 | 22.0 | 167 | 5.01 | 12.7 |
 
 The CSC Gram kernel does not call BLAS. Its advantage at higher densities comes
-from accumulating coefficient blocks directly. At very low densities, stable
-centering costs more than assembling the result with the existing operator
-products. Those products apply centering through raw-product corrections and
-can lose small variations around large offsets. The Gram kernel prioritizes
-that numerical requirement; it is not a universal speedup for sparse inputs.
+from accumulating coefficient blocks directly. The measurements above predate
+the sparse-pair optimization below. Repeated operators apply centering through
+raw-product corrections and can lose small variations around large offsets.
+
+## Sparse-pair optimization
+
+Measured on October 6, 2026, on the same Ryzen 9 7900, pinned to CPU 10,
+with 10 Criterion samples per case. These are the centered 10,000 by 128 CSC
+cases with ndarray's default multiplication kernels. The original code and the
+range-sum implementation were built from the same worktree and measured with
+the same benchmark command.
+
+| Density | Original CSC Gram | Range-sum CSC Gram |
+| --- | ---: | ---: |
+| 0.1% | 10.37 ms | 2.08 ms |
+| 1% | 31.84 ms | 19.28 ms |
+
+The range-sum table adds weights without subtracting a large prefix. Stored
+values are normalized before pair accumulation, and noncanonical columns or
+unsafe arithmetic still use the two-column fallback. The 10% and 100% cases
+continue to use bounded panels.
+
+A final pinned run with the optimized code measured these cases, in
+milliseconds:
+
+| Shape | Density | CSC Gram | CSC operators |
+| --- | ---: | ---: | ---: |
+| 2,000 by 32 | 0.1% | 0.062 | 0.134 |
+| 2,000 by 32 | 1% | 0.243 | 0.149 |
+| 10,000 by 128 | 0.1% | 1.98 | 3.05 |
+| 10,000 by 128 | 1% | 17.22 | 6.18 |
+
+The Gram kernel now wins at 0.1% in both fixtures. At 1%, repeated operators
+remain faster, although their centering correction has the numerical limitation
+described above.

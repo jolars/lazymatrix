@@ -95,6 +95,50 @@ fn sprs_gram_accepts_sliced_columns_and_explicit_zeros() {
 }
 
 #[test]
+fn sprs_sparse_centered_gram_keeps_implicit_rows_with_large_weights() {
+    use lazymatrix::WeightedGramInto;
+
+    let n = 1_000;
+    let p = 32;
+    let matrix = CsMat::new_csc((n, p), (0..=p).collect(), vec![0; p], vec![1.0_f64; p]);
+    let lazy = LazyMatrix::with_centers(SprsCsc::try_new(matrix).unwrap(), vec![1.0; p]);
+    let mut weights = vec![1.0_f64; n];
+    weights[0] = 1e16;
+    let mut out = common::GramOutput(vec![vec![f64::NAN; p]; p]);
+    lazy.weighted_gram_into(&weights, &mut out).unwrap();
+    for row in &out.0 {
+        assert!(row.iter().all(|&value| value == 999.0));
+    }
+}
+
+#[test]
+fn sprs_centered_gram_matches_oracle_for_sparse_pairs() {
+    use lazymatrix::WeightedGramInto;
+
+    let (n, p) = (1_000, 32);
+    let mut dense = vec![vec![0.0; p]; n];
+    let mut triplets = TriMat::new((n, p));
+    for j in 0..p {
+        for i in (j % 17..n).step_by(97) {
+            let value = (i % 7) as f64 - 2.0;
+            dense[i][j] = value;
+            triplets.add_triplet(i, j, value);
+        }
+    }
+    let centers: Vec<_> = (0..p).map(|j| 0.1 + j as f64 / 100.0).collect();
+    let weights: Vec<_> = (0..n).map(|i| 0.5 + (i % 11) as f64 / 11.0).collect();
+    let matrix = SprsCsc::try_new(triplets.to_csc::<usize>()).unwrap();
+    let lazy = LazyMatrix::with_centers(matrix, centers);
+    let mut out = common::GramOutput(vec![vec![f64::NAN; p]; p]);
+    lazy.weighted_gram_into(&weights, &mut out).unwrap();
+    common::assert_gram(
+        &out,
+        &common::materialize(&dense, lazy.centers(), None),
+        &weights,
+    );
+}
+
+#[test]
 fn sprs_csr_wrapper_checks_orientation_and_borrows_sliced_rows() {
     let matrix = CsMat::new(
         (3, 4),

@@ -74,6 +74,30 @@ mod sparse {
 
     const TILE: usize = 32;
 
+    struct CachedColumn<'a, F> {
+        rows: &'a [usize],
+        raw: &'a [F],
+        normalized: Vec<F>,
+        background: F,
+        safe: bool,
+    }
+
+    impl<F: Scalar> CachedColumn<'_, F> {
+        fn value(
+            &self,
+            index: usize,
+            column: usize,
+            centers: Option<&[F]>,
+            scales: Option<&[F]>,
+        ) -> F {
+            self.normalized
+                .as_slice()
+                .get(index)
+                .copied()
+                .unwrap_or_else(|| normalize(self.raw[index], column, centers, scales))
+        }
+    }
+
     struct Panel<F> {
         values: Vec<F>,
         cursors: [usize; TILE],
@@ -181,6 +205,7 @@ mod sparse {
     pub(crate) struct WeightSums<F> {
         nodes: Vec<F>,
         len: usize,
+        ranges: Option<Vec<Vec<F>>>,
     }
 
     impl<F: Scalar> WeightSums<F> {
@@ -193,14 +218,71 @@ mod sparse {
             for i in (1..len).rev() {
                 nodes[i] = nodes[2 * i] + nodes[2 * i + 1];
             }
-            Self { nodes, len }
+            Self {
+                nodes,
+                len,
+                ranges: None,
+            }
+        }
+
+        pub(crate) fn new_fast<W: VectorView<F> + ?Sized>(weights: &W) -> Self {
+            let mut sums = Self::new(weights);
+            let n = sums.len;
+            if n <= 1 {
+                return sums;
+            }
+            let levels = (usize::BITS - (n - 1).leading_zeros()) as usize;
+            // The disjoint table removes per-gap tree walks when sparse column
+            // pairs make many range queries. Keep its workspace bounded.
+            if n.checked_mul(levels)
+                .and_then(|entries| entries.checked_mul(std::mem::size_of::<F>()))
+                .is_none_or(|bytes| bytes > 64 * 1024 * 1024)
+            {
+                return sums;
+            }
+            let mut ranges = Vec::with_capacity(levels);
+            for level in 0..levels {
+                let half = 1usize << level;
+                let mut values = vec![F::zero(); n];
+                for base in (0..n).step_by(2 * half) {
+                    let middle = (base + half).min(n);
+                    let end = (base + 2 * half).min(n);
+                    let mut total = F::zero();
+                    for i in (base..middle).rev() {
+                        total = weights.get(i) + total;
+                        values[i] = total;
+                    }
+                    total = F::zero();
+                    for (i, value) in values.iter_mut().enumerate().take(end).skip(middle) {
+                        total = total + weights.get(i);
+                        *value = total;
+                    }
+                }
+                ranges.push(values);
+            }
+            sums.ranges = Some(ranges);
+            sums
         }
 
         pub(crate) fn is_finite(&self) -> bool {
             self.nodes.iter().all(|x| x.is_finite())
+                && self
+                    .ranges
+                    .as_ref()
+                    .is_none_or(|ranges| ranges.iter().flatten().all(|x| x.is_finite()))
         }
 
         pub(crate) fn sum(&self, start: usize, end: usize) -> F {
+            if let Some(ranges) = &self.ranges {
+                if start == end {
+                    return F::zero();
+                }
+                if start + 1 == end {
+                    return self.nodes[self.len + start];
+                }
+                let level = (usize::BITS - 1 - (start ^ (end - 1)).leading_zeros()) as usize;
+                return ranges[level][start] + ranges[level][end - 1];
+            }
             let (mut l, mut r) = (start + self.len, end + self.len);
             let mut sum = F::zero();
             while l < r {
@@ -236,51 +318,78 @@ mod sparse {
         if p == 0 {
             return;
         }
-        let backgrounds: Vec<_> = (0..p)
-            .map(|j| normalize(F::zero(), j, centers, scales))
-            .collect();
         let finite_weights = (0..n).all(|i| weights.get(i).is_finite());
         let max_weight = (0..n).fold(F::zero(), |m, i| m.max(weights.get(i).abs()));
-        let mut safe: Vec<_> = (0..p)
+        let nnz: usize = (0..p).map(|j| matrix.sparse_column(j).0.len()).sum();
+        // Limit the normalized-value cache to sparse input. Dense or nearly
+        // dense fallback cases must not duplicate the entire design matrix.
+        let cache_normalized = nnz <= n.saturating_mul(p) / 4;
+        let mut columns: Vec<_> = (0..p)
             .map(|j| {
                 let (rows, values) = matrix.sparse_column(j);
-                finite_weights
-                    && (backgrounds[j] * max_weight).is_finite()
+                let background = normalize(F::zero(), j, centers, scales);
+                let normalized: Vec<_> = if cache_normalized {
+                    values
+                        .iter()
+                        .map(|&x| normalize(x, j, centers, scales))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                let safe = finite_weights
+                    && (background * max_weight).is_finite()
                     && rows.windows(2).all(|pair| pair[0] < pair[1])
-                    && rows.iter().zip(values).all(|(&i, &x)| {
-                        (normalize(x, j, centers, scales) * weights.get(i)).is_finite()
-                    })
+                    && rows.iter().enumerate().all(|(a, &i)| {
+                        (normalized
+                            .as_slice()
+                            .get(a)
+                            .copied()
+                            .unwrap_or_else(|| normalize(values[a], j, centers, scales))
+                            * weights.get(i))
+                        .is_finite()
+                    });
+                CachedColumn {
+                    rows,
+                    raw: values,
+                    normalized,
+                    background,
+                    safe,
+                }
             })
             .collect();
-        let centered = backgrounds.iter().any(|&b| b != F::zero());
-        let nnz: usize = (0..p).map(|j| matrix.sparse_column(j).0.len()).sum();
+        let centered = columns.iter().any(|column| column.background != F::zero());
         // At moderate densities, bounded panels avoid a range-sum query for
         // nearly every stored entry. Very sparse matrices retain sparse work.
         if centered
             && n > 0
             && p >= 16
-            && safe.iter().all(|&s| s)
-            && nnz as f64 / (n as f64 * p as f64) >= 0.005
+            && columns.iter().all(|column| column.safe)
+            && nnz as f64 / (n as f64 * p as f64) >= 0.02
         {
             tiled_gram(matrix, weights, centers, scales, out);
             return;
         }
-        let weight_sums = centered.then(|| WeightSums::new(weights));
-        if weight_sums
-            .as_ref()
-            .is_some_and(|tree| tree.nodes.iter().any(|w| !w.is_finite()))
-        {
-            safe.fill(false);
+        let weight_sums = centered.then(|| {
+            if finite_weights && p >= 16 && n >= 256 && nnz as f64 / (n as f64 * p as f64) < 0.02 {
+                WeightSums::new_fast(weights)
+            } else {
+                WeightSums::new(weights)
+            }
+        });
+        if weight_sums.as_ref().is_some_and(|tree| !tree.is_finite()) {
+            for column in &mut columns {
+                column.safe = false;
+            }
         }
         let mut scratch: Option<(Vec<F>, Vec<F>)> = None;
         for j in 0..p {
             for k in j..p {
-                let (jr, jv) = matrix.sparse_column(j);
-                let (kr, kv) = matrix.sparse_column(k);
-                let bj = backgrounds[j];
-                let bk = backgrounds[k];
+                let left = &columns[j];
+                let right = &columns[k];
+                let (jr, kr) = (left.rows, right.rows);
+                let (bj, bk) = (left.background, right.background);
                 let mut sum = F::zero();
-                let mut fast = safe[j] && safe[k] && ((bj * max_weight) * bk).is_finite();
+                let mut fast = left.safe && right.safe && ((bj * max_weight) * bk).is_finite();
                 if fast && bj == F::zero() && bk == F::zero() {
                     let (mut a, mut b) = (0, 0);
                     while a < jr.len() && b < kr.len() {
@@ -288,9 +397,9 @@ mod sparse {
                             std::cmp::Ordering::Less => a += 1,
                             std::cmp::Ordering::Greater => b += 1,
                             std::cmp::Ordering::Equal => {
-                                sum = sum
-                                    + (normalize(jv[a], j, centers, scales) * weights.get(jr[a]))
-                                        * normalize(kv[b], k, centers, scales);
+                                let x = left.value(a, j, centers, scales);
+                                let y = right.value(b, k, centers, scales);
+                                sum = sum + (x * weights.get(jr[a])) * y;
                                 a += 1;
                                 b += 1;
                             }
@@ -309,14 +418,14 @@ mod sparse {
                             sum = sum + (bj * weight_sums.as_ref().unwrap().sum(next, row)) * bk;
                         }
                         let x = if jr.get(a) == Some(&row) {
-                            let x = normalize(jv[a], j, centers, scales);
+                            let x = left.value(a, j, centers, scales);
                             a += 1;
                             x
                         } else {
                             bj
                         };
                         let y = if kr.get(b) == Some(&row) {
-                            let y = normalize(kv[b], k, centers, scales);
+                            let y = right.value(b, k, centers, scales);
                             b += 1;
                             y
                         } else {
@@ -337,10 +446,10 @@ mod sparse {
                         scratch.get_or_insert_with(|| (vec![F::zero(); n], vec![F::zero(); n]));
                     x.fill(F::zero());
                     y.fill(F::zero());
-                    for (&i, &v) in jr.iter().zip(jv) {
+                    for (&i, &v) in jr.iter().zip(left.raw) {
                         x[i] = x[i] + v;
                     }
-                    for (&i, &v) in kr.iter().zip(kv) {
+                    for (&i, &v) in kr.iter().zip(right.raw) {
                         y[i] = y[i] + v;
                     }
                     sum = (0..n)
@@ -355,6 +464,34 @@ mod sparse {
                     out.set(k, j, sum);
                 }
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::WeightSums;
+
+        #[test]
+        fn fast_weight_ranges_match_direct_sums() {
+            for n in [1, 2, 3, 7, 16, 35, 100] {
+                let weights: Vec<_> = (0..n).map(|i| (i % 7) as f64 - 2.0).collect();
+                let sums = WeightSums::new_fast(&weights);
+                for start in 0..=n {
+                    for end in start..=n {
+                        let expected: f64 = weights[start..end].iter().sum();
+                        assert_eq!(sums.sum(start, end), expected);
+                    }
+                }
+            }
+            let mut weights = vec![1.0_f64; 1_000];
+            weights[0] = 1e16;
+            let sums = WeightSums::new_fast(&weights);
+            assert_eq!(sums.sum(1, 1_000), 999.0);
+
+            let mut weights = vec![1.0_f32; 1_000];
+            weights[0] = 1e8;
+            let sums = WeightSums::new_fast(&weights);
+            assert_eq!(sums.sum(1, 1_000), 999.0);
         }
     }
 }
