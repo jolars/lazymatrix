@@ -106,6 +106,15 @@
 //! accept immutable vector views directly. Raw columns borrow in O(1) time;
 //! dense logical-column operations take O(nrows) time.
 //!
+//! [`MatVecScaledInto`] and [`MatTransposeVecScaledInto`] fuse a product with
+//! output scaling for ndarray and sprs matrices, including normalized
+//! [`LazyMatrix`] wrappers. Exact zero `alpha` skips the product; exact zero
+//! `beta` ignores previous output values. Scaling a normalized forward product
+//! needs O(ncols) coefficient scratch. The optional
+//! [`LazyMatrix::matvec_scaled_with_workspace`] and
+//! [`LazyMatrix::mat_transpose_vec_scaled_with_workspace`] methods let callers
+//! reuse that storage across calls.
+//!
 //! sprs products and statistics work directly on either CSC or CSR storage.
 //! They visit stored entries without copying or materializing a normalized
 //! matrix. CSC statistics take O(ncols + nnz) time and support `parallel`;
@@ -327,8 +336,9 @@ pub use matrix::LazyMatrix;
 pub use normalization::{Centering, Normalization, NormalizationStats, Scaling};
 pub use traits::{
     ColumnStats, Columns, DotProduct, DotSlice, ElemDivAssign, L2Norm, LogicalColumn,
-    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape,
-    MatrixWrite, RawColumn, RawColumns, Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
-    SparseColumns, SparseRows, SubScalarAssign, SumEntries, VectorOwned, VectorView, VectorViewMut,
-    WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
+    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
+    MatVecScaledInto, MatrixErrorType, MatrixShape, MatrixWrite, RawColumn, RawColumns, Scalar,
+    ScaleAssign, ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign,
+    SumEntries, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
+    WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
 };

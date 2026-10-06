@@ -13,8 +13,8 @@ use std::ops::Deref;
 use sprs::{CsMatBase, SpIndex};
 
 use crate::traits::{
-    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, Scalar, VectorView,
-    VectorViewMut,
+    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
+    MatVecScaledInto, MatrixShape, Scalar, VectorView, VectorViewMut,
 };
 
 impl<F, I, IP, IS, DS, Iptr> MatrixShape for CsMatBase<F, I, IP, IS, DS, Iptr>
@@ -46,24 +46,72 @@ where
     Y: VectorViewMut<F>,
 {
     fn matvec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
-        assert_eq!(self.cols(), x.len(), "matvec_into: dimension mismatch");
+        self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F, I, IP, IS, DS, Iptr, X, Y> MatVecScaledInto<X, Y, F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+    X: VectorView<F>,
+    Y: VectorViewMut<F>,
+{
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        assert_eq!(
+            self.cols(),
+            x.len(),
+            "matvec_scaled_into: dimension mismatch"
+        );
         assert_eq!(
             self.rows(),
             out.len(),
-            "matvec_into: output dimension mismatch"
+            "matvec_scaled_into: output dimension mismatch"
         );
+        if alpha == F::zero() {
+            for row in 0..out.len() {
+                out.set(
+                    row,
+                    if beta == F::zero() {
+                        F::zero()
+                    } else {
+                        beta * out.get(row)
+                    },
+                );
+            }
+            return Ok(());
+        }
         if self.is_csr() {
             for (row, values) in self.outer_iterator().enumerate() {
-                out.set(row, values.iter().map(|(col, &v)| v * x.get(col)).sum());
+                let product: F = values.iter().map(|(col, &v)| v * x.get(col)).sum();
+                out.set(
+                    row,
+                    if beta == F::zero() {
+                        alpha * product
+                    } else {
+                        alpha * product + beta * out.get(row)
+                    },
+                );
             }
         } else {
             for row in 0..out.len() {
-                out.set(row, F::zero());
+                out.set(
+                    row,
+                    if beta == F::zero() {
+                        F::zero()
+                    } else {
+                        beta * out.get(row)
+                    },
+                );
             }
             for (col, values) in self.outer_iterator().enumerate() {
                 let coefficient = x.get(col);
                 for (row, &value) in values.iter() {
-                    out.set(row, out.get(row) + value * coefficient);
+                    out.set(row, out.get(row) + alpha * (value * coefficient));
                 }
             }
         }
@@ -83,17 +131,41 @@ where
     Y: VectorViewMut<F>,
 {
     fn mat_transpose_vec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
+        self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F, I, IP, IS, DS, Iptr, X, Y> MatTransposeVecScaledInto<X, Y, F>
+    for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+    X: VectorView<F>,
+    Y: VectorViewMut<F>,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
             self.rows(),
             x.len(),
-            "mat_transpose_vec_into: dimension mismatch"
+            "mat_transpose_vec_scaled_into: dimension mismatch"
         );
         assert_eq!(
             self.cols(),
             out.len(),
-            "mat_transpose_vec_into: output dimension mismatch"
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        self.transpose_view().matvec_into(x, out)?;
+        self.transpose_view()
+            .matvec_scaled_into(alpha, x, beta, out)?;
         Ok(())
     }
 }

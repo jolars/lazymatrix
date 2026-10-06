@@ -125,21 +125,25 @@ and solver-specific update logic belong in consuming crates.
     it, so borrowed or strided inputs can write into owned backend vectors.
   - [x] Specify dimension-checking and overwrite semantics, and implement
     backend-specific fast paths.
-  - Measure allocation costs in an iterative consumer before designing a
-    reusable normalization workspace.
+  - Measure allocation costs in an iterative consumer before extending the
+    fused prototype's reusable workspace API.
   - Use ndarray-glm fitting to evaluate repeated `S^-1 x` allocations and
-    support immutable coefficient views with caller-owned scratch storage.
+    decide whether caller-owned scratch should also support the existing
+    overwrite API.
   - Keep allocating convenience methods if they materially improve ergonomics.
 
-- [ ] Prototype fused scaled operator application.
+- [x] Prototype fused scaled operator application for ndarray and sprs.
   - Add forward and transpose capabilities for `y = alpha * A * x + beta * y`.
+    Exact zero `alpha` skips the product, and exact zero `beta` ignores prior output.
   - Express overwrite, accumulation, and subtraction through the same primitive
-    rather than allocating intermediate vectors.
-  - Determine how callers can reuse the `S^-1 x` workspace needed by a scaled
-    `LazyMatrix` without exposing backend-specific scratch types in the core
-    traits.
-  - Test `alpha` and `beta` at zero, one, negative values, and nonfinite values,
-    along with empty and rectangular operators.
+    in the prototype backends rather than allocating intermediate vectors.
+  - Let callers reuse coefficient scratch through optional `LazyMatrix` methods;
+    keep backend-specific scratch types out of the core operator traits.
+  - Test zero, one, negative, and nonfinite coefficients, plus empty and
+    rectangular operators.
+
+- [ ] Evaluate fused application for the remaining backends and `WithIntercept`
+  after consumer benchmarks.
 
 - [ ] Avoid cloning the forward input when scaling is inactive.
   - Preserve the direct backend path for raw and center-only products.

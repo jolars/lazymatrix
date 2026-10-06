@@ -41,6 +41,19 @@ pub trait MatVecInto<X, Y = X>: MatrixShape + MatrixErrorType {
     fn matvec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error>;
 }
 
+/// Fused product `out = alpha * A * x + beta * out`.
+///
+/// Exact zero `alpha` skips the product, including any storage reads. Exact zero
+/// `beta` overwrites without reading prior output values. Dimensions are checked
+/// even when a coefficient is zero. On an operational error, `out` may be partial.
+///
+/// # Panics
+///
+/// Panics unless `x` has length `ncols` and `out` has length `nrows`.
+pub trait MatVecScaledInto<X, Y, F>: MatrixShape + MatrixErrorType {
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error>;
+}
+
 /// Transposed matrix–vector product `Aᵀ x`, returning a freshly allocated vector
 /// of length `ncols`. Returns the backend error if the product cannot be completed.
 pub trait MatTransposeVec<V>: MatrixShape + MatrixErrorType {
@@ -64,6 +77,25 @@ pub trait MatTransposeVec<V>: MatrixShape + MatrixErrorType {
 /// Panics unless `x` has length `nrows` and `out` has length `ncols`.
 pub trait MatTransposeVecInto<X, Y = X>: MatrixShape + MatrixErrorType {
     fn mat_transpose_vec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error>;
+}
+
+/// Fused transpose product `out = alpha * Aᵀ * x + beta * out`.
+///
+/// Exact zero `alpha` skips the product, including any storage reads. Exact zero
+/// `beta` overwrites without reading prior output values. Dimensions are checked
+/// even when a coefficient is zero. On an operational error, `out` may be partial.
+///
+/// # Panics
+///
+/// Panics unless `x` has length `nrows` and `out` has length `ncols`.
+pub trait MatTransposeVecScaledInto<X, Y, F>: MatrixShape + MatrixErrorType {
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error>;
 }
 
 impl<M: MatrixShape + ?Sized> MatrixShape for &M {
@@ -94,6 +126,15 @@ where
     }
 }
 
+impl<M, X, Y, F> MatVecScaledInto<X, Y, F> for &M
+where
+    M: MatVecScaledInto<X, Y, F> + ?Sized,
+{
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        (**self).matvec_scaled_into(alpha, x, beta, out)
+    }
+}
+
 impl<M, V> MatTransposeVec<V> for &M
 where
     M: MatTransposeVec<V> + ?Sized,
@@ -109,5 +150,20 @@ where
 {
     fn mat_transpose_vec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
         (**self).mat_transpose_vec_into(x, out)
+    }
+}
+
+impl<M, X, Y, F> MatTransposeVecScaledInto<X, Y, F> for &M
+where
+    M: MatTransposeVecScaledInto<X, Y, F> + ?Sized,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        (**self).mat_transpose_vec_scaled_into(alpha, x, beta, out)
     }
 }

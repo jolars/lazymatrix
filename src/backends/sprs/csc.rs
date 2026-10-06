@@ -3,8 +3,8 @@ use std::ops::Deref;
 use sprs::{CsMatBase, CsVecBase, CsVecViewI, SpIndex};
 
 use crate::{
-    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, RawColumn,
-    RawColumns, Scalar, SparseColumns,
+    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MatrixShape, RawColumn, RawColumns, Scalar, SparseColumns,
 };
 
 /// A checked CSC matrix or view that supports contiguous borrowed columns.
@@ -186,6 +186,27 @@ impl<M: MatVecInto<X, Y>, X, Y> MatVecInto<X, Y> for SprsCsc<M> {
 impl<M: MatTransposeVecInto<X, Y>, X, Y> MatTransposeVecInto<X, Y> for SprsCsc<M> {
     fn mat_transpose_vec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
         self.inner.mat_transpose_vec_into(x, out)
+    }
+}
+
+impl<M: MatVecScaledInto<X, Y, F>, X, Y, F> MatVecScaledInto<X, Y, F> for SprsCsc<M> {
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        self.inner.matvec_scaled_into(alpha, x, beta, out)
+    }
+}
+
+impl<M: MatTransposeVecScaledInto<X, Y, F>, X, Y, F> MatTransposeVecScaledInto<X, Y, F>
+    for SprsCsc<M>
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        self.inner
+            .mat_transpose_vec_scaled_into(alpha, x, beta, out)
     }
 }
 

@@ -9,8 +9,8 @@ use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan,
 };
 use crate::traits::{
-    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, RawColumns,
-    Scalar,
+    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MatrixShape, RawColumns, Scalar,
 };
 
 impl<S: Data> MatrixShape for ArrayBase<S, Ix2> {
@@ -75,13 +75,43 @@ where
         x: &ArrayBase<X, Ix1>,
         out: &mut ArrayBase<Y, Ix1>,
     ) -> Result<(), Self::Error> {
-        assert_eq!(self.ncols(), x.len(), "matvec_into: dimension mismatch");
+        self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F, S, X, Y> MatVecScaledInto<ArrayBase<X, Ix1>, ArrayBase<Y, Ix1>, F> for ArrayBase<S, Ix2>
+where
+    F: Scalar,
+    S: Data<Elem = F>,
+    X: Data<Elem = F>,
+    Y: DataMut<Elem = F>,
+{
+    fn matvec_scaled_into(
+        &self,
+        alpha: F,
+        x: &ArrayBase<X, Ix1>,
+        beta: F,
+        out: &mut ArrayBase<Y, Ix1>,
+    ) -> Result<(), Self::Error> {
+        assert_eq!(
+            self.ncols(),
+            x.len(),
+            "matvec_scaled_into: dimension mismatch"
+        );
         assert_eq!(
             self.nrows(),
             out.len(),
-            "matvec_into: output dimension mismatch"
+            "matvec_scaled_into: output dimension mismatch"
         );
-        general_mat_vec_mul(F::one(), self, x, F::zero(), out);
+        if alpha == F::zero() {
+            if beta == F::zero() {
+                out.fill(F::zero());
+            } else if beta != F::one() {
+                out.mapv_inplace(|value| beta * value);
+            }
+            return Ok(());
+        }
+        general_mat_vec_mul(alpha, self, x, beta, out);
         Ok(())
     }
 }
@@ -98,17 +128,44 @@ where
         x: &ArrayBase<X, Ix1>,
         out: &mut ArrayBase<Y, Ix1>,
     ) -> Result<(), Self::Error> {
+        self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F, S, X, Y> MatTransposeVecScaledInto<ArrayBase<X, Ix1>, ArrayBase<Y, Ix1>, F>
+    for ArrayBase<S, Ix2>
+where
+    F: Scalar,
+    S: Data<Elem = F>,
+    X: Data<Elem = F>,
+    Y: DataMut<Elem = F>,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &ArrayBase<X, Ix1>,
+        beta: F,
+        out: &mut ArrayBase<Y, Ix1>,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
             self.nrows(),
             x.len(),
-            "mat_transpose_vec_into: dimension mismatch"
+            "mat_transpose_vec_scaled_into: dimension mismatch"
         );
         assert_eq!(
             self.ncols(),
             out.len(),
-            "mat_transpose_vec_into: output dimension mismatch"
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        general_mat_vec_mul(F::one(), &self.t(), x, F::zero(), out);
+        if alpha == F::zero() {
+            if beta == F::zero() {
+                out.fill(F::zero());
+            } else if beta != F::one() {
+                out.mapv_inplace(|value| beta * value);
+            }
+            return Ok(());
+        }
+        general_mat_vec_mul(alpha, &self.t(), x, beta, out);
         Ok(())
     }
 }

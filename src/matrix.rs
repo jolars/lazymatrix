@@ -1,9 +1,10 @@
 use crate::column::{LazyColumn, LazySparseColumn, SparseColumnRef};
 use crate::normalization::Normalization;
 use crate::traits::{
-    ColumnStats, Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto, MatVec,
-    MatVecInto, MatrixShape, RawColumns, Scalar, ScaledSubSlice, SparseColumns, SubScalarAssign,
-    SumEntries,
+    ColumnStats, Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
+    MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixShape, RawColumns,
+    Scalar, ScaledSubSlice, SparseColumns, SubScalarAssign, SumEntries, VectorOwned, VectorView,
+    VectorViewMut,
 };
 
 /// A matrix presented with lazy column normalization `X̃ = (X − 1cᵀ)S⁻¹`.
@@ -307,6 +308,207 @@ where
             out.elem_div_assign(s);
         }
         Ok(())
+    }
+}
+
+impl<M, F: Scalar> LazyMatrix<M, F>
+where
+    M: MatrixShape,
+{
+    /// Apply `out = alpha * X̃ * x + beta * out` using caller-owned coefficient scratch.
+    ///
+    /// `scratch` must have length `ncols`. It is used when column scaling is
+    /// active, and its contents after the call are unspecified on error.
+    pub fn matvec_scaled_with_workspace<X, Y>(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+        scratch: &mut X::Owned,
+    ) -> Result<(), M::Error>
+    where
+        X: VectorOwned<F>,
+        Y: VectorViewMut<F>,
+        M: MatVecScaledInto<X, Y, F> + MatVecScaledInto<X::Owned, Y, F>,
+    {
+        assert_eq!(
+            x.len(),
+            self.ncols(),
+            "matvec_scaled_into: dimension mismatch"
+        );
+        assert_eq!(
+            out.len(),
+            self.nrows(),
+            "matvec_scaled_into: output dimension mismatch"
+        );
+        assert_eq!(
+            scratch.len(),
+            self.ncols(),
+            "matvec_scaled_into: scratch dimension mismatch"
+        );
+        if let Some(scales) = self.scales.as_ref().filter(|_| alpha != F::zero()) {
+            for (j, &scale) in scales.iter().enumerate() {
+                scratch.set(j, x.get(j) / scale);
+            }
+            self.data.matvec_scaled_into(alpha, scratch, beta, out)?;
+            if let Some(centers) = &self.centers {
+                let correction: F = (0..self.ncols()).map(|j| scratch.get(j) * centers[j]).sum();
+                for i in 0..out.len() {
+                    out.set(i, out.get(i) - alpha * correction);
+                }
+            }
+        } else {
+            self.data.matvec_scaled_into(alpha, x, beta, out)?;
+            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+                let correction: F = (0..self.ncols()).map(|j| x.get(j) * centers[j]).sum();
+                for i in 0..out.len() {
+                    out.set(i, out.get(i) - alpha * correction);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply `out = alpha * X̃ᵀ * x + beta * out` using caller-owned scratch.
+    ///
+    /// `scratch` must have length `ncols`. Scaling with nonzero `alpha` uses
+    /// this buffer to keep the previous `out` values separate from the raw
+    /// transpose product.
+    pub fn mat_transpose_vec_scaled_with_workspace<X, Y>(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+        scratch: &mut Y::Owned,
+    ) -> Result<(), M::Error>
+    where
+        X: VectorView<F>,
+        Y: VectorOwned<F> + VectorViewMut<F>,
+        M: MatTransposeVecScaledInto<X, Y, F> + MatTransposeVecScaledInto<X, Y::Owned, F>,
+    {
+        assert_eq!(
+            x.len(),
+            self.nrows(),
+            "mat_transpose_vec_scaled_into: dimension mismatch"
+        );
+        assert_eq!(
+            out.len(),
+            self.ncols(),
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
+        );
+        assert_eq!(
+            scratch.len(),
+            self.ncols(),
+            "mat_transpose_vec_scaled_into: scratch dimension mismatch"
+        );
+        if let Some(scales) = self.scales.as_ref().filter(|_| alpha != F::zero()) {
+            self.data
+                .mat_transpose_vec_scaled_into(F::one(), x, F::zero(), scratch)?;
+            let total = if self.centers.is_some() {
+                x.sum()
+            } else {
+                F::zero()
+            };
+            for (j, &scale) in scales.iter().enumerate() {
+                let center = self.centers.as_ref().map_or_else(F::zero, |c| c[j]);
+                let product = alpha * ((scratch.get(j) - center * total) / scale);
+                out.set(
+                    j,
+                    if beta == F::zero() {
+                        product
+                    } else {
+                        product + beta * out.get(j)
+                    },
+                );
+            }
+        } else {
+            self.data
+                .mat_transpose_vec_scaled_into(alpha, x, beta, out)?;
+            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+                let total = x.sum();
+                for (j, &center) in centers.iter().enumerate() {
+                    out.set(j, out.get(j) - alpha * center * total);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<M, X, Y, F> MatVecScaledInto<X, Y, F> for LazyMatrix<M, F>
+where
+    F: Scalar,
+    X: VectorOwned<F>,
+    Y: VectorViewMut<F>,
+    M: MatVecScaledInto<X, Y, F> + MatVecScaledInto<X::Owned, Y, F>,
+{
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        assert_eq!(
+            x.len(),
+            self.ncols(),
+            "matvec_scaled_into: dimension mismatch"
+        );
+        assert_eq!(
+            out.len(),
+            self.nrows(),
+            "matvec_scaled_into: output dimension mismatch"
+        );
+        if self.scales.is_some() && alpha != F::zero() {
+            let mut scratch = X::owned_from_fn(self.ncols(), |_| F::zero());
+            self.matvec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
+        } else {
+            self.data.matvec_scaled_into(alpha, x, beta, out)?;
+            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+                let correction: F = (0..self.ncols()).map(|j| x.get(j) * centers[j]).sum();
+                for i in 0..out.len() {
+                    out.set(i, out.get(i) - alpha * correction);
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+impl<M, X, Y, F> MatTransposeVecScaledInto<X, Y, F> for LazyMatrix<M, F>
+where
+    F: Scalar,
+    X: VectorView<F>,
+    Y: VectorOwned<F> + VectorViewMut<F>,
+    M: MatTransposeVecScaledInto<X, Y, F> + MatTransposeVecScaledInto<X, Y::Owned, F>,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        assert_eq!(
+            x.len(),
+            self.nrows(),
+            "mat_transpose_vec_scaled_into: dimension mismatch"
+        );
+        assert_eq!(
+            out.len(),
+            self.ncols(),
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
+        );
+        if self.scales.is_some() && alpha != F::zero() {
+            let mut scratch = Y::owned_from_fn(self.ncols(), |_| F::zero());
+            self.mat_transpose_vec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
+        } else {
+            self.data
+                .mat_transpose_vec_scaled_into(alpha, x, beta, out)?;
+            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+                let total = x.sum();
+                for (j, &center) in centers.iter().enumerate() {
+                    out.set(j, out.get(j) - alpha * center * total);
+                }
+            }
+            Ok(())
+        }
     }
 }
 

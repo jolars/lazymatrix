@@ -9,6 +9,8 @@
 //!   [`MatVecInto`] / [`MatTransposeVecInto`] counterparts — the matrix-free
 //!   linear-operator interface, implemented both by concrete backend matrices
 //!   and by [`LazyMatrix`](crate::LazyMatrix) itself. Products return `Result`.
+//!   [`MatVecScaledInto`] and [`MatTransposeVecScaledInto`] prototype fused
+//!   `alpha`/`beta` products for ndarray and sprs.
 //! * Solver-facing vector algebra ([`DotProduct`], [`L2Norm`],
 //!   [`ScaledAddAssign`], and [`ScaleAssign`]).
 //! * [`WeightedGramInto`] computes dense coefficient-space products into
@@ -55,7 +57,8 @@ pub use crate::normalization::{Centering, Normalization, NormalizationStats, Sca
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};
 pub use gram::{MatrixWrite, WeightedGramInto, WeightedGramKernel};
 pub use operator::{
-    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape,
+    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
+    MatVecScaledInto, MatrixErrorType, MatrixShape,
 };
 pub use rows::SparseRows;
 pub use stats::ColumnStats;
