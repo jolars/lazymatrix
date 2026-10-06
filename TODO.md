@@ -1,8 +1,8 @@
 # TODO
 
-This file records design work identified during the initial API audit. The
-crate should expose normalized matrices and their storage capabilities; solver
-state and solver-specific update logic belong in consuming crates.
+This file records design work identified during the initial API audit. The crate
+should expose normalized matrices and their storage capabilities; solver state
+and solver-specific update logic belong in consuming crates.
 
 ## Backend version compatibility
 
@@ -12,18 +12,19 @@ state and solver-specific update logic belong in consuming crates.
   - Run full backend suites for every enabled release, including version pairs,
     all-feature builds, and parallelism. Separate consumer crates verify Cargo
     feature unification across dependencies.
-  - Cover sprs and Zarr interoperability with every enabled ndarray release,
-    and compare products and Gram outputs across backend versions.
+  - Cover sprs and Zarr interoperability with every enabled ndarray release, and
+    compare products and Gram outputs across backend versions.
 
 ## Out-of-core storage
 
 - [x] Demonstrate memory-mapped ndarray views with a private `.npy` file.
 - [x] Make products, column statistics, and computed normalization fallible,
-      sharing each backend's error type through `MatrixErrorType`.
+  sharing each backend's error type through `MatrixErrorType`.
 - [x] Add synchronous zarrs 0.22 products and all normalization options, with
-      serial chunk reads and at most two scans for computed normalization.
+  serial chunk reads and at most two scans for computed normalization.
 - [ ] Measure cold-I/O throughput and peak memory on larger-than-RAM inputs
-      before adding chunk caching, prefetching, async reads, or stricter budgets.
+  before adding chunk caching, prefetching, async reads, or stricter
+  budgets.
 
 ## Foundation
 
@@ -44,8 +45,8 @@ state and solver-specific update logic belong in consuming crates.
   - Apply the same algorithm and edge-case policy to every backend.
 
 - [x] Define the policy for empty matrices and nonfinite statistics.
-  - Allow normalization of matrices with zero rows. Undefined means and
-    standard deviations are `NaN`; zero L2 and max-absolute scales use the
+  - Allow normalization of matrices with zero rows. Undefined means and standard
+    deviations are `NaN`; zero L2 and max-absolute scales use the
     degenerate-column convention below.
   - Follow IEEE behavior for nonfinite values instead of rejecting them. Ensure
     aggregations propagate `NaN` rather than accidentally masking it.
@@ -66,10 +67,9 @@ state and solver-specific update logic belong in consuming crates.
 
 - [x] Add `SparseColumns` for contiguous CSC column access.
   - Return borrowed row-index and raw-value slices without copying.
-  - Implement it only for storage types that provide efficient contiguous
-    column access.
-  - Keep it separate from `ColumnStats`, which remains
-    orientation-independent.
+  - Implement it only for storage types that provide efficient contiguous column
+    access.
+  - Keep it separate from `ColumnStats`, which remains orientation-independent.
 
 - [x] Add `LazyMatrix::column` and a borrowed `LazyColumn` view.
   - Gate generic column access on `M: RawColumns`; retain `M: SparseColumns` for
@@ -78,8 +78,8 @@ state and solver-specific update logic belong in consuming crates.
     expose row indices and raw stored values.
   - Use the canonical `center` and `scale` terminology used by `LazyMatrix`;
     inverse scales and affine background values are derived quantities.
-  - Represent inactive centering and scaling as effective values `0` and `1`
-    in the view where that simplifies consumers.
+  - Represent inactive centering and scaling as effective values `0` and `1` in
+    the view where that simplifies consumers.
   - Do not hide a dense centered-column update behind a method that appears to
     be sparse.
   - Test reconstruction of logical columns against a dense oracle.
@@ -99,7 +99,8 @@ state and solver-specific update logic belong in consuming crates.
     generally dense even when its raw row is sparse.
   - Test reconstruction of logical rows against a dense oracle.
 
-- [ ] Complete CSR operator and statistics support when it has a concrete consumer.
+- [ ] Complete CSR operator and statistics support when it has a concrete
+  consumer.
   - sprs already supports CSC and CSR operators and statistics because its
     matrix type stores orientation at runtime. `SprsCsc` and `SprsCsr` check
     storage orientation for borrowed columns and rows, respectively.
@@ -112,8 +113,8 @@ state and solver-specific update logic belong in consuming crates.
 ## Operator performance
 
 - [x] Allow `LazyMatrix` to wrap a borrowed backend matrix.
-  - Add forwarding implementations for the matrix capability traits on `&M`,
-    or provide an explicit borrowed wrapper with equivalent ergonomics.
+  - Add forwarding implementations for the matrix capability traits on `&M`, or
+    provide an explicit borrowed wrapper with equivalent ergonomics.
   - Support construction such as `LazyMatrix::new(&x, spec)` so fitting paths,
     cross-validation, and prediction do not need to consume the design matrix.
 
@@ -171,18 +172,19 @@ state and solver-specific update logic belong in consuming crates.
   - Add a wrapper only when a consumer benefits beyond spelling two existing
     operator calls explicitly.
   - Keep broadcast scalar/vector addition out of generic arithmetic: its row
-    versus column semantics are ambiguous, and the general case needs a
-    low-rank expression rather than altered normalization metadata.
+    versus column semantics are ambiguous, and the general case needs a low-rank
+    expression rather than altered normalization metadata.
 
 ## Lazy design matrices
 
-- [ ] Prototype a programmatic API for numeric column selection and interactions.
+- [ ] Prototype a programmatic API for numeric column selection and
+  interactions.
   - Borrow source columns and store term descriptions, including an optional
     intercept. For numeric inputs, `~ x1 + x2 + x2:x3` represents the columns
     `[1, x1, x2, x2 * x3]` without allocating the interaction column.
   - Implement `MatrixShape`, `MatrixErrorType`, forward and transpose products,
-    and their reusable-output counterparts. Evaluate interactions directly
-    into outputs or accumulators.
+    and their reusable-output counterparts. Evaluate interactions directly into
+    outputs or accumulators.
   - Start with borrowed dense columns. Efficient interactions require aligned
     access to source values; operator products alone are insufficient.
   - Expose logical column operations for dots, norms, weighted products, and
@@ -196,10 +198,11 @@ state and solver-specific update logic belong in consuming crates.
   - Normalize the expanded terms by default. Centering an interaction is
     different from multiplying centered predictors; document and test that
     distinction.
-  - Define how to preserve an intercept with effective center zero and scale
-    one when normalizing the remaining columns.
+  - Define how to preserve an intercept with effective center zero and scale one
+    when normalizing the remaining columns.
 
-- [ ] Evaluate sparse and chunked interaction strategies with concrete consumers.
+- [ ] Evaluate sparse and chunked interaction strategies with concrete
+  consumers.
   - Preserve `SparseColumns` as a borrowed-slice capability; computed sparse
     interactions must not claim to expose stored product values as slices.
   - Preserve IEEE nonfinite behavior when exploiting structural zeros.
@@ -318,19 +321,18 @@ system still requires O(p^2) storage.
 
 ## SLOPE rewrite support
 
-These items come from comparing the normalization code in `../libslope` with
-the current operator and column-view API. The JIT-normalization enum and its
+These items come from comparing the normalization code in `../libslope` with the
+current operator and column-view API. The JIT-normalization enum and its
 four-way branches should not be ported: optional centers and scales already
 represent the same four states.
 
 - [x] Add weighted logical-column products.
-  - [x] Provide a weighted dot product for
-    `x_tilde_j^T (weights * vector)` without materializing the elementwise
-    product.
+  - [x] Provide a weighted dot product for `x_tilde_j^T (weights * vector)`
+    without materializing the elementwise product.
   - [x] Provide a weighted squared norm `sum_i weights_i * x_tilde_ij^2` for
     coordinate-wise Hessian calculations.
-  - [x] Offer a weighted-dot variant accepting cached `sum(weights * vector)`
-    so repeated dots remain O(nnz_j). Weighted norms scan row weights directly
+  - [x] Offer a weighted-dot variant accepting cached `sum(weights * vector)` so
+    repeated dots remain O(nnz_j). Weighted norms scan row weights directly
     in O(n + nnz_j) to preserve small implicit-zero contributions. Their
     cached-total variant uses the same calculation.
   - [x] Accept borrowed inputs without forcing copies of dense matrix columns;
@@ -339,13 +341,13 @@ represent the same four states.
     combinations, including implicit and explicitly stored zeros.
 
 - [x] Make the sparse-plus-offset decomposition of `LazyColumn` easier to use.
-  - Provide `implicit_value()` (`-center / scale`), `raw_sum()`, and an
-    iterator over stored corrections (`raw_value / scale`).
+  - Provide `implicit_value()` (`-center / scale`), `raw_sum()`, and an iterator
+    over stored corrections (`raw_value / scale`).
   - Keep these as representation-level column operations. Residual offsets,
     cached residual sums, and coordinate-update policy remain in the consuming
     solver.
-  - Use the coordinate-descent example to verify that a centered residual
-    update can stay O(nnz_j) without rederiving normalization formulas.
+  - Use the coordinate-descent example to verify that a centered residual update
+    can stay O(nnz_j) without rederiving normalization formulas.
 
 - [x] Add the remaining normalization statistics used by `libslope`.
   - Add minimum centering and L1 and range scaling.
@@ -361,8 +363,8 @@ represent the same four states.
 - [x] Add a generic dense/sparse logical-column interface.
   - Use `RawColumns` with an associated borrowed view for backend storage and
     `Columns` with an associated `LogicalColumn` for generic consumers.
-  - Accept contiguous and strided inputs and destinations through
-    `VectorView` / `VectorViewMut` without forcing copies.
+  - Accept contiguous and strided inputs and destinations through `VectorView` /
+    `VectorViewMut` without forcing copies.
   - Keep `SparseColumns` as the stronger contiguous-CSC capability and expose
     sparse representation helpers separately from common logical operations.
 
@@ -378,13 +380,12 @@ represent the same four states.
     can be computed through `LazyColumn` views.
   - Add a restricted `matvec` or transpose product only if working-set and
     screening benchmarks show that zero-filled full products are a bottleneck.
-  - Do not encode flattened feature-response indices or SLOPE working-set
-    policy in the matrix API.
+  - Do not encode flattened feature-response indices or SLOPE working-set policy
+    in the matrix API.
 
 - [ ] Benchmark logical column-pair products before adding a Gram-entry API.
-  - Prototype `X_tilde_j^T X_tilde_k` and
-    `X_tilde_j^T diag(weights) X_tilde_k` in a consuming coordinate or block
-    method.
+  - Prototype `X_tilde_j^T X_tilde_k` and `X_tilde_j^T diag(weights) X_tilde_k`
+    in a consuming coordinate or block method.
   - For CSC inputs, merge stored row indices and account for the centered
     background analytically rather than materializing either logical column.
   - Define the capability at matrix level if accepting two backend-specific
@@ -394,7 +395,7 @@ represent the same four states.
     costs for dense storage or for an incompatible sparse orientation.
 
 - [ ] Pressure-test signed combinations of normalized columns in the SLOPE
-      consumer.
+  consumer.
   - Build cluster directions from `LazyColumn` views into a consumer-owned
     sparse-plus-offset workspace instead of materializing a normalized sparse
     matrix for every cluster.
@@ -405,35 +406,35 @@ represent the same four states.
 
 - [ ] Add submatrix support only after row and column views are established.
   - Define `lazy.submatrix(rows, cols)` as a restriction of the already
-    normalized matrix; inherit the selected columns' existing centers and
-    scales rather than recomputing them.
+    normalized matrix; inherit the selected columns' existing centers and scales
+    rather than recomputing them.
   - Start with contiguous ranges, where global-to-local index mapping is cheap.
   - Treat a block as the range-selected form of a submatrix rather than as an
     unrelated abstraction.
-  - Use filtering view adapters when restriction breaks slice contiguity; do
-    not weaken full CSC/CSR access merely to give every view the same type.
+  - Use filtering view adapters when restriction breaks slice contiguity; do not
+    weaken full CSC/CSR access merely to give every view the same type.
   - Defer arbitrary index selections until their ordering, duplicate-index,
     mapping, allocation, and complexity contracts are clear.
-  - Keep selecting raw data and then normalizing it as a distinct operation
-    with distinct statistical semantics.
+  - Keep selecting raw data and then normalizing it as a distinct operation with
+    distinct statistical semantics.
 
 ## Tests and maintenance
 
 - [ ] Exercise the public scalar claim with shared `f32` tests.
 - [ ] Test explicit stored zeros and fully dense sparse columns/rows.
 - [ ] Test every new view through dense reconstruction and relevant algebraic
-      identities rather than solver convergence.
+  identities rather than solver convergence.
 - [ ] Consider sharing private CSC statistics helpers between backends to
-      prevent their numerical behavior from diverging.
+  prevent their numerical behavior from diverging.
 - [ ] Replace the ignored crate-level example with a small compiling doctest
-      once the shape-aware constructors settle.
+  once the shape-aware constructors settle.
 
 ## Surface ownership decisions
 
 - [ ] Revisit whole-operator logical reductions only with a concrete consumer.
   - Column sums and squared norms are already available through `LogicalColumn`;
-    do not duplicate them as matrix-wide allocation-returning methods merely
-    for symmetry.
+    do not duplicate them as matrix-wide allocation-returning methods merely for
+    symmetry.
   - Spectral norms, bilinear forms such as `u^T A v`, and quadratic forms such
     as `A^T A v` remain compositions of existing primitives unless fusion is
     shown to matter.
@@ -461,5 +462,5 @@ represent the same four states.
   KKT policy, SLOPE clusters, and cluster merging or splitting remain in the
   consuming model crate.
 - Dense in-place normalization and a `modify_x` mode are not part of the lazy
-  operator. Consumers that deliberately materialize normalized dense data can
-  do so outside this crate.
+  operator. Consumers that deliberately materialize normalized dense data can do
+  so outside this crate.
