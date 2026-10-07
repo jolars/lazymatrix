@@ -148,11 +148,13 @@ and solver-specific update logic belong in consuming crates.
     workspace paths. They cover dense and CSC input with raw, centered, and
     standardized designs, with dataset construction and workspace setup
     outside measurement.
-  - [ ] Measure normalization allocations in ndarray-glm fitting and Shrinkage's
-    backtracking proximal gradient. Shrinkage currently pins LazyMatrix
-    0.5.0 and uses ordinary overwrite products, which still clone a native
-    coefficient vector on every scaled forward product, including trial
-    steps and final diagnostics.
+  - [x] Measure normalization allocations in ndarray-glm fitting and Shrinkage's
+    backtracking proximal gradient. [Downstream
+    profiles](benches/normalization_allocations.md) verify one coefficient
+    clone per scaled forward product in Shrinkage, including rejected trials
+    and the final pass. ndarray-glm currently standardizes an owned dense
+    design during construction; the profiles measure that cost separately
+    from fitting and prediction. Lazy adoption remains open.
   - [ ] Compare the existing overwrite API with fused workspace application
     using `alpha = 1` and `beta = 0`. The existing consumer benchmark uses
     accumulation with `beta = 1` and fuses coefficient updates, so it does

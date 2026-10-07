@@ -1,0 +1,20 @@
+[package]
+name = "normalization-allocations"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[workspace]
+
+[dependencies]
+faer = { version = "0.24", default-features = false, features = ["std", "linalg"] }
+ndarray = "0.17.2"
+rand = { version = "0.10", default-features = false, features = ["std"] }
+rand_chacha = "0.10"
+sprs = { version = "=0.11.4", default-features = false }
+ndarray-glm = { git = "https://github.com/felix-clark/ndarray-glm", rev = "0b727d8baaaf7c18980a8348fd410aa9d86a41b4" }
+shrinkage = { git = "https://github.com/jolars/shrinkage", rev = "165cd6e64c42c00bec15d09388d4c19793da4be4", default-features = false, features = ["faer_v0_24", "ndarray_v0_17", "sprs_v0_11"] }
+
+[patch.crates-io]
+lazymatrix = { path = "../.." }
