@@ -316,6 +316,38 @@ constructors do not guarantee finite arithmetic results.
 
 ## Out-of-core matrices
 
+The experimental `ReadBlock<F>` capability reads caller-chosen rectangles into
+an initialized `&mut [F]`. `ZarrMatrix` implements it independently of borrowed
+column and row access. A successful read returns a `DenseBlock` borrowing the
+packed row-major buffer prefix; its dimensions exclude storage padding. Values
+are raw, without normalization. The view must cease to be used before the buffer
+can be reused.
+
+```rust
+use lazymatrix::{MatrixShape, ReadBlock};
+
+fn first_block<M: ReadBlock<f64>>(matrix: &M) -> Result<(), M::Error> {
+    let rows = matrix.nrows().min(32);
+    let columns = matrix.ncols().min(8);
+    let mut buffer = vec![0.0; 32 * 8];
+    let block = matrix.read_block(0..rows, 0..columns, &mut buffer)?;
+    assert_eq!(block.values().len(), rows * columns);
+    Ok(())
+}
+```
+
+Invalid ranges and insufficient buffer length panic before storage access. Empty
+rectangles perform no reads. On an operational error, discard the entire
+requested prefix; a successful retry overwrites it. The unused buffer tail is
+unchanged on both success and failure. Reads decode intersecting Zarr chunks
+serially and preserve configured fill values. Total memory also includes decoded
+storage chunks and codec workspace, including outer shards. Repeated reads from
+the same chunk may decode it again.
+
+The sibling Shrinkage prototype uses this capability for validation and proximal
+product passes while retaining normalization in `LazyMatrix`. Solver state and
+backtracking remain in Shrinkage.
+
 A borrowed ndarray view can refer to a memory-mapped file. The `ndarray_mmap`
 example creates a private temporary `.npy` file in column-major order, fills it
 through a writable mapping, and normalizes a read-only `ArrayView2` without

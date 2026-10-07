@@ -8,6 +8,7 @@ use std::marker::PhantomData;
 use zarrs::array::ElementOwned;
 use zarrs::array::codec::CodecOptions;
 use zarrs::array::{Array, ArrayError};
+use zarrs::array_subset::ArraySubset;
 use zarrs::storage::ReadableStorageTraits;
 
 use crate::{
@@ -73,6 +74,9 @@ impl From<ArrayError> for ZarrMatrixError {
 /// and throughout each operation. The adapter provides no snapshot isolation.
 /// It deliberately provides no borrowed column or row capabilities, since data
 /// must be loaded and decoded before it can be borrowed.
+/// [`crate::ReadBlock`] instead loads caller-chosen rectangles into an explicit
+/// reusable buffer. Reads decode intersecting chunks serially; chunk and codec
+/// workspace is additional to the caller's buffer, including outer shards.
 #[derive(Debug)]
 pub struct ZarrMatrix<S: ?Sized, F = f64> {
     array: Array<S>,
@@ -172,6 +176,69 @@ impl<S: ?Sized, F> MatrixShape for ZarrMatrix<S, F> {
 
 impl<S: ?Sized, F> MatrixErrorType for ZarrMatrix<S, F> {
     type Error = ZarrMatrixError;
+}
+
+impl<S, F> crate::ReadBlock<F> for ZarrMatrix<S, F>
+where
+    S: ReadableStorageTraits + ?Sized + 'static,
+    F: Scalar + ElementOwned,
+{
+    fn read_block<'buf>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        buffer: &'buf mut [F],
+    ) -> Result<crate::DenseBlock<'buf, F>, Self::Error> {
+        let len = crate::traits::validate_rectangle(self, &rows, &columns, buffer.len());
+        let output = &mut buffer[..len];
+        if len == 0 {
+            return Ok(crate::DenseBlock::new(output, rows.len(), columns.len()));
+        }
+        let subset = ArraySubset::new_with_start_shape(
+            vec![rows.start as u64, columns.start as u64],
+            vec![rows.len() as u64, columns.len() as u64],
+        )
+        .map_err(ArrayError::from)?;
+        let chunks = self
+            .array
+            .chunks_in_array_subset(&subset)
+            .map_err(ArrayError::from)?
+            .ok_or_else(|| ArrayError::InvalidArraySubset(subset, self.array.shape().to_vec()))?;
+        let mut options = CodecOptions::default();
+        options.set_concurrent_target(1);
+        for indices in chunks.indices() {
+            let chunk_shape = self.array.chunk_shape(&indices)?;
+            let chunk_rows =
+                usize::try_from(chunk_shape[0].get()).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+            let chunk_cols =
+                usize::try_from(chunk_shape[1].get()).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+            chunk_rows
+                .checked_mul(chunk_cols)
+                .and_then(|n| n.checked_mul(std::mem::size_of::<F>()))
+                .filter(|&bytes| bytes <= isize::MAX as usize)
+                .ok_or(ZarrMatrixError::SizeOverflow)?;
+            let origin = self.array.chunk_origin(&indices)?;
+            let row_start =
+                usize::try_from(origin[0]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+            let col_start =
+                usize::try_from(origin[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+            let row_end = row_start.saturating_add(chunk_rows).min(rows.end);
+            let col_end = col_start.saturating_add(chunk_cols).min(columns.end);
+            let values = self
+                .array
+                .retrieve_chunk_elements_opt::<F>(&indices, &options)?;
+            for row in row_start.max(rows.start)..row_end {
+                let count = col_end - col_start.max(columns.start);
+                let source =
+                    (row - row_start) * chunk_cols + columns.start.saturating_sub(col_start);
+                let destination =
+                    (row - rows.start) * columns.len() + col_start.saturating_sub(columns.start);
+                output[destination..destination + count]
+                    .copy_from_slice(&values[source..source + count]);
+            }
+        }
+        Ok(crate::DenseBlock::new(output, rows.len(), columns.len()))
+    }
 }
 
 impl<S, F, X, Y> MatVecInto<X, Y> for ZarrMatrix<S, F>

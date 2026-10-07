@@ -22,6 +22,8 @@ re-exports. The main implementation is divided as follows:
 - `src/traits/vectors.rs`, `stats.rs`, and `columns.rs` define vector algebra,
   sparse-aware statistics, and column capabilities.
 - `src/traits/rows.rs` defines the contiguous sparse-row borrowing capability.
+- `src/traits/blocks.rs` defines experimental fallible rectangular reads into
+  caller-owned buffers and the borrowed packed `DenseBlock` view.
 - `src/backends/faer/` and `src/backends/nalgebra/` contain feature-gated dense,
   sparse, and vector implementations. `src/backends/ndarray/` contains dense
   matrix and vector implementations. `src/backends/sprs/` contains sparse

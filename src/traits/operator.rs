@@ -1,4 +1,4 @@
-/// Error shared by a matrix's products and column statistics.
+/// Error shared by a matrix's fallible operations.
 ///
 /// In-memory backends use [`std::convert::Infallible`]. Storage-backed matrices
 /// use this type to report read and decoding failures across all capabilities.

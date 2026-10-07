@@ -62,6 +62,97 @@ fn missing_chunks_use_their_fill_value() {
 }
 
 #[test]
+fn rectangular_reads_pack_values_and_reuse_only_the_buffer_prefix() {
+    use lazymatrix::{MatrixShape, ReadBlock};
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let mut buffer = vec![-99.0; 18];
+        let address = buffer.as_ptr();
+        for (rows, cols) in [(0..2, 0..2), (1..5, 1..3), (4..5, 2..3), (0..5, 0..3)] {
+            store.reset();
+            buffer.fill(-99.0);
+            let len = rows.len() * cols.len();
+            let matrix_ref = &matrix;
+            let block = lazymatrix::ReadBlock::read_block(
+                &matrix_ref,
+                rows.clone(),
+                cols.clone(),
+                &mut buffer,
+            )
+            .unwrap();
+            assert_eq!((block.nrows(), block.ncols()), (rows.len(), cols.len()));
+            let expected: Vec<_> = rows
+                .flat_map(|i| cols.clone().map(move |j| (i * 3 + j + 1) as f64))
+                .collect();
+            assert_eq!(block.values(), expected);
+            assert_eq!(&buffer[len..], vec![-99.0; 18 - len]);
+            assert_eq!(buffer.as_ptr(), address);
+        }
+        store.reset();
+        assert_eq!(matrix.read_block(5..5, 0..3, &mut []).unwrap().ncols(), 3);
+        assert_eq!(matrix.read_block(0..5, 3..3, &mut []).unwrap().nrows(), 5);
+        assert!(store.keys.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn rectangular_read_failure_discards_partial_values_and_allows_retry() {
+    use lazymatrix::ReadBlock;
+    let (matrix, store) = tracked(false);
+    let mut buffer = [999.0; 17];
+    store.fail_after.store(1, Ordering::Relaxed);
+    let error = matrix.read_block(0..5, 0..3, &mut buffer).unwrap_err();
+    assert!(error.to_string().contains("injected read failure"));
+    assert_eq!(store.keys.lock().unwrap().len(), 2);
+    assert_ne!(buffer[0], 999.0);
+    assert_eq!(&buffer[15..], &[999.0; 2]);
+    store.reset();
+    let block = matrix.read_block(0..5, 0..3, &mut buffer).unwrap();
+    assert_eq!(block.values(), &(1..=15).map(f64::from).collect::<Vec<_>>());
+    assert_scans(&store, &matrix, 1);
+}
+
+#[test]
+fn rectangular_reads_validate_before_storage_access() {
+    use lazymatrix::ReadBlock;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let (matrix, store) = tracked(false);
+    for (rows, cols, capacity) in [
+        (0..6, 0..1, 6),
+        (0..1, 0..4, 4),
+        (std::ops::Range { start: 3, end: 2 }, 0..1, 1),
+        (0..2, 0..2, 3),
+    ] {
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                matrix
+                    .read_block(rows, cols, &mut vec![0.0; capacity])
+                    .unwrap();
+            }))
+            .is_err()
+        );
+        assert!(store.keys.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn rectangular_reads_preserve_fill_values_and_f32_edge_values() {
+    use lazymatrix::ReadBlock;
+    let array = ArrayBuilder::new(vec![3, 3], vec![2, 2], DataType::Float32, 7.0_f32)
+        .build(Arc::new(MemoryStore::new()), "/blocks")
+        .unwrap();
+    array
+        .store_chunk_elements(&[1, 1], &[3.0_f32, f32::NAN, f32::NAN, f32::NAN])
+        .unwrap();
+    let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
+    let mut buffer = [0.0_f32; 4];
+    assert_eq!(
+        matrix.read_block(1..3, 1..3, &mut buffer).unwrap().values(),
+        &[7.0, 7.0, 7.0, 3.0]
+    );
+}
+
+#[test]
 fn fused_products_preserve_scan_counts_and_skip_reads_for_zero_alpha() {
     use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto, WithIntercept};
     fn exercise<O>(op: &O, matrix: &ZarrMatrix<TrackedStore>, store: &TrackedStore)
@@ -418,6 +509,7 @@ fn edge_padding_is_excluded_and_nan_fill_propagates() {
 
 #[test]
 fn oversized_chunks_fail_before_reading_or_allocating_them() {
+    use lazymatrix::ReadBlock;
     let array = ArrayBuilder::new(vec![1, 1], vec![u64::MAX, 2], DataType::Float64, 0.0f64)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();
@@ -426,6 +518,21 @@ fn oversized_chunks_fail_before_reading_or_allocating_them() {
         matrix.col_means(),
         Err(ZarrMatrixError::SizeOverflow)
     ));
+    assert!(matches!(
+        matrix.read_block(0..1, 0..1, &mut [0.0]),
+        Err(ZarrMatrixError::SizeOverflow)
+    ));
+}
+
+#[test]
+fn block_views_borrow_the_buffer_without_borrowing_the_reader() {
+    use lazymatrix::ReadBlock;
+    let mut buffer = [0.0; 4];
+    let block = {
+        let (matrix, _) = tracked(false);
+        matrix.read_block(0..2, 0..2, &mut buffer).unwrap()
+    };
+    assert_eq!(block.values(), &[1.0, 2.0, 4.0, 5.0]);
 }
 
 #[cfg(feature = "ndarray_all")]

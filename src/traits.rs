@@ -34,6 +34,8 @@
 //! * [`SparseColumns`] — the stronger borrowed access capability for
 //!   contiguous sparse columns.
 //! * [`SparseRows`] — borrowed access to contiguous sparse rows.
+//! * [`ReadBlock`] — experimental fallible rectangular reads into caller-owned
+//!   storage, returning [`DenseBlock`] views without hiding I/O in borrowing.
 
 /// Numeric scalar element type.
 ///
@@ -45,6 +47,7 @@ pub trait Scalar:
 {
 }
 
+mod blocks;
 mod columns;
 mod gram;
 mod operator;
@@ -53,9 +56,12 @@ mod stats;
 mod vectors;
 mod weighted_sums;
 
+#[cfg(feature = "zarrs_all")]
+pub(crate) use blocks::validate_rectangle;
 pub(crate) use operator::scale_output;
 
 pub use crate::normalization::{Centering, Normalization, NormalizationStats, Scaling};
+pub use blocks::{DenseBlock, ReadBlock};
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};
 pub use gram::{MatrixWrite, WeightedGramInto, WeightedGramKernel};
 pub use operator::{

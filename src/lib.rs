@@ -349,10 +349,10 @@ pub use matrix::LazyMatrix;
 pub use normalization::{Centering, Normalization, NormalizationStats, Scaling};
 pub use row::LazyRow;
 pub use traits::{
-    ColumnStats, Columns, DotProduct, DotSlice, ElemDivAssign, L2Norm, LogicalColumn,
+    ColumnStats, Columns, DenseBlock, DotProduct, DotSlice, ElemDivAssign, L2Norm, LogicalColumn,
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
-    MatVecScaledInto, MatrixErrorType, MatrixShape, MatrixWrite, RawColumn, RawColumns, Scalar,
-    ScaleAssign, ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign,
-    SumEntries, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
+    MatVecScaledInto, MatrixErrorType, MatrixShape, MatrixWrite, RawColumn, RawColumns, ReadBlock,
+    Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows,
+    SubScalarAssign, SumEntries, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
     WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
 };

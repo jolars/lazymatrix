@@ -22,7 +22,7 @@ and solver-specific update logic belong in consuming crates.
   sharing each backend's error type through `MatrixErrorType`.
 - [x] Add synchronous zarrs 0.22 products and all normalization options, with
   serial chunk reads and at most two scans for computed normalization.
-- [ ] Prototype a separate fallible block-reader capability with a Shrinkage
+- [x] Prototype a separate fallible block-reader capability with a Shrinkage
   consumer before stabilizing buffered access.
   - Specify caller-owned buffer capacity, logical block dimensions, and how
     returned views borrow the buffer until the next read. Keep memory bounded
@@ -33,6 +33,10 @@ and solver-specific update logic belong in consuming crates.
   - Inject failures during normalization statistics and a later solver pass.
     Verify buffer reuse and that consumers discard partially written blocks.
     Keep solver iteration and residual policies in Shrinkage.
+  - `ReadBlock` and `DenseBlock` provide raw rectangular Zarr reads into
+    caller-owned storage. Shrinkage's experimental buffered proximal consumer
+    reuses iteration and normalization, with parity and injected-failure tests.
+    Its development Cargo override remains local; the interfaces are provisional.
 - [ ] Measure cold-I/O throughput and peak memory on larger-than-RAM inputs
   before adding chunk caching, prefetching, async reads, or stricter
   budgets.
