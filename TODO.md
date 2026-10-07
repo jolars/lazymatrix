@@ -22,6 +22,17 @@ and solver-specific update logic belong in consuming crates.
   sharing each backend's error type through `MatrixErrorType`.
 - [x] Add synchronous zarrs 0.22 products and all normalization options, with
   serial chunk reads and at most two scans for computed normalization.
+- [ ] Prototype a separate fallible block-reader capability with a Shrinkage
+  consumer before stabilizing buffered access.
+  - Specify caller-owned buffer capacity, logical block dimensions, and how
+    returned views borrow the buffer until the next read. Keep memory bounded
+    independently of the full design size.
+  - Keep decoding and I/O out of infallible `RawColumns`, `SparseColumns`, and
+    `SparseRows` borrowing. Preserve the backend's error type and define which
+    buffer contents remain usable after a failed read.
+  - Inject failures during normalization statistics and a later solver pass.
+    Verify buffer reuse and that consumers discard partially written blocks.
+    Keep solver iteration and residual policies in Shrinkage.
 - [ ] Measure cold-I/O throughput and peak memory on larger-than-RAM inputs
   before adding chunk caching, prefetching, async reads, or stricter
   budgets.
@@ -125,16 +136,25 @@ and solver-specific update logic belong in consuming crates.
     it, so borrowed or strided inputs can write into owned backend vectors.
   - [x] Specify dimension-checking and overwrite semantics, and implement
     backend-specific fast paths.
-  - Measure allocation costs in an iterative consumer before extending the
-    fused prototype's reusable workspace API.
-  - Use ndarray-glm fitting to evaluate repeated `S^-1 x` allocations and
-    decide whether caller-owned scratch should also support the existing
-    overwrite API.
+  - Measure allocation costs in an iterative consumer before extending the fused
+    prototype's reusable workspace API.
+  - Use ndarray-glm fitting and Shrinkage's backtracking proximal gradient to
+    evaluate repeated `S^-1 x` allocations. Shrinkage currently pins 0.3.0 and
+    clones a native coefficient vector on every scaled forward product,
+    including trial steps and final diagnostics.
+  - Compare the existing overwrite API with fused workspace application using
+    `alpha = 1` and `beta = 0`. Measure allocation count, requested bytes, and
+    throughput for dense and CSC input with raw, centered, and standardized
+    designs. Keep dataset construction and workspace setup outside measurement.
+  - Use those results to decide whether the overwrite API also needs an explicit
+    workspace method. Verify the integrated consumer before claiming that
+    normalized iterations allocate nothing.
   - Keep allocating convenience methods if they materially improve ergonomics.
 
 - [x] Prototype fused scaled operator application for ndarray and sprs.
   - Add forward and transpose capabilities for `y = alpha * A * x + beta * y`.
-    Exact zero `alpha` skips the product, and exact zero `beta` ignores prior output.
+    Exact zero `alpha` skips the product, and exact zero `beta` ignores prior
+    output.
   - Express overwrite, accumulation, and subtraction through the same primitive
     in the prototype backends rather than allocating intermediate vectors.
   - Let callers reuse coefficient scratch through optional `LazyMatrix` methods;
@@ -149,6 +169,28 @@ and solver-specific update logic belong in consuming crates.
   - [Consumer benchmarks](benches/fused_consumer.md) show allocation savings
     with caller-owned scratch and mixed throughput gains. Keep allocating and
     overwrite products; ordinary fused calls can allocate more with scaling.
+
+- [ ] Make workspace reuse compose through `WithIntercept<LazyMatrix<M>>`.
+  - The current intercept workspace reuses only the wrapper's buffer. Its inner
+    normalized operator still allocates coefficient scratch, as measured in
+    `benches/fused_consumer.md`.
+  - Prototype a way to pass or retain both workspaces without moving solver
+    state into the matrix crate. Preserve separate allocating convenience paths.
+  - Extend the consumer allocation checks to the nested wrapper, including
+    scaled forward and transpose products, zero `alpha` and `beta`, and backend
+    failures after partial output writes. Normalization and intercept
+    corrections must run only after the inner product succeeds.
+
+- [ ] Evaluate native-vector borrowing in Shrinkage's proximal consumer.
+  - `VectorOwned`, `VectorView`, and `VectorViewMut` already cover buffer
+    construction and indexed access. Check whether adopting them lets Shrinkage
+    remove its separate `ProximalVector` backend implementations.
+  - Shrinkage currently copies between native product vectors and slice buffers
+    used by predictor datafits and complete proximal terms. Measure these copies
+    separately from normalization allocations.
+  - Evaluate borrowed contiguous slice access only if consumer measurements
+    justify it. Keep contiguity an explicit capability, preserve strided views,
+    and avoid implicit gathers or scalar runtime dispatch.
 
 - [ ] Avoid cloning the forward input when scaling is inactive.
   - Preserve the direct backend path for raw and center-only products.
