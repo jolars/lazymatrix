@@ -36,7 +36,8 @@ and solver-specific update logic belong in consuming crates.
   - `ReadBlock` and `DenseBlock` provide raw rectangular Zarr reads into
     caller-owned storage. Shrinkage's experimental buffered proximal consumer
     reuses iteration and normalization, with parity and injected-failure tests.
-    Its development Cargo override remains local; the interfaces are provisional.
+    Its development Cargo override remains local; the interfaces are
+    provisional.
 - [ ] Measure cold-I/O throughput and peak memory on larger-than-RAM inputs
   before adding chunk caching, prefetching, async reads, or stricter
   budgets.
@@ -140,20 +141,22 @@ and solver-specific update logic belong in consuming crates.
     it, so borrowed or strided inputs can write into owned backend vectors.
   - [x] Specify dimension-checking and overwrite semantics, and implement
     backend-specific fast paths.
-  - Measure allocation costs in an iterative consumer before extending the fused
-    prototype's reusable workspace API.
-  - Use ndarray-glm fitting and Shrinkage's backtracking proximal gradient to
-    evaluate repeated `S^-1 x` allocations. Shrinkage currently pins 0.3.0 and
-    clones a native coefficient vector on every scaled forward product,
-    including trial steps and final diagnostics.
-  - Compare the existing overwrite API with fused workspace application using
-    `alpha = 1` and `beta = 0`. Measure allocation count, requested bytes, and
-    throughput for dense and CSC input with raw, centered, and standardized
-    designs. Keep dataset construction and workspace setup outside measurement.
-  - Use those results to decide whether the overwrite API also needs an explicit
-    workspace method. Verify the integrated consumer before claiming that
-    normalized iterations allocate nothing.
-  - Keep allocating convenience methods if they materially improve ergonomics.
+  - [ ] Measure allocation costs in an iterative consumer before extending the
+    fused prototype's reusable workspace API.
+  - [ ] Use ndarray-glm fitting and Shrinkage's backtracking proximal gradient
+    to evaluate repeated `S^-1 x` allocations. Shrinkage currently pins
+    0.3.0 and clones a native coefficient vector on every scaled forward
+    product, including trial steps and final diagnostics.
+  - [ ] Compare the existing overwrite API with fused workspace application
+    using `alpha = 1` and `beta = 0`. Measure allocation count, requested
+    bytes, and throughput for dense and CSC input with raw, centered, and
+    standardized designs. Keep dataset construction and workspace setup
+    outside measurement.
+  - [ ] Use those results to decide whether the overwrite API also needs an
+    explicit workspace method. Verify the integrated consumer before
+    claiming that normalized iterations allocate nothing.
+  - [ ] Keep allocating convenience methods if they materially improve
+    ergonomics.
 
 - [x] Prototype fused scaled operator application for ndarray and sprs.
   - Add forward and transpose capabilities for `y = alpha * A * x + beta * y`.
