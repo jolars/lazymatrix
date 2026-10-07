@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/jolars/lazymatrix-rs/compare/v0.4.0...v0.5.0) (2026-10-07)
+
+### Features
+
+- prototype fallible rectangular block reads ([`82e1581`](https://github.com/jolars/lazymatrix-rs/commit/82e1581e30da96511722572e72718174837fa0d1))
+- extend fused operators across backends ([`91e06fa`](https://github.com/jolars/lazymatrix-rs/commit/91e06fa2d6e341fe11ed80fd26dbda274e208fbc))
+- add borrowed normalized row views ([`effa08c`](https://github.com/jolars/lazymatrix-rs/commit/effa08c1f0535d06d564f4a3bd36be9309d3bbb9))
+- prototype fused scaled operators ([`271458e`](https://github.com/jolars/lazymatrix-rs/commit/271458e5f0c774d161f08b7ba8a237b458097b8a))
+
+### Performance Improvements
+
+- speed up sparse centered Gram products ([`ced9620`](https://github.com/jolars/lazymatrix-rs/commit/ced962073b2228e98828129b4b75c9ec12d52f1c))
+
 ## [0.4.0](https://github.com/jolars/lazymatrix-rs/compare/v0.3.0...v0.4.0) (2026-09-25)
 
 ### Features
