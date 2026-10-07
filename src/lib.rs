@@ -131,13 +131,20 @@
 //! [`SparseRows`] borrows raw column-index and value slices from CSR storage in
 //! O(1) time, preserving explicitly stored zeros. It is available for faer's
 //! `SparseRowMat`, `SparseRowMatRef`, and `SparseRowMatMut` with `usize` indices,
-//! and nalgebra-sparse's `CsrMatrix`. These CSR types provide shape and raw row
-//! access; their operator and column-statistics implementations remain future
+//! and nalgebra-sparse's `CsrMatrix`. These CSR types provide shape and borrowed
+//! row access; their operator and column-statistics implementations remain future
 //! work. With sprs, wrap a CSR matrix or view in `SprsCsr::try_new`. The wrapper
 //! returns CSC inputs unchanged as `Err` and forwards existing products and
 //! statistics. Borrowing rows requires `usize` column indices, while pointer
 //! indices may use any supported width. The slices describe the original
-//! matrix, before normalization; normalized row views remain future work.
+//! matrix, before normalization.
+//!
+//! [`LazyMatrix::row`] requires [`SparseRows`] and returns a borrowed [`LazyRow`]
+//! in O(1) time without allocation. The view exposes raw storage and the full
+//! optional center and scale slices. Its logical length is the number of columns,
+//! even for an empty raw row. Centering generally makes the logical row dense:
+//! [`LazyRow::implicit_value`] exposes the background at a column, and
+//! [`LazyRow::stored_corrections`] iterates over the scaled raw entries.
 
 //! # An implicit intercept
 //!
@@ -323,6 +330,7 @@ mod gram;
 mod intercept;
 mod matrix;
 mod normalization;
+mod row;
 pub mod traits;
 mod weighted_sums;
 
@@ -334,6 +342,7 @@ pub use column::{LazyColumn, LazySparseColumn, SparseColumnRef};
 pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{Centering, Normalization, NormalizationStats, Scaling};
+pub use row::LazyRow;
 pub use traits::{
     ColumnStats, Columns, DotProduct, DotSlice, ElemDivAssign, L2Norm, LogicalColumn,
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,

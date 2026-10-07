@@ -91,7 +91,7 @@ and solver-specific update logic belong in consuming crates.
   - Support faer CSR matrices and views, nalgebra-sparse CSR matrices, and
     checked `SprsCsr` matrices and views, with `usize` column indices.
 
-- [ ] Add `LazyMatrix::row` and a borrowed `LazyRow` view.
+- [x] Add `LazyMatrix::row` and a borrowed `LazyRow` view.
   - Gate the method on `M: SparseRows`.
   - Expose column indices, raw stored values, logical length, and borrowed
     normalization parameters.

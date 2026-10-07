@@ -161,6 +161,18 @@ macro_rules! backend_suite {
                     assert_eq!(values.as_ptr(), values_ptr);
                     assert_eq!(rows.sparse_row(1), (&[][..], &[][..]));
                     assert_eq!(rows.sparse_row(2), (&[1][..], &[-2.0][..]));
+                    let lazy =
+                        LazyMatrix::from_parts(rows, Some(vec![0.5; 4]), Some(vec![-2.0; 4]));
+                    let row = lazy.row(0);
+                    assert_eq!(row.column_indices().as_ptr(), indices_ptr);
+                    assert_eq!(row.values().as_ptr(), values_ptr);
+                    assert_eq!(row.values(), &[1.0, 0.0]);
+                    assert_eq!(
+                        row.stored_corrections().collect::<Vec<_>>(),
+                        vec![(0, -0.5), (2, -0.0)]
+                    );
+                    assert!(lazy.row(1).values().is_empty());
+                    assert_eq!(lazy.row(1).implicit_value(3), 0.25);
                 };
                 check(&matrix);
                 check(&matrix.as_ref());
@@ -168,6 +180,7 @@ macro_rules! backend_suite {
 
                 let csc = build(&common::random_matrix(76, 5, 3, 0.5));
                 let transposed = csc.as_ref().transpose();
+                let lazy = LazyMatrix::from_parts(transposed, None, None);
                 assert_eq!(MatrixShape::nrows(&transposed), 3);
                 assert_eq!(MatrixShape::ncols(&transposed), 5);
                 for i in 0..3 {
@@ -176,6 +189,8 @@ macro_rules! backend_suite {
                     assert_eq!(indices, &csc.row_idx()[range.clone()]);
                     assert_eq!(indices.as_ptr(), csc.row_idx()[range.clone()].as_ptr());
                     assert_eq!(values.as_ptr(), csc.val()[range].as_ptr());
+                    assert_eq!(lazy.row(i).column_indices().as_ptr(), indices.as_ptr());
+                    assert_eq!(lazy.row(i).values().as_ptr(), values.as_ptr());
                 }
             }
 
@@ -194,6 +209,17 @@ macro_rules! backend_suite {
                 assert_eq!(values, &[1.0, 0.0, -2.0]);
                 assert_eq!(columns.as_ptr(), matrix.col_idx().as_ptr());
                 assert_eq!(values.as_ptr(), matrix.val().as_ptr());
+                let lazy = LazyMatrix::from_parts(
+                    matrix,
+                    Some(vec![0.5, -1.0, 2.0]),
+                    Some(vec![2.0, -4.0, 0.5]),
+                );
+                let row = lazy.row(0);
+                assert_eq!(row.column_indices(), &[2, 0, 2]);
+                assert_eq!(
+                    row.stored_corrections().collect::<Vec<_>>(),
+                    vec![(2, 2.0), (0, 0.0), (2, -4.0)]
+                );
             }
 
             #[test]

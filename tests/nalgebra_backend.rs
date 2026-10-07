@@ -117,6 +117,14 @@ macro_rules! backend_suite {
                 assert_eq!(values, &[0.0, -2.0]);
                 assert_eq!(columns.as_ptr(), matrix.col_indices()[1..].as_ptr());
                 assert_eq!(values.as_ptr(), matrix.values()[1..].as_ptr());
+                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![0.5; 4]), Some(vec![-2.0; 4]));
+                let row = lazy.row(1);
+                assert_eq!(row.column_indices().as_ptr(), columns.as_ptr());
+                assert_eq!(row.values().as_ptr(), values.as_ptr());
+                assert_eq!(
+                    row.stored_corrections().collect::<Vec<_>>(),
+                    vec![(0, -0.0), (3, 1.0)]
+                );
             }
 
             #[test]

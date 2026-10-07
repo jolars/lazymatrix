@@ -602,6 +602,60 @@ pub fn run_sparse_rows_suite<M: SparseRows<f64>>(build: impl Fn(&TestMatrix) -> 
                     .is_err()
             );
         }
+        lazy_rows_match_dense_oracle(&matrix, &tm);
+    }
+}
+
+fn lazy_rows_match_dense_oracle<M: SparseRows<f64>>(matrix: &M, tm: &TestMatrix) {
+    let centers: Vec<_> = (0..tm.ncols).map(|j| j as f64 * 0.5 - 1.25).collect();
+    let scales: Vec<_> = (0..tm.ncols)
+        .map(|j| if j % 2 == 0 { 0.5 } else { -2.0 })
+        .collect();
+    for use_center in [false, true] {
+        for use_scale in [false, true] {
+            let lazy = LazyMatrix::from_parts(
+                matrix,
+                use_center.then(|| centers.clone()),
+                use_scale.then(|| scales.clone()),
+            );
+            let expected = materialize(&tm.dense, lazy.centers(), lazy.scales());
+            for (i, expected_row) in expected.iter().enumerate() {
+                let row = lazy.row(i);
+                let (columns, values) = matrix.sparse_row(i);
+                assert_eq!(row.len(), tm.ncols);
+                assert_eq!(row.is_empty(), tm.ncols == 0);
+                assert_eq!(row.column_indices().as_ptr(), columns.as_ptr());
+                assert_eq!(row.values().as_ptr(), values.as_ptr());
+                assert_eq!(
+                    row.centers().map(<[f64]>::as_ptr),
+                    lazy.centers().map(<[f64]>::as_ptr)
+                );
+                assert_eq!(
+                    row.scales().map(<[f64]>::as_ptr),
+                    lazy.scales().map(<[f64]>::as_ptr)
+                );
+                let mut raw = vec![0.0; row.len()];
+                for (&j, &value) in row.column_indices().iter().zip(row.values()) {
+                    raw[j] += value;
+                }
+                let direct: Vec<_> = raw
+                    .iter()
+                    .enumerate()
+                    .map(|(j, &value)| (value - row.center(j)) / row.scale(j))
+                    .collect();
+                assert_close(&direct, expected_row, EPS);
+                let mut affine: Vec<_> = (0..row.len()).map(|j| row.implicit_value(j)).collect();
+                for (j, correction) in row.stored_corrections() {
+                    affine[j] += correction;
+                }
+                assert_close(&affine, expected_row, EPS);
+            }
+            for i in [tm.nrows, usize::MAX] {
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| lazy.row(i))).is_err()
+                );
+            }
+        }
     }
 }
 

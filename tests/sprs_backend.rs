@@ -160,9 +160,20 @@ fn sprs_csr_wrapper_checks_orientation_and_borrows_sliced_rows() {
     assert_eq!(values.as_ptr(), matrix.data()[1..].as_ptr());
     assert_eq!(wrapped.as_inner().rows(), 2);
     assert_eq!(wrapped.sparse_row(1), (&[2][..], &[-1.0][..]));
+    let lazy = LazyMatrix::from_parts(&wrapped, Some(vec![0.5; 4]), Some(vec![-2.0; 4]));
+    let row = lazy.row(0);
+    assert_eq!(row.column_indices().as_ptr(), columns.as_ptr());
+    assert_eq!(row.values().as_ptr(), values.as_ptr());
+    assert_eq!(
+        row.stored_corrections().collect::<Vec<_>>(),
+        vec![(1, -0.0), (3, -1.0)]
+    );
+    assert_eq!(lazy.row(1).values(), &[-1.0]);
 
     let wrapped = SprsCsr::try_new(matrix.view_mut()).unwrap();
     assert_eq!(wrapped.sparse_row(0).1.as_ptr(), data_ptr);
+    let lazy = LazyMatrix::from_parts(&wrapped, None, None);
+    assert_eq!(lazy.row(0).values().as_ptr(), data_ptr);
     let mut recovered = wrapped.into_inner();
     recovered.data_mut()[0] = 7.0;
     assert_eq!(matrix.data()[0], 7.0);

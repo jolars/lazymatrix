@@ -217,14 +217,14 @@ indices require one working column.
 `SparseRows` borrows raw column-index and value slices from CSR storage in O(1)
 time, including explicitly stored zeros. It supports faer's `SparseRowMat`,
 `SparseRowMatRef`, and `SparseRowMatMut` with `usize` indices, and
-nalgebra-sparse's `CsrMatrix`. These CSR types currently provide shape and raw
+nalgebra-sparse's `CsrMatrix`. These CSR types provide shape and borrowed
 row access; their operator and column-statistics implementations remain future
 work.
 
 For sprs, use the checked `SprsCsr` wrapper:
 
 ```rust
-use lazymatrix::{SparseRows, SprsCsr};
+use lazymatrix::{LazyMatrix, SparseRows, SprsCsr};
 use sprs::CsMat;
 
 let x = CsMat::new(
@@ -237,14 +237,35 @@ let csr = SprsCsr::try_new(x.view()).unwrap();
 let (columns, values) = csr.sparse_row(0);
 assert_eq!(columns, &[0, 2]);
 assert_eq!(values, &[1.0, 0.0]);
+
+let lazy = LazyMatrix::from_parts(csr, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]));
+let row = lazy.row(0);
+assert_eq!(row.len(), 3);
+assert_eq!(row.column_indices(), &[0, 2]);
+assert_eq!(row.values(), &[1.0, 0.0]);
+assert_eq!(row.implicit_value(1), 0.5);
+assert_eq!(row.stored_corrections().collect::<Vec<_>>(), vec![(0, 0.5), (2, 0.0)]);
 ```
 
 `SprsCsr::try_new` checks orientation without copying and returns a CSC input
 unchanged as `Err`. The wrapper forwards products and statistics, so it can
 also be passed to `LazyMatrix::new`. Row borrowing requires `usize` column
 indices; pointer indices may use any supported width. The returned slices
-describe the original matrix, before normalization. Normalized row views
-remain future work.
+describe the original matrix, before normalization.
+
+`LazyMatrix::row(i)` requires `SparseRows` and borrows raw storage and the full
+optional center and scale slices without allocating. `centers()` and `scales()`
+expose those slices; `center(j)` and `scale(j)` return effective parameters of
+zero and one when normalization is inactive. Explicit parameters let faer and
+nalgebra CSR matrices use row views without column-statistics implementations.
+
+A logical entry is `(raw[j] - center(j)) / scale(j)`. Sum duplicate raw entries
+before normalizing. The affine representation has a background
+`-center(j) / scale(j)` and stored corrections `raw_value / scale(j)`. Centering
+can therefore make a logical row dense even when its stored entries are empty.
+Consuming the corrections takes O(nnz_row) time and allocates nothing. Adding
+the affine parts can differ from direct normalization because of floating-point
+rounding or nonfinite arithmetic.
 
 Enable `parallel` alongside a backend to compute column statistics with Rayon.
 For sprs, CSC columns run independently in parallel; CSR statistics scan rows

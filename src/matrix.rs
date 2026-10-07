@@ -1,10 +1,11 @@
 use crate::column::{LazyColumn, LazySparseColumn, SparseColumnRef};
 use crate::normalization::Normalization;
+use crate::row::LazyRow;
 use crate::traits::{
     ColumnStats, Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
     MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixShape, RawColumns,
-    Scalar, ScaledSubSlice, SparseColumns, SubScalarAssign, SumEntries, VectorOwned, VectorView,
-    VectorViewMut,
+    Scalar, ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SumEntries, VectorOwned,
+    VectorView, VectorViewMut,
 };
 
 /// A matrix presented with lazy column normalization `X̃ = (X − 1cᵀ)S⁻¹`.
@@ -129,6 +130,59 @@ where
             SparseColumnRef::new(row_indices, values, self.nrows()),
             self.centers.as_ref().map_or_else(F::zero, |c| c[j]),
             self.scales.as_ref().map_or_else(F::one, |s| s[j]),
+        )
+    }
+
+    /// Borrow one lazily normalized sparse row without copying.
+    ///
+    /// This takes O(1) time and allocates nothing. The view borrows the raw
+    /// stored column indices and values and the full normalization slices.
+    /// Centering generally makes the logical row dense; [`LazyRow`] exposes
+    /// its sparse-plus-affine representation explicitly.
+    ///
+    /// ```
+    /// # #[cfg(feature = "sprs_all")]
+    /// # {
+    /// use lazymatrix::{LazyMatrix, SprsCsr};
+    /// use sprs::CsMat;
+    ///
+    /// let x = CsMat::new((1, 3), vec![0, 2], vec![0, 2], vec![1.0, 0.0]);
+    /// let csr = SprsCsr::try_new(x.view()).unwrap();
+    /// let lazy = LazyMatrix::from_parts(csr, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]));
+    /// let row = lazy.row(0);
+    /// assert_eq!(row.len(), 3);
+    /// assert_eq!(row.column_indices(), &[0, 2]);
+    /// assert_eq!(row.values(), &[1.0, 0.0]);
+    /// assert_eq!(row.implicit_value(1), 0.5);
+    /// assert_eq!(row.stored_corrections().collect::<Vec<_>>(), vec![(0, 0.5), (2, 0.0)]);
+    /// # }
+    /// ```
+    ///
+    /// Row access requires contiguous sparse-row storage:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{LazyMatrix, MatrixShape};
+    ///
+    /// fn row_without_sparse_rows<M: MatrixShape>(matrix: &LazyMatrix<M>) {
+    ///     let _ = matrix.row(0);
+    /// }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if `i >= self.nrows()`.
+    pub fn row(&self, i: usize) -> LazyRow<'_, F>
+    where
+        M: SparseRows<F>,
+    {
+        assert!(i < self.nrows(), "row index out of bounds");
+        let (column_indices, values) = self.data.sparse_row(i);
+        LazyRow::new(
+            column_indices,
+            values,
+            self.ncols(),
+            self.centers(),
+            self.scales(),
         )
     }
 

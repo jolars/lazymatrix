@@ -6,9 +6,10 @@
 re-exports. The main implementation is divided as follows:
 
 - `src/normalization.rs` defines `Centering`, `Scaling`, and `Normalization`.
-- `src/matrix.rs` implements `LazyMatrix`, construction, column access, and
+- `src/matrix.rs` implements `LazyMatrix`, construction, column and row access, and
   operator behavior.
 - `src/column.rs` contains logical and sparse borrowed column views.
+- `src/row.rs` contains the borrowed normalized sparse row view.
 - `src/intercept.rs` implements `WithIntercept`, an implicit leading column of
   ones added after predictor normalization. `src/weighted_sums.rs` and
   `src/traits/weighted_sums.rs` provide directly centered weighted-column sums
@@ -141,9 +142,14 @@ wrapper implements column borrowing; `SprsCsr` checks CSR storage for row
 borrowing. `SparseColumns` and `SparseRows` require `usize` row and column
 indices, respectively. faer CSR matrices and views and nalgebra CSR matrices
 provide `MatrixShape` and `SparseRows`; use faer's row ranges to exclude spare
-capacity and sprs's adjusted outer ranges for sliced views. Normalized row views
-and faer and nalgebra CSR operators and statistics remain prospective work
-described in `TODO.md`.
+capacity and sprs's adjusted outer ranges for sliced views. `LazyMatrix::row`
+requires `SparseRows` and returns a `LazyRow` borrowing raw storage and the full
+optional center and scale slices. Its logical length is the column count, even
+when no entries are stored. The background varies by column; expose it and the
+stored scaled corrections without allocating a dense row. Preserve storage
+order and duplicates, and sum duplicate raw values before direct normalization.
+Faer and nalgebra CSR operators and statistics remain prospective work described
+in `TODO.md`.
 
 ## Example-Driven Design
 
