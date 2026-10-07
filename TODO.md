@@ -141,22 +141,32 @@ and solver-specific update logic belong in consuming crates.
     it, so borrowed or strided inputs can write into owned backend vectors.
   - [x] Specify dimension-checking and overwrite semantics, and implement
     backend-specific fast paths.
-  - [ ] Measure allocation costs in an iterative consumer before extending the
-    fused prototype's reusable workspace API.
-  - [ ] Use ndarray-glm fitting and Shrinkage's backtracking proximal gradient
-    to evaluate repeated `S^-1 x` allocations. Shrinkage currently pins
-    0.3.0 and clones a native coefficient vector on every scaled forward
-    product, including trial steps and final diagnostics.
-  - [ ] Compare the existing overwrite API with fused workspace application
-    using `alpha = 1` and `beta = 0`. Measure allocation count, requested
-    bytes, and throughput for dense and CSC input with raw, centered, and
-    standardized designs. Keep dataset construction and workspace setup
+  - [x] Measure allocation costs in an iterative consumer before extending the
+    fused prototype's reusable workspace API. [Consumer
+    benchmarks](benches/fused_consumer.md) measure allocation count,
+    requested bytes, and throughput for allocating, overwrite, fused, and
+    workspace paths. They cover dense and CSC input with raw, centered, and
+    standardized designs, with dataset construction and workspace setup
     outside measurement.
-  - [ ] Use those results to decide whether the overwrite API also needs an
-    explicit workspace method. Verify the integrated consumer before
-    claiming that normalized iterations allocate nothing.
-  - [ ] Keep allocating convenience methods if they materially improve
-    ergonomics.
+  - [ ] Measure normalization allocations in ndarray-glm fitting and Shrinkage's
+    backtracking proximal gradient. Shrinkage currently pins LazyMatrix
+    0.5.0 and uses ordinary overwrite products, which still clone a native
+    coefficient vector on every scaled forward product, including trial
+    steps and final diagnostics.
+  - [ ] Compare the existing overwrite API with fused workspace application
+    using `alpha = 1` and `beta = 0`. The existing consumer benchmark uses
+    accumulation with `beta = 1` and fuses coefficient updates, so it does
+    not isolate the overwrite comparison. Measure allocation count,
+    requested bytes, and throughput across the same inputs and normalization
+    modes, with setup outside measurement.
+  - [ ] Use the isolated comparison and downstream consumer measurements to
+    decide whether the overwrite API also needs an explicit workspace
+    method. Verify the integrated consumer before claiming that normalized
+    iterations allocate nothing.
+  - [x] Keep allocating convenience methods if they materially improve
+    ergonomics. The consumer benchmarks recommend retaining both allocating
+    and overwrite interfaces because workspace allocation savings do not
+    consistently improve throughput.
 
 - [x] Prototype fused scaled operator application for ndarray and sprs.
   - Add forward and transpose capabilities for `y = alpha * A * x + beta * y`.
