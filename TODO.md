@@ -155,11 +155,11 @@ and solver-specific update logic belong in consuming crates.
     and the final pass. ndarray-glm currently standardizes an owned dense
     design during construction; the profiles measure that cost separately
     from fitting and prediction. Lazy adoption remains open.
-  - [ ] Compare the existing overwrite API with fused workspace application
-    using `alpha = 1` and `beta = 0`. The existing consumer benchmark uses
-    accumulation with `beta = 1` and fuses coefficient updates, so it does
-    not isolate the overwrite comparison. Measure allocation count,
-    requested bytes, and throughput across the same inputs and normalization
+  - [x] Compare the existing overwrite API with fused workspace application
+    using `alpha = 1` and `beta = 0`. The [isolated
+    comparison](benches/overwrite_comparison.md) measures allocation count,
+    requested bytes, and throughput for forward and transpose products and
+    identical iteration batches across the existing inputs and normalization
     modes, with setup outside measurement.
   - [ ] Use the isolated comparison and downstream consumer measurements to
     decide whether the overwrite API also needs an explicit workspace

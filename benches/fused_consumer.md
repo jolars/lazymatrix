@@ -3,13 +3,18 @@
 Run the consumer comparison with:
 
 ```sh
-cargo bench --locked --bench fused_consumer --features faer,nalgebra,ndarray,sprs,zarrs
+cargo bench --locked --bench fused_consumer --features faer,nalgebra,ndarray,sprs,zarrs -- '^consumer/'
 ```
 
-Criterion filters select individual cases. For example, append
-`-- 'consumer/faer_csc/2000x32/density_0.01/standardized'` to compare the four
+Criterion filters select individual cases. For example, replace `^consumer/`
+with `consumer/faer_csc/2000x32/density_0.01/standardized` to compare the four
 product paths with and without an intercept. The benchmark uses the newest
 enabled version of each backend. Versioned features can select older releases.
+
+The same benchmark also provides an [isolated overwrite
+comparison](overwrite_comparison.md) using `alpha = 1` and `beta = 0` for both
+products. Its product and iteration groups use the same fixtures, and its
+iteration paths perform identical response subtraction and coefficient updates.
 
 Each timed batch resets coefficients and takes ten least-squares steps:
 

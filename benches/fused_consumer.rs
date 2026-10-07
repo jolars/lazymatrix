@@ -1,11 +1,11 @@
-//! Fixed least-squares iteration batches, with setup excluded from timing.
+//! Product and least-squares iteration comparisons, with setup excluded from timing.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use lazymatrix::{
     Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVec,
     MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
@@ -61,6 +61,20 @@ static ALLOCATOR: CountedAllocator = CountedAllocator;
 
 const STEPS: usize = 10;
 
+fn count_allocations(name: &str, mut run: impl FnMut()) {
+    run();
+    ALLOCATIONS.store(0, Ordering::Relaxed);
+    BYTES.store(0, Ordering::Relaxed);
+    COUNTING.store(true, Ordering::Relaxed);
+    run();
+    COUNTING.store(false, Ordering::Relaxed);
+    eprintln!(
+        "allocations {name}: {} calls, {} bytes per {STEPS} operations",
+        ALLOCATIONS.load(Ordering::Relaxed),
+        BYTES.load(Ordering::Relaxed),
+    );
+}
+
 fn measure<V: VectorViewMut<f64>>(
     c: &mut Criterion,
     name: &str,
@@ -75,17 +89,7 @@ fn measure<V: VectorViewMut<f64>>(
         batch(black_box(coefficients));
         black_box(&*coefficients);
     };
-    run(coefficients);
-    ALLOCATIONS.store(0, Ordering::Relaxed);
-    BYTES.store(0, Ordering::Relaxed);
-    COUNTING.store(true, Ordering::Relaxed);
-    run(coefficients);
-    COUNTING.store(false, Ordering::Relaxed);
-    eprintln!(
-        "allocations {name}: {} calls, {} bytes per {STEPS} steps",
-        ALLOCATIONS.load(Ordering::Relaxed),
-        BYTES.load(Ordering::Relaxed),
-    );
+    count_allocations(name, || run(coefficients));
     let actual: Vec<_> = (0..coefficients.len())
         .map(|j| coefficients.get(j))
         .collect();
@@ -99,14 +103,131 @@ fn measure<V: VectorViewMut<f64>>(
     actual
 }
 
+fn measure_product<V>(
+    c: &mut Criterion,
+    name: &str,
+    path: &str,
+    expected: &V,
+    mut product: impl FnMut(&mut V),
+) where
+    V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
+{
+    // NaNs expose accidental reads of prior output when beta is zero.
+    let mut output = V::owned_from_fn(expected.len(), |_| f64::NAN);
+    let mut run = || {
+        for _ in 0..STEPS {
+            product(black_box(&mut output));
+            black_box(&output);
+        }
+    };
+    count_allocations(&format!("{name}/{path}"), &mut run);
+    for j in 0..expected.len() {
+        approx::assert_relative_eq!(
+            output.get(j),
+            expected.get(j),
+            epsilon = 1e-10,
+            max_relative = 1e-10
+        );
+    }
+    let mut group = c.benchmark_group(name);
+    group.throughput(Throughput::Elements(STEPS as u64));
+    group.bench_function(path, |b| {
+        b.iter(|| {
+            for _ in 0..STEPS {
+                product(black_box(&mut output));
+                black_box(&output);
+            }
+        });
+    });
+    group.finish();
+}
+
+fn bench_overwrite_operator<O, V>(
+    c: &mut Criterion,
+    name: &str,
+    op: &O,
+    response: &V,
+    step: f64,
+    mut forward_workspace: impl FnMut(f64, &V, f64, &mut V),
+    mut transpose_workspace: impl FnMut(f64, &V, f64, &mut V),
+) where
+    O: MatVec<V> + MatTransposeVec<V> + MatVecInto<V> + MatTransposeVecInto<V>,
+    V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
+{
+    let values = common::random_vec(205, op.ncols());
+    let input = V::owned_from_fn(values.len(), |j| values[j]);
+    let forward_expected = op.matvec(&input).unwrap();
+    let transpose_expected = op.mat_transpose_vec(response).unwrap();
+    let mut coefficients = V::owned_from_fn(op.ncols(), |_| 0.0);
+    let mut residual = V::owned_from_fn(op.nrows(), |_| 0.0);
+    let mut gradient = V::owned_from_fn(op.ncols(), |_| 0.0);
+    let mut expected_coefficients = None;
+    for workspace in [false, true] {
+        let path = if workspace { "workspace" } else { "overwrite" };
+        measure_product(
+            c,
+            &format!("overwrite_products/{name}/forward"),
+            path,
+            &forward_expected,
+            |out| {
+                if workspace {
+                    forward_workspace(1.0, black_box(&input), 0.0, out);
+                } else {
+                    op.matvec_into(black_box(&input), out).unwrap();
+                }
+            },
+        );
+        measure_product(
+            c,
+            &format!("overwrite_products/{name}/transpose"),
+            path,
+            &transpose_expected,
+            |out| {
+                if workspace {
+                    transpose_workspace(1.0, black_box(response), 0.0, out);
+                } else {
+                    op.mat_transpose_vec_into(black_box(response), out).unwrap();
+                }
+            },
+        );
+        let actual = measure(
+            c,
+            &format!("overwrite_iterations/{name}/{path}"),
+            &mut coefficients,
+            |coefficients| {
+                for _ in 0..STEPS {
+                    if workspace {
+                        forward_workspace(1.0, coefficients, 0.0, &mut residual);
+                    } else {
+                        op.matvec_into(coefficients, &mut residual).unwrap();
+                    }
+                    for i in 0..residual.len() {
+                        residual.set(i, residual.get(i) - response.get(i));
+                    }
+                    if workspace {
+                        transpose_workspace(1.0, &residual, 0.0, &mut gradient);
+                    } else {
+                        op.mat_transpose_vec_into(&residual, &mut gradient).unwrap();
+                    }
+                    for j in 0..coefficients.len() {
+                        coefficients.set(j, coefficients.get(j) - step * gradient.get(j));
+                    }
+                }
+            },
+            expected_coefficients.as_deref(),
+        );
+        expected_coefficients = Some(actual);
+    }
+}
+
 fn bench_operator<O, V>(
     c: &mut Criterion,
     name: &str,
     op: &O,
     response: &V,
     step: f64,
-    mut forward_workspace: impl FnMut(&V, &mut V),
-    mut transpose_workspace: impl FnMut(&V, &mut V),
+    mut forward_workspace: impl FnMut(f64, &V, f64, &mut V),
+    mut transpose_workspace: impl FnMut(f64, &V, f64, &mut V),
 ) where
     O: MatVec<V>
         + MatTransposeVec<V>
@@ -116,6 +237,16 @@ fn bench_operator<O, V>(
         + MatTransposeVecScaledInto<V, V, f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
+    bench_overwrite_operator(
+        c,
+        name,
+        op,
+        response,
+        step,
+        &mut forward_workspace,
+        &mut transpose_workspace,
+    );
+    let name = format!("consumer/{name}");
     let mut coefficients = V::owned_from_fn(op.ncols(), |_| 0.0);
     let mut residual = V::owned_from_fn(op.nrows(), |_| 0.0);
     let mut gradient = V::owned_from_fn(op.ncols(), |_| 0.0);
@@ -181,8 +312,8 @@ fn bench_operator<O, V>(
                 for i in 0..residual.len() {
                     residual.set(i, -response.get(i));
                 }
-                forward_workspace(coefficients, &mut residual);
-                transpose_workspace(&residual, coefficients);
+                forward_workspace(1.0, coefficients, 1.0, &mut residual);
+                transpose_workspace(-step, &residual, 1.0, coefficients);
             }
         },
         Some(&expected),
@@ -235,7 +366,7 @@ where
             })
             .sum();
         let step = 0.5 / (bound + matrix.nrows() as f64).max(1.0);
-        let name = format!("consumer/{label}/{normalization}");
+        let name = format!("{label}/{normalization}");
         let mut forward_scratch = V::owned_from_fn(matrix.ncols(), |_| 0.0);
         let mut transpose_scratch = V::owned_from_fn(matrix.ncols(), |_| 0.0);
         bench_operator(
@@ -244,15 +375,15 @@ where
             &lazy,
             &response,
             step,
-            |x, out| {
-                lazy.matvec_scaled_with_workspace(1.0, x, 1.0, out, &mut forward_scratch)
+            |alpha, x, beta, out| {
+                lazy.matvec_scaled_with_workspace(alpha, x, beta, out, &mut forward_scratch)
                     .unwrap()
             },
-            |x, out| {
+            |alpha, x, beta, out| {
                 lazy.mat_transpose_vec_scaled_with_workspace(
-                    -step,
+                    alpha,
                     x,
-                    1.0,
+                    beta,
                     out,
                     &mut transpose_scratch,
                 )
@@ -266,17 +397,17 @@ where
             &design,
             &response,
             step,
-            |x, out| {
+            |alpha, x, beta, out| {
                 design
-                    .matvec_scaled_with_workspace(1.0, x, 1.0, out, &mut forward_scratch)
+                    .matvec_scaled_with_workspace(alpha, x, beta, out, &mut forward_scratch)
                     .unwrap()
             },
-            |x, out| {
+            |alpha, x, beta, out| {
                 design
                     .mat_transpose_vec_scaled_with_workspace(
-                        -step,
+                        alpha,
                         x,
-                        1.0,
+                        beta,
                         out,
                         &mut transpose_scratch,
                     )
