@@ -90,6 +90,201 @@ impl MatTransposeVecInto<Vec<f64>> for Source {
         Ok(())
     }
 }
+
+impl<X: VectorView<f64>, Y: VectorViewMut<f64>> lazymatrix::MatVecScaledInto<X, Y, f64> for Source {
+    fn matvec_scaled_into(
+        &self,
+        alpha: f64,
+        x: &X,
+        beta: f64,
+        out: &mut Y,
+    ) -> Result<(), ReadError> {
+        if let Err(error) = self.begin() {
+            if !out.is_empty() {
+                out.set(0, 17.0);
+            }
+            return Err(error);
+        }
+        for i in 0..self.rows {
+            let product = alpha
+                * (0..self.cols)
+                    .map(|j| self.values[i * self.cols + j] * x.get(j))
+                    .sum::<f64>();
+            out.set(
+                i,
+                if beta == 0.0 {
+                    product
+                } else {
+                    product + beta * out.get(i)
+                },
+            );
+        }
+        Ok(())
+    }
+}
+
+impl<X: VectorView<f64>, Y: VectorViewMut<f64>> lazymatrix::MatTransposeVecScaledInto<X, Y, f64>
+    for Source
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: f64,
+        x: &X,
+        beta: f64,
+        out: &mut Y,
+    ) -> Result<(), ReadError> {
+        if let Err(error) = self.begin() {
+            if !out.is_empty() {
+                out.set(0, 17.0);
+            }
+            return Err(error);
+        }
+        for j in 0..self.cols {
+            let product = alpha
+                * (0..self.rows)
+                    .map(|i| self.values[i * self.cols + j] * x.get(i))
+                    .sum::<f64>();
+            out.set(
+                j,
+                if beta == 0.0 {
+                    product
+                } else {
+                    product + beta * out.get(j)
+                },
+            );
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn fused_intercept_skips_input_scratch_and_predictors_for_zero_alpha() {
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto, VectorOwned};
+    struct Unreadable(usize);
+    impl VectorView<f64> for Unreadable {
+        fn len(&self) -> usize {
+            self.0
+        }
+        fn get(&self, _: usize) -> f64 {
+            panic!("input must not be read");
+        }
+    }
+    impl VectorOwned<f64> for Unreadable {
+        type Owned = Vec<f64>;
+        fn owned_from_fn(_: usize, _: impl FnMut(usize) -> f64) -> Vec<f64> {
+            panic!("scratch must not be allocated");
+        }
+    }
+    struct WriteOnly(Vec<f64>);
+    impl VectorView<f64> for WriteOnly {
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+        fn get(&self, _: usize) -> f64 {
+            panic!("old output must not be read");
+        }
+    }
+    impl VectorViewMut<f64> for WriteOnly {
+        fn set(&mut self, index: usize, value: f64) {
+            self.0[index] = value;
+        }
+    }
+    impl VectorOwned<f64> for WriteOnly {
+        type Owned = Vec<f64>;
+        fn owned_from_fn(_: usize, _: impl FnMut(usize) -> f64) -> Vec<f64> {
+            panic!("scratch must not be allocated");
+        }
+    }
+    let matrix = WithIntercept::<_, f64>::new(Source::new(2, 2, vec![f64::NAN; 4]));
+    matrix.as_inner().fail.set(true);
+    let mut out = vec![f64::NAN; 2];
+    matrix
+        .matvec_scaled_into(-0.0, &Unreadable(3), 0.0, &mut out)
+        .unwrap();
+    assert_eq!(out, [0.0; 2]);
+    let mut transpose = vec![3.0; 3];
+    matrix
+        .mat_transpose_vec_scaled_into(0.0, &Unreadable(2), -2.0, &mut transpose)
+        .unwrap();
+    assert_eq!(transpose, [-6.0; 3]);
+    let mut scratch = vec![13.0; 2];
+    matrix
+        .matvec_scaled_with_workspace(0.0, &Unreadable(3), 1.0, &mut out, &mut scratch)
+        .unwrap();
+    matrix
+        .mat_transpose_vec_scaled_with_workspace(
+            0.0,
+            &Unreadable(2),
+            1.0,
+            &mut transpose,
+            &mut scratch,
+        )
+        .unwrap();
+    assert_eq!(scratch, [13.0; 2]);
+    assert_eq!(matrix.as_inner().calls.get(), 0);
+    let mut write_only = WriteOnly(vec![f64::NAN; 3]);
+    matrix
+        .mat_transpose_vec_scaled_into(0.0, &Unreadable(2), 0.0, &mut write_only)
+        .unwrap();
+    assert_eq!(write_only.0, [0.0; 3]);
+    matrix.as_inner().fail.set(false);
+    let mut scratch = vec![f64::NAN; 2];
+    matrix
+        .mat_transpose_vec_scaled_with_workspace(
+            1.0,
+            &vec![0.0; 2],
+            0.0,
+            &mut write_only,
+            &mut scratch,
+        )
+        .unwrap();
+    assert_eq!(write_only.0[0], 0.0);
+    assert!(write_only.0[1..].iter().all(|v| v.is_nan()));
+}
+
+#[test]
+fn fused_intercept_does_not_correct_partial_outputs_after_errors() {
+    let matrix = WithIntercept::<_, f64>::new(Source::new(2, 2, vec![1.0; 4]));
+    matrix.as_inner().fail.set(true);
+    let mut out = vec![11.0, 13.0];
+    let mut scratch = vec![0.0; 2];
+    assert_eq!(
+        matrix.matvec_scaled_with_workspace(2.0, &vec![3.0, 2.0, 4.0], 1.0, &mut out, &mut scratch),
+        Err(ReadError)
+    );
+    assert_eq!(out, [17.0, 13.0]);
+    let mut transpose = vec![11.0, 13.0, 15.0];
+    assert_eq!(
+        matrix.mat_transpose_vec_scaled_with_workspace(
+            2.0,
+            &vec![2.0, 4.0],
+            1.0,
+            &mut transpose,
+            &mut scratch
+        ),
+        Err(ReadError)
+    );
+    assert_eq!(transpose, [11.0, 13.0, 15.0]);
+    assert_eq!(scratch[0], 17.0);
+}
+
+#[test]
+fn fused_intercept_only_operator_skips_predictors_and_preserves_nonfinite_values() {
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    let matrix = WithIntercept::<_, f64>::new(Source::new(2, 0, vec![]));
+    matrix.as_inner().fail.set(true);
+    let mut out = vec![f64::NAN; 2];
+    matrix
+        .matvec_scaled_into(f64::INFINITY, &vec![2.0], 0.0, &mut out)
+        .unwrap();
+    assert_eq!(out, [f64::INFINITY; 2]);
+    let mut transpose = vec![f64::NAN];
+    matrix
+        .mat_transpose_vec_scaled_into(2.0, &vec![2.0, 4.0], 0.0, &mut transpose)
+        .unwrap();
+    assert_eq!(transpose, [12.0]);
+    assert_eq!(matrix.as_inner().calls.get(), 0);
+}
 impl WeightedGramKernel<f64> for Source {
     fn weighted_gram_normalized_into<W, O>(
         &self,

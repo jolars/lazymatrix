@@ -19,8 +19,8 @@ use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan, sparse_column_sd,
 };
 use crate::traits::{
-    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, RawColumns,
-    Scalar, SparseColumns,
+    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MatrixShape, RawColumns, Scalar, SparseColumns,
 };
 
 // --- operator traits on CscMatrix<F> -----------------------------------------
@@ -84,18 +84,43 @@ where
     F: Scalar + nalgebra::Scalar + ClosedAddAssign + ClosedMulAssign,
 {
     fn matvec_into(&self, x: &DVector<F>, out: &mut DVector<F>) -> Result<(), Self::Error> {
-        assert_eq!(self.ncols(), x.len(), "matvec_into: dimension mismatch");
+        self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F> MatVecScaledInto<DVector<F>, DVector<F>, F> for CscMatrix<F>
+where
+    F: Scalar + nalgebra::Scalar + ClosedAddAssign + ClosedMulAssign,
+{
+    fn matvec_scaled_into(
+        &self,
+        alpha: F,
+        x: &DVector<F>,
+        beta: F,
+        out: &mut DVector<F>,
+    ) -> Result<(), Self::Error> {
+        assert_eq!(
+            self.ncols(),
+            x.len(),
+            "matvec_scaled_into: dimension mismatch"
+        );
         assert_eq!(
             self.nrows(),
             out.len(),
-            "matvec_into: output dimension mismatch"
+            "matvec_scaled_into: output dimension mismatch"
         );
-        // The backend scales old output by beta, so beta = 0 alone retains NaNs.
-        out.fill(F::zero());
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        // The backend multiplies old output by beta, so zero beta alone retains NaNs.
+        if beta == F::zero() {
+            out.fill(F::zero());
+        }
         spmm_csc_dense(
-            F::zero(),
+            beta,
             out.as_view_mut(),
-            F::one(),
+            alpha,
             Op::NoOp(self),
             Op::NoOp(x.as_view()),
         );
@@ -112,22 +137,43 @@ where
         x: &DVector<F>,
         out: &mut DVector<F>,
     ) -> Result<(), Self::Error> {
+        self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F> MatTransposeVecScaledInto<DVector<F>, DVector<F>, F> for CscMatrix<F>
+where
+    F: Scalar + nalgebra::Scalar + ClosedAddAssign + ClosedMulAssign,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &DVector<F>,
+        beta: F,
+        out: &mut DVector<F>,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
             self.nrows(),
             x.len(),
-            "mat_transpose_vec_into: dimension mismatch"
+            "mat_transpose_vec_scaled_into: dimension mismatch"
         );
         assert_eq!(
             self.ncols(),
             out.len(),
-            "mat_transpose_vec_into: output dimension mismatch"
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        // The backend scales old output by beta, so beta = 0 alone retains NaNs.
-        out.fill(F::zero());
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        // The backend multiplies old output by beta, so zero beta alone retains NaNs.
+        if beta == F::zero() {
+            out.fill(F::zero());
+        }
         spmm_csc_dense(
-            F::zero(),
+            beta,
             out.as_view_mut(),
-            F::one(),
+            alpha,
             Op::Transpose(self),
             Op::NoOp(x.as_view()),
         );

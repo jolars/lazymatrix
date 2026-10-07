@@ -55,7 +55,19 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn fused_products_support_f32() {
+                let matrix = DMatrix::from_column_slice(2, 1, &[1.0_f32, 3.0]);
+                common::check_fused_f32(&matrix, DVector::from_column_slice);
+                let sparse =
+                    CscMatrix::try_from_csc_data(2, 1, vec![0, 2], vec![0, 1], vec![1.0_f32, 3.0])
+                        .unwrap();
+                common::check_fused_f32(&sparse, DVector::from_column_slice);
+            }
+
+            #[test]
             fn nalgebra_backend_suite() {
+                common::run_fused_suite(build, to_dvec);
+                common::run_fused_suite(build_dense, to_dvec);
                 common::run_gram_suite(build);
                 common::run_backend_suite(build, to_dvec, from_dvec);
                 common::run_sparse_columns_suite(build);
@@ -136,6 +148,14 @@ macro_rules! backend_suite {
                     2,
                     2,
                     1,
+                );
+                common::check_fused_operator(
+                    &design,
+                    &(0..4)
+                        .map(|i| (0..2).map(|j| design[(i, j)]).collect())
+                        .collect::<Vec<Vec<f64>>>(),
+                    2,
+                    &to_dvec,
                 );
                 let lazy =
                     LazyMatrix::new(design, Normalization::new(Centering::Mean, Scaling::L2))

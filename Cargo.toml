@@ -127,3 +127,8 @@ required-features = ["sprs_all"]
 name = "weighted_gram"
 harness = false
 required-features = ["ndarray_all", "sprs_all"]
+
+[[bench]]
+name = "fused_consumer"
+harness = false
+required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all", "zarrs_all"]

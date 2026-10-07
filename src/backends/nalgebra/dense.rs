@@ -9,8 +9,9 @@ use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan,
 };
 use crate::traits::{
-    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, RawColumn,
-    RawColumns, Scalar, VectorView, VectorViewMut,
+    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MatrixShape, RawColumn, RawColumns, Scalar, VectorView,
+    VectorViewMut,
 };
 
 impl<F, R, S> VectorView<F> for Matrix<F, R, U1, S>
@@ -146,14 +147,45 @@ where
     S: RawStorage<F, R, C>,
 {
     fn matvec_into(&self, x: &DVector<F>, out: &mut DVector<F>) -> Result<(), Self::Error> {
-        assert_eq!(self.ncols(), x.len(), "matvec_into: dimension mismatch");
+        self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F, R, C, S> MatVecScaledInto<DVector<F>, DVector<F>, F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorage<F, R, C>,
+{
+    fn matvec_scaled_into(
+        &self,
+        alpha: F,
+        x: &DVector<F>,
+        beta: F,
+        out: &mut DVector<F>,
+    ) -> Result<(), Self::Error> {
+        assert_eq!(
+            self.ncols(),
+            x.len(),
+            "matvec_scaled_into: dimension mismatch"
+        );
         assert_eq!(
             self.nrows(),
             out.len(),
-            "matvec_into: output dimension mismatch"
+            "matvec_scaled_into: output dimension mismatch"
         );
-        for i in 0..self.nrows() {
-            out[i] = (0..self.ncols()).map(|j| self[(i, j)] * x[j]).sum();
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        for i in 0..out.len() {
+            let product = alpha * (0..x.len()).map(|j| self[(i, j)] * x[j]).sum::<F>();
+            out[i] = if beta == F::zero() {
+                product
+            } else {
+                product + beta * out[i]
+            };
         }
         Ok(())
     }
@@ -171,18 +203,45 @@ where
         x: &DVector<F>,
         out: &mut DVector<F>,
     ) -> Result<(), Self::Error> {
+        self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F, R, C, S> MatTransposeVecScaledInto<DVector<F>, DVector<F>, F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorage<F, R, C>,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &DVector<F>,
+        beta: F,
+        out: &mut DVector<F>,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
             self.nrows(),
             x.len(),
-            "mat_transpose_vec_into: dimension mismatch"
+            "mat_transpose_vec_scaled_into: dimension mismatch"
         );
         assert_eq!(
             self.ncols(),
             out.len(),
-            "mat_transpose_vec_into: output dimension mismatch"
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        for j in 0..self.ncols() {
-            out[j] = (0..self.nrows()).map(|i| self[(i, j)] * x[i]).sum();
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        for i in 0..out.len() {
+            let product = alpha * (0..x.len()).map(|j| self[(j, i)] * x[j]).sum::<F>();
+            out[i] = if beta == F::zero() {
+                product
+            } else {
+                product + beta * out[i]
+            };
         }
         Ok(())
     }

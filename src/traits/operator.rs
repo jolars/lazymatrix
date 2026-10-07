@@ -98,6 +98,22 @@ pub trait MatTransposeVecScaledInto<X, Y, F>: MatrixShape + MatrixErrorType {
     ) -> Result<(), Self::Error>;
 }
 
+/// Honor the fused zero-coefficient contract without reading overwritten values.
+pub(crate) fn scale_output<F: super::Scalar, Y: super::VectorViewMut<F> + ?Sized>(
+    beta: F,
+    out: &mut Y,
+) {
+    if beta == F::zero() {
+        for i in 0..out.len() {
+            out.set(i, F::zero());
+        }
+    } else if beta != F::one() {
+        for i in 0..out.len() {
+            out.set(i, beta * out.get(i));
+        }
+    }
+}
+
 impl<M: MatrixShape + ?Sized> MatrixShape for &M {
     fn nrows(&self) -> usize {
         (**self).nrows()

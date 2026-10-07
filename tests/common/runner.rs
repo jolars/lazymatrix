@@ -353,6 +353,284 @@ pub fn assert_close(a: &[f64], b: &[f64], eps: f64) {
 
 const EPS: f64 = 1e-10;
 
+/// Exercise fused products independently of each backend's storage representation.
+pub fn run_fused_suite<M, V>(build: impl Fn(&TestMatrix) -> M, to_v: impl Fn(&[f64]) -> V)
+where
+    M: lazymatrix::MatVecScaledInto<V, V, f64> + lazymatrix::MatTransposeVecScaledInto<V, V, f64>,
+    V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
+{
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto, WithIntercept};
+    for (rows, cols, density) in [
+        (7, 3, 0.4),
+        (3, 7, 1.0),
+        (0, 3, 0.0),
+        (5, 0, 0.0),
+        (0, 0, 0.0),
+        (4, 3, 0.0),
+    ] {
+        let tm = random_matrix(219, rows, cols, density);
+        let matrix = build(&tm);
+        check_fused_operator(&matrix, &tm.dense, cols, &to_v);
+        for centering in [false, true] {
+            for scaling in [false, true] {
+                let centers = centering.then(|| vec![0.75; cols]);
+                let scales = scaling.then(|| {
+                    (0..cols)
+                        .map(|j| if j % 2 == 0 { 2.0 } else { -2.0 })
+                        .collect()
+                });
+                let normalized = materialize(&tm.dense, centers.as_deref(), scales.as_deref());
+                let lazy = LazyMatrix::from_parts(&matrix, centers, scales);
+                check_fused_operator(&lazy, &normalized, cols, &to_v);
+                let design = WithIntercept::new(&lazy);
+                let augmented: Vec<Vec<f64>> = normalized
+                    .iter()
+                    .map(|row| std::iter::once(1.0).chain(row.iter().copied()).collect())
+                    .collect();
+                check_fused_operator(&design, &augmented, cols + 1, &to_v);
+
+                let x = to_v(&vec![2.0; cols]);
+                let u = to_v(&vec![1.0; rows]);
+                let mut scratch = to_v(&vec![f64::NAN; cols]);
+                let mut forward = to_v(&vec![3.0; rows]);
+                let mut transpose = to_v(&vec![3.0; cols]);
+                lazy.matvec_scaled_with_workspace(2.0, &x, -1.0, &mut forward, &mut scratch)
+                    .unwrap();
+                lazy.mat_transpose_vec_scaled_with_workspace(
+                    2.0,
+                    &u,
+                    -1.0,
+                    &mut transpose,
+                    &mut scratch,
+                )
+                .unwrap();
+                let mut expected = to_v(&vec![3.0; rows]);
+                lazy.matvec_scaled_into(2.0, &x, -1.0, &mut expected)
+                    .unwrap();
+                assert_vector_values(&forward, &expected);
+                let mut expected = to_v(&vec![3.0; cols]);
+                lazy.mat_transpose_vec_scaled_into(2.0, &u, -1.0, &mut expected)
+                    .unwrap();
+                assert_vector_values(&transpose, &expected);
+
+                let x = to_v(&vec![2.0; cols + 1]);
+                let mut forward = to_v(&vec![3.0; rows]);
+                let mut transpose = to_v(&vec![3.0; cols + 1]);
+                design
+                    .matvec_scaled_with_workspace(2.0, &x, -1.0, &mut forward, &mut scratch)
+                    .unwrap();
+                design
+                    .mat_transpose_vec_scaled_with_workspace(
+                        2.0,
+                        &u,
+                        -1.0,
+                        &mut transpose,
+                        &mut scratch,
+                    )
+                    .unwrap();
+                let mut expected = to_v(&vec![3.0; rows]);
+                design
+                    .matvec_scaled_into(2.0, &x, -1.0, &mut expected)
+                    .unwrap();
+                assert_vector_values(&forward, &expected);
+                let mut expected = to_v(&vec![3.0; cols + 1]);
+                design
+                    .mat_transpose_vec_scaled_into(2.0, &u, -1.0, &mut expected)
+                    .unwrap();
+                assert_vector_values(&transpose, &expected);
+
+                let mut wrong_scratch = to_v(&vec![0.0; cols + 1]);
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        design
+                            .matvec_scaled_with_workspace(
+                                0.0,
+                                &x,
+                                0.0,
+                                &mut forward,
+                                &mut wrong_scratch,
+                            )
+                            .unwrap();
+                    }))
+                    .is_err()
+                );
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        design
+                            .mat_transpose_vec_scaled_with_workspace(
+                                0.0,
+                                &u,
+                                0.0,
+                                &mut transpose,
+                                &mut wrong_scratch,
+                            )
+                            .unwrap();
+                    }))
+                    .is_err()
+                );
+            }
+        }
+    }
+    let matrix = build(&TestMatrix {
+        nrows: 1,
+        ncols: 1,
+        dense: vec![vec![2.0]],
+        triplets: vec![(0, 0, 2.0)],
+    });
+    for (alpha, beta, expected) in [
+        (f64::INFINITY, 0.0, f64::INFINITY),
+        (f64::NAN, 0.0, f64::NAN),
+        (1.0, f64::NAN, f64::NAN),
+        (1.0, f64::INFINITY, f64::INFINITY),
+    ] {
+        let mut out = to_v(&[3.0]);
+        matrix
+            .matvec_scaled_into(alpha, &to_v(&[1.0]), beta, &mut out)
+            .unwrap();
+        assert_vector_values(&out, &to_v(&[expected]));
+        matrix
+            .mat_transpose_vec_scaled_into(alpha, &to_v(&[1.0]), beta, &mut out)
+            .unwrap();
+        assert_vector_values(&out, &to_v(&[expected]));
+    }
+}
+
+/// Check the scalar contract on a two-row, one-column matrix containing [1, 3].
+pub fn check_fused_f32<M, V>(matrix: &M, to_v: impl Fn(&[f32]) -> V)
+where
+    M: lazymatrix::MatVecScaledInto<V, V, f32> + lazymatrix::MatTransposeVecScaledInto<V, V, f32>,
+    V: lazymatrix::VectorOwned<f32, Owned = V> + lazymatrix::VectorViewMut<f32>,
+{
+    use lazymatrix::WithIntercept;
+    let mut out = to_v(&[3.0; 2]);
+    matrix
+        .matvec_scaled_into(2.0, &to_v(&[2.0]), -1.0, &mut out)
+        .unwrap();
+    assert_eq!([out.get(0), out.get(1)], [1.0, 9.0]);
+    let mut transpose = to_v(&[3.0]);
+    matrix
+        .mat_transpose_vec_scaled_into(2.0, &to_v(&[1.0; 2]), -1.0, &mut transpose)
+        .unwrap();
+    assert_eq!(transpose.get(0), 5.0);
+    let design = WithIntercept::new(LazyMatrix::from_parts(
+        matrix,
+        Some(vec![1.0_f32]),
+        Some(vec![-2.0_f32]),
+    ));
+    out = to_v(&[3.0; 2]);
+    let mut scratch = to_v(&[f32::NAN]);
+    design
+        .matvec_scaled_with_workspace(2.0, &to_v(&[3.0, 2.0]), -1.0, &mut out, &mut scratch)
+        .unwrap();
+    assert_eq!([out.get(0), out.get(1)], [3.0, -1.0]);
+    let mut transpose = to_v(&[3.0; 2]);
+    design
+        .mat_transpose_vec_scaled_with_workspace(
+            2.0,
+            &to_v(&[1.0; 2]),
+            -1.0,
+            &mut transpose,
+            &mut scratch,
+        )
+        .unwrap();
+    assert_eq!([transpose.get(0), transpose.get(1)], [1.0, -5.0]);
+}
+
+fn assert_vector_values(a: &impl VectorView<f64>, b: &impl VectorView<f64>) {
+    assert_eq!(a.len(), b.len());
+    for j in 0..a.len() {
+        let (actual, expected) = (a.get(j), b.get(j));
+        if expected.is_nan() {
+            assert!(actual.is_nan());
+        } else if expected.is_infinite() {
+            assert_eq!(actual, expected);
+        } else {
+            approx::assert_abs_diff_eq!(actual, expected, epsilon = EPS);
+        }
+    }
+}
+
+pub fn check_fused_operator<O, V>(
+    op: &O,
+    dense: &[Vec<f64>],
+    cols: usize,
+    to_v: &impl Fn(&[f64]) -> V,
+) where
+    O: lazymatrix::MatVecScaledInto<V, V, f64> + lazymatrix::MatTransposeVecScaledInto<V, V, f64>,
+    V: lazymatrix::VectorViewMut<f64>,
+{
+    let rows = op.nrows();
+    let coefficients = random_vec(220, cols);
+    let input = random_vec(221, rows);
+    let forward = dense_matvec(dense, &coefficients);
+    let transpose: Vec<f64> = (0..cols)
+        .map(|j| (0..rows).map(|i| dense[i][j] * input[i]).sum())
+        .collect();
+    for alpha in [0.0, -0.0, 1.0, -1.0, 2.0] {
+        for beta in [0.0, -0.0, 1.0, -1.0, 0.5] {
+            let old = if beta == 0.0 { f64::NAN } else { 3.0 };
+            let mut out = to_v(&vec![old; rows]);
+            let mut trans = to_v(&vec![old; cols]);
+            let x = to_v(&if alpha == 0.0 {
+                vec![f64::NAN; cols]
+            } else {
+                coefficients.clone()
+            });
+            let u = to_v(&if alpha == 0.0 {
+                vec![f64::NAN; rows]
+            } else {
+                input.clone()
+            });
+            op.matvec_scaled_into(alpha, &x, beta, &mut out).unwrap();
+            op.mat_transpose_vec_scaled_into(alpha, &u, beta, &mut trans)
+                .unwrap();
+            let combine = |value| {
+                if beta == 0.0 {
+                    alpha * value
+                } else {
+                    alpha * value + beta * old
+                }
+            };
+            assert_vector_values(
+                &out,
+                &to_v(&forward.iter().map(|&p| combine(p)).collect::<Vec<_>>()),
+            );
+            assert_vector_values(
+                &trans,
+                &to_v(&transpose.iter().map(|&p| combine(p)).collect::<Vec<_>>()),
+            );
+        }
+    }
+    for (x_len, out_len) in [(cols + 1, rows), (cols, rows + 1)] {
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                op.matvec_scaled_into(
+                    0.0,
+                    &to_v(&vec![0.0; x_len]),
+                    0.0,
+                    &mut to_v(&vec![0.0; out_len]),
+                )
+                .unwrap();
+            }))
+            .is_err()
+        );
+    }
+    for (x_len, out_len) in [(rows + 1, cols), (rows, cols + 1)] {
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                op.mat_transpose_vec_scaled_into(
+                    0.0,
+                    &to_v(&vec![0.0; x_len]),
+                    0.0,
+                    &mut to_v(&vec![0.0; out_len]),
+                )
+                .unwrap();
+            }))
+            .is_err()
+        );
+    }
+}
+
 /// Run the full verification suite against a backend, given closures that build
 /// the backend matrix `M` from a [`TestMatrix`] and convert between `Vec<f64>`
 /// and the backend vector `V`.

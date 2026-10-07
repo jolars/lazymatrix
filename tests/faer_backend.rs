@@ -43,7 +43,26 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn fused_products_support_f32() {
+                let matrix = Mat::from_fn(2, 1, |i, _| (2 * i + 1) as f32);
+                let to_v = |v: &[f32]| Col::from_fn(v.len(), |i| v[i]);
+                common::check_fused_f32(&matrix, to_v);
+                let sparse = SparseColMat::try_new_from_triplets(
+                    2,
+                    1,
+                    &[
+                        Triplet::new(0_usize, 0_usize, 1.0_f32),
+                        Triplet::new(1, 0, 3.0_f32),
+                    ],
+                )
+                .unwrap();
+                common::check_fused_f32(&sparse, to_v);
+            }
+
+            #[test]
             fn faer_backend_suite() {
+                common::run_fused_suite(build, to_col);
+                common::run_fused_suite(build_dense, to_col);
                 common::run_gram_suite(build);
                 common::run_backend_suite(build, to_col, from_col);
                 common::run_sparse_columns_suite(build);
@@ -226,6 +245,14 @@ macro_rules! backend_suite {
             fn faer_strided_views_are_borrowed() {
                 let design_storage = Mat::from_fn(2, 4, |i, j| (i * 4 + j + 1) as f64);
                 let design = design_storage.as_ref().transpose();
+                common::check_fused_operator(
+                    &design,
+                    &(0..4)
+                        .map(|i| (0..2).map(|j| design[(i, j)]).collect())
+                        .collect::<Vec<Vec<f64>>>(),
+                    2,
+                    &to_col,
+                );
                 let lazy =
                     LazyMatrix::new(design, Normalization::new(Centering::Mean, Scaling::L2))
                         .unwrap();

@@ -8,8 +8,9 @@ use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan,
 };
 use crate::traits::{
-    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, RawColumn,
-    RawColumns, Scalar, VectorView, VectorViewMut,
+    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MatrixShape, RawColumn, RawColumns, Scalar, VectorView,
+    VectorViewMut,
 };
 
 impl<F: Scalar> VectorView<F> for Col<F> {
@@ -131,39 +132,32 @@ impl<F: Scalar> RawColumns<F> for MatRef<'_, F> {
     }
 }
 
-fn matvec_into<F: Scalar>(
+fn matvec_scaled_into<F: Scalar>(
     nrows: usize,
     ncols: usize,
     at: impl Fn(usize, usize) -> F,
+    alpha: F,
     x: &Col<F>,
+    beta: F,
     out: &mut Col<F>,
 ) {
-    assert_eq!(ncols, x.nrows(), "matvec_into: dimension mismatch");
-    assert_eq!(nrows, out.nrows(), "matvec_into: output dimension mismatch");
-    for i in 0..nrows {
-        out[i] = (0..ncols).map(|j| at(i, j) * x[j]).sum();
-    }
-}
-
-fn mat_transpose_vec_into<F: Scalar>(
-    nrows: usize,
-    ncols: usize,
-    at: impl Fn(usize, usize) -> F,
-    x: &Col<F>,
-    out: &mut Col<F>,
-) {
+    assert_eq!(ncols, x.nrows(), "matvec_scaled_into: dimension mismatch");
     assert_eq!(
         nrows,
-        x.nrows(),
-        "mat_transpose_vec_into: dimension mismatch"
-    );
-    assert_eq!(
-        ncols,
         out.nrows(),
-        "mat_transpose_vec_into: output dimension mismatch"
+        "matvec_scaled_into: output dimension mismatch"
     );
-    for j in 0..ncols {
-        out[j] = (0..nrows).map(|i| at(i, j) * x[i]).sum();
+    if alpha == F::zero() {
+        crate::traits::scale_output(beta, out);
+        return;
+    }
+    for i in 0..nrows {
+        let product = alpha * (0..ncols).map(|j| at(i, j) * x[j]).sum::<F>();
+        out[i] = if beta == F::zero() {
+            product
+        } else {
+            product + beta * out[i]
+        };
     }
 }
 
@@ -185,10 +179,50 @@ macro_rules! impl_dense_ops {
             }
         }
 
+        impl<F: Scalar> MatVecScaledInto<Col<F>, Col<F>, F> for $matrix {
+            fn matvec_scaled_into(
+                &self,
+                alpha: F,
+                x: &Col<F>,
+                beta: F,
+                out: &mut Col<F>,
+            ) -> Result<(), Self::Error> {
+                matvec_scaled_into(
+                    self.nrows(),
+                    self.ncols(),
+                    |i, j| self[(i, j)],
+                    alpha,
+                    x,
+                    beta,
+                    out,
+                );
+                Ok(())
+            }
+        }
+        impl<F: Scalar> MatTransposeVecScaledInto<Col<F>, Col<F>, F> for $matrix {
+            fn mat_transpose_vec_scaled_into(
+                &self,
+                alpha: F,
+                x: &Col<F>,
+                beta: F,
+                out: &mut Col<F>,
+            ) -> Result<(), Self::Error> {
+                matvec_scaled_into(
+                    self.ncols(),
+                    self.nrows(),
+                    |i, j| self[(j, i)],
+                    alpha,
+                    x,
+                    beta,
+                    out,
+                );
+                Ok(())
+            }
+        }
+
         impl<F: Scalar> MatVecInto<Col<F>> for $matrix {
             fn matvec_into(&self, x: &Col<F>, out: &mut Col<F>) -> Result<(), Self::Error> {
-                matvec_into(self.nrows(), self.ncols(), |i, j| self[(i, j)], x, out);
-                Ok(())
+                self.matvec_scaled_into(F::one(), x, F::zero(), out)
             }
         }
 
@@ -198,8 +232,7 @@ macro_rules! impl_dense_ops {
                 x: &Col<F>,
                 out: &mut Col<F>,
             ) -> Result<(), Self::Error> {
-                mat_transpose_vec_into(self.nrows(), self.ncols(), |i, j| self[(i, j)], x, out);
-                Ok(())
+                self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
             }
         }
     };

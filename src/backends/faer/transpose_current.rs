@@ -7,14 +7,16 @@ pub(super) fn multiply<F: Scalar + faer_traits::ComplexField>(
     matrix: &SparseColMat<usize, F>,
     input: &Col<F>,
     output: &mut Col<F>,
+    alpha: F,
+    accumulation: Accum,
     parallelism: Par,
 ) {
     faer::sparse::linalg::matmul::sparse_dense_matmul(
         output.as_mat_mut(),
-        Accum::Replace,
+        accumulation,
         matrix.as_ref().transpose(),
         input.as_mat(),
-        F::one(),
+        alpha,
         parallelism,
     );
 }

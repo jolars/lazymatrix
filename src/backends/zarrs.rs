@@ -11,8 +11,8 @@ use zarrs::array::{Array, ArrayError};
 use zarrs::storage::ReadableStorageTraits;
 
 use crate::{
-    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape, Scalar,
-    VectorView, VectorViewMut,
+    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
+    MatVecScaledInto, MatrixErrorType, MatrixShape, Scalar, VectorView, VectorViewMut,
 };
 
 /// Failure to interpret or read a Zarr matrix.
@@ -182,16 +182,35 @@ where
     Y: VectorViewMut<F>,
 {
     fn matvec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
-        assert_eq!(x.len(), self.ncols(), "matvec_into: dimension mismatch");
+        self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<S, F, X, Y> MatVecScaledInto<X, Y, F> for ZarrMatrix<S, F>
+where
+    S: ReadableStorageTraits + ?Sized + 'static,
+    F: Scalar + ElementOwned,
+    X: VectorView<F>,
+    Y: VectorViewMut<F>,
+{
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        assert_eq!(
+            x.len(),
+            self.ncols(),
+            "matvec_scaled_into: dimension mismatch"
+        );
         assert_eq!(
             out.len(),
             self.nrows(),
-            "matvec_into: output dimension mismatch"
+            "matvec_scaled_into: output dimension mismatch"
         );
-        for row in 0..out.len() {
-            out.set(row, F::zero());
+        crate::traits::scale_output(beta, out);
+        if alpha == F::zero() {
+            return Ok(());
         }
-        self.for_each_value(|row, col, value| out.set(row, out.get(row) + value * x.get(col)))
+        self.for_each_value(|row, col, value| {
+            out.set(row, out.get(row) + alpha * (value * x.get(col)));
+        })
     }
 }
 
@@ -203,20 +222,41 @@ where
     Y: VectorViewMut<F>,
 {
     fn mat_transpose_vec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
+        self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<S, F, X, Y> MatTransposeVecScaledInto<X, Y, F> for ZarrMatrix<S, F>
+where
+    S: ReadableStorageTraits + ?Sized + 'static,
+    F: Scalar + ElementOwned,
+    X: VectorView<F>,
+    Y: VectorViewMut<F>,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
             x.len(),
             self.nrows(),
-            "mat_transpose_vec_into: dimension mismatch"
+            "mat_transpose_vec_scaled_into: dimension mismatch"
         );
         assert_eq!(
             out.len(),
             self.ncols(),
-            "mat_transpose_vec_into: output dimension mismatch"
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        for col in 0..out.len() {
-            out.set(col, F::zero());
+        crate::traits::scale_output(beta, out);
+        if alpha == F::zero() {
+            return Ok(());
         }
-        self.for_each_value(|row, col, value| out.set(col, out.get(col) + value * x.get(row)))
+        self.for_each_value(|row, col, value| {
+            out.set(col, out.get(col) + alpha * (value * x.get(row)));
+        })
     }
 }
 

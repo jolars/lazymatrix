@@ -107,13 +107,18 @@
 //! dense logical-column operations take O(nrows) time.
 //!
 //! [`MatVecScaledInto`] and [`MatTransposeVecScaledInto`] fuse a product with
-//! output scaling for ndarray and sprs matrices, including normalized
-//! [`LazyMatrix`] wrappers. Exact zero `alpha` skips the product; exact zero
-//! `beta` ignores previous output values. Scaling a normalized forward product
-//! needs O(ncols) coefficient scratch. The optional
+//! output scaling for all supported matrix backends, including normalized
+//! [`LazyMatrix`] and [`WithIntercept`] wrappers. Exact zero `alpha` skips the
+//! product; exact zero `beta` ignores previous output values. Scaling a normalized
+//! forward product needs O(ncols) coefficient scratch. The optional
 //! [`LazyMatrix::matvec_scaled_with_workspace`] and
 //! [`LazyMatrix::mat_transpose_vec_scaled_with_workspace`] methods let callers
 //! reuse that storage across calls.
+//! [`WithIntercept::matvec_scaled_with_workspace`] and
+//! [`WithIntercept::mat_transpose_vec_scaled_with_workspace`] reuse the wrapper's
+//! predictor buffer, whose length excludes the intercept. Inner normalization
+//! may still allocate its own scratch. Fusing an operation alone does not
+//! guarantee fewer allocations or faster products; see the consumer benchmarks.
 //!
 //! sprs products and statistics work directly on either CSC or CSR storage.
 //! They visit stored entries without copying or materializing a normalized

@@ -142,8 +142,13 @@ and solver-specific update logic belong in consuming crates.
   - Test zero, one, negative, and nonfinite coefficients, plus empty and
     rectangular operators.
 
-- [ ] Evaluate fused application for the remaining backends and `WithIntercept`
+- [x] Evaluate fused application for the remaining backends and `WithIntercept`
   after consumer benchmarks.
+  - Added fused products for faer, nalgebra, zarrs, and `WithIntercept`, plus
+    reusable predictor scratch on the intercept wrapper.
+  - [Consumer benchmarks](benches/fused_consumer.md) show allocation savings
+    with caller-owned scratch and mixed throughput gains. Keep allocating and
+    overwrite products; ordinary fused calls can allocate more with scaling.
 
 - [ ] Avoid cloning the forward input when scaling is inactive.
   - Preserve the direct backend path for raw and center-only products.

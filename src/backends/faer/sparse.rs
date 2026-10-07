@@ -18,8 +18,8 @@ use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan, sparse_column_sd,
 };
 use crate::traits::{
-    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape, RawColumns,
-    Scalar, SparseColumns,
+    ColumnStats, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MatrixShape, RawColumns, Scalar, SparseColumns,
 };
 
 #[cfg(feature = "parallel")]
@@ -91,18 +91,47 @@ where
     F: Scalar + faer_traits::ComplexField,
 {
     fn matvec_into(&self, x: &Col<F>, out: &mut Col<F>) -> Result<(), Self::Error> {
-        assert_eq!(self.ncols(), x.nrows(), "matvec_into: dimension mismatch");
+        self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F> MatVecScaledInto<Col<F>, Col<F>, F> for SparseColMat<usize, F>
+where
+    F: Scalar + faer_traits::ComplexField,
+{
+    fn matvec_scaled_into(
+        &self,
+        alpha: F,
+        x: &Col<F>,
+        beta: F,
+        out: &mut Col<F>,
+    ) -> Result<(), Self::Error> {
+        assert_eq!(
+            self.ncols(),
+            x.nrows(),
+            "matvec_scaled_into: dimension mismatch"
+        );
         assert_eq!(
             self.nrows(),
             out.nrows(),
-            "matvec_into: output dimension mismatch"
+            "matvec_scaled_into: output dimension mismatch"
         );
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        let accumulation = if beta == F::zero() {
+            Accum::Replace
+        } else {
+            crate::traits::scale_output(beta, out);
+            Accum::Add
+        };
         sparse_dense_matmul(
             out.as_mat_mut(),
-            Accum::Replace,
+            accumulation,
             self.as_ref(),
             x.as_mat(),
-            F::one(),
+            alpha,
             parallelism(),
         );
         Ok(())
@@ -114,17 +143,42 @@ where
     F: Scalar + faer_traits::ComplexField,
 {
     fn mat_transpose_vec_into(&self, x: &Col<F>, out: &mut Col<F>) -> Result<(), Self::Error> {
+        self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+}
+
+impl<F> MatTransposeVecScaledInto<Col<F>, Col<F>, F> for SparseColMat<usize, F>
+where
+    F: Scalar + faer_traits::ComplexField,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &Col<F>,
+        beta: F,
+        out: &mut Col<F>,
+    ) -> Result<(), Self::Error> {
         assert_eq!(
             self.nrows(),
             x.nrows(),
-            "mat_transpose_vec_into: dimension mismatch"
+            "mat_transpose_vec_scaled_into: dimension mismatch"
         );
         assert_eq!(
             self.ncols(),
             out.nrows(),
-            "mat_transpose_vec_into: output dimension mismatch"
+            "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        super::transpose::multiply(self, x, out, parallelism());
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        let accumulation = if beta == F::zero() {
+            Accum::Replace
+        } else {
+            crate::traits::scale_output(beta, out);
+            Accum::Add
+        };
+        super::transpose::multiply(self, x, out, alpha, accumulation, parallelism());
         Ok(())
     }
 }

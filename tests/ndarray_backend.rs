@@ -62,7 +62,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn intercept_accepts_strided_vectors_and_outputs() {
-                use lazymatrix::{WithIntercept, WeightedGramInto, WeightedColumnSumsInto};
+                use lazymatrix::{WithIntercept, WeightedGramInto, WeightedColumnSumsInto, MatVecScaledInto, MatTransposeVecScaledInto};
                 let storage = Array2::from_shape_fn((6, 4), |(i, j)| (i + j) as f64);
                 let matrix = storage.slice(s![..;2, ..;2]);
                 let lazy = LazyMatrix::from_parts(matrix, Some(vec![1.0, 2.0]), Some(vec![2.0, -1.0]));
@@ -75,6 +75,22 @@ macro_rules! backend_suite {
                 assert!(output.slice(s![1..;2]).iter().all(|&x| x == 99.0));
                 augmented.mat_transpose_vec_into(&x, &mut output.slice_mut(s![..;-2])).unwrap();
                 assert_close(&output.slice(s![..;-2]).to_vec(), &augmented.mat_transpose_vec(&x.to_owned()).unwrap().to_vec(), 1e-10);
+                output.fill(99.0);
+                let expected = augmented.matvec(&x.to_owned()).unwrap();
+                augmented.matvec_scaled_into(2.0, &x, -1.0, &mut output.slice_mut(s![..;2])).unwrap();
+                assert_close(&output.slice(s![..;2]).to_vec(), &expected.mapv(|v| 2.0 * v - 99.0).to_vec(), 1e-10);
+                assert!(output.slice(s![1..;2]).iter().all(|&v| v == 99.0));
+                let mut scratch = Array1::zeros(2);
+                output.fill(99.0);
+                augmented.matvec_scaled_with_workspace(2.0, &x, -1.0, &mut output.slice_mut(s![..;2]), &mut scratch).unwrap();
+                assert_close(&output.slice(s![..;2]).to_vec(), &expected.mapv(|v| 2.0 * v - 99.0).to_vec(), 1e-10);
+                assert!(output.slice(s![1..;2]).iter().all(|&v| v == 99.0));
+                output.fill(99.0);
+                let expected = augmented.mat_transpose_vec(&x.to_owned()).unwrap();
+                augmented.mat_transpose_vec_scaled_with_workspace(2.0, &x, -1.0, &mut output.slice_mut(s![..;-2]), &mut scratch).unwrap();
+                assert_close(&output.slice(s![..;-2]).to_vec(), &expected.mapv(|v| 2.0 * v - 99.0).to_vec(), 1e-10);
+                output.fill(99.0);
+                augmented.mat_transpose_vec_scaled_into(1.0, &x, 0.0, &mut output.slice_mut(s![..;-2])).unwrap();
                 let mut sums = Array1::from_elem(6, 99.0);
                 augmented.weighted_column_sums_into(&x, &mut sums.slice_mut(s![..;-2])).unwrap();
                 assert_close(&sums.slice(s![..;-2]).to_vec(), &output.slice(s![..;-2]).to_vec(), 1e-10);
@@ -99,6 +115,7 @@ macro_rules! backend_suite {
             fn ndarray_backend_suite() {
                 for build in [build, build_fortran] {
                     common::run_gram_suite(build);
+                    common::run_fused_suite(build, |v| Array1::from_vec(v.to_vec()));
                     common::run_backend_suite(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
                     common::run_logical_columns_suite(build);
                 }
@@ -148,6 +165,7 @@ macro_rules! backend_suite {
 
             fn check_matrix_view(matrix: ArrayView2<'_, f64>) {
                 let dense: Vec<Vec<_>> = matrix.rows().into_iter().map(|row| row.to_vec()).collect();
+                common::check_fused_operator(&matrix, &dense, matrix.ncols(), &|v| Array1::from_vec(v.to_vec()));
                 let v = Array1::from_vec(common::random_vec(51, matrix.ncols()));
                 let u = Array1::from_vec(common::random_vec(52, matrix.nrows()));
                 for center in [Centering::None, Centering::Mean, Centering::Min] {

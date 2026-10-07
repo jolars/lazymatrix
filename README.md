@@ -23,6 +23,21 @@ Centering and scaling are independently optional. The crate also provides
 borrowed logical column views and sparse column and row access for algorithms
 that work directly with stored entries.
 
+All supported matrix backends, `LazyMatrix`, and `WithIntercept` provide fused
+`MatVecScaledInto` and `MatTransposeVecScaledInto` products:
+`out = alpha * A * x + beta * out`, with `Aᵀ` for the transpose form. Exact zero
+`alpha` skips the product and storage reads; exact zero `beta` ignores prior
+output values. Dimensions are checked even when either coefficient is zero.
+
+`LazyMatrix::matvec_scaled_with_workspace` and
+`mat_transpose_vec_scaled_with_workspace` reuse normalization scratch of length
+`ncols()`. `WithIntercept` exposes the same methods with scratch length
+`ncols() - 1`; these reuse the wrapper's predictor buffer, while the inner
+operator may still allocate normalization scratch. Ordinary fused products
+allocate scratch internally when needed. The
+[consumer benchmarks](benches/fused_consumer.md) compare their runtime and
+allocations in repeated least-squares steps.
+
 ## Install
 
 The core trait and operator API has no linear algebra dependency beyond
@@ -157,8 +172,9 @@ design.weighted_gram_into(&array![1.0, 0.5, 2.0], &mut gram).unwrap();
 The intercept occupies coefficient zero and stays equal to one when predictors
 are centered. The wrapper also accepts unnormalized operators. Products preserve
 the underlying error type and storage access pattern, including chunked reads.
-Reusable products allocate coefficient scratch; no column of ones or design
-matrix is created. `as_inner()` exposes predictor normalization metadata, and
+Ordinary reusable products allocate coefficient scratch. Fused workspace
+methods reuse that buffer; no column of ones or design matrix is created.
+`as_inner()` exposes predictor normalization metadata, and
 `into_inner()` recovers the predictors. Fitting, penalty exclusions, and
 coefficient transformations remain with the caller.
 

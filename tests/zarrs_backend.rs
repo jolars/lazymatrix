@@ -33,12 +33,14 @@ fn build(tm: &common::TestMatrix, chunk: [u64; 2]) -> ZarrMatrix<MemoryStore> {
 #[test]
 fn zarrs_backend_suite() {
     for chunks in [[3, 2], [1, 7], [16, 1], [32, 32]] {
+        common::run_fused_suite(|tm| build(tm, chunks), |v| v.to_vec());
         common::run_backend_suite(|tm| build(tm, chunks), |v| v.to_vec(), |v| v.clone());
     }
 }
 
 #[test]
 fn missing_chunks_use_their_fill_value() {
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
     let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], DataType::Float64, 5.0f64)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();
@@ -47,6 +49,118 @@ fn missing_chunks_use_their_fill_value() {
     assert_eq!(matrix.matvec(&vec![2.0, 3.0]).unwrap(), [25.0; 3]);
     let lazy = LazyMatrix::new(&matrix, Normalization::default()).unwrap();
     assert_eq!(lazy.matvec(&vec![2.0, 3.0]).unwrap(), [25.0; 3]);
+    let mut forward = vec![3.0; 3];
+    matrix
+        .matvec_scaled_into(2.0, &vec![2.0, 3.0], -1.0, &mut forward)
+        .unwrap();
+    assert_eq!(forward, [47.0; 3]);
+    let mut transpose = vec![f64::NAN; 2];
+    matrix
+        .mat_transpose_vec_scaled_into(2.0, &vec![1.0; 3], 0.0, &mut transpose)
+        .unwrap();
+    assert_eq!(transpose, [30.0; 2]);
+}
+
+#[test]
+fn fused_products_preserve_scan_counts_and_skip_reads_for_zero_alpha() {
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto, WithIntercept};
+    fn exercise<O>(op: &O, matrix: &ZarrMatrix<TrackedStore>, store: &TrackedStore)
+    where
+        O: MatVec<Vec<f64>>
+            + MatTransposeVec<Vec<f64>>
+            + MatVecScaledInto<Vec<f64>, Vec<f64>, f64>
+            + MatTransposeVecScaledInto<Vec<f64>, Vec<f64>, f64>,
+    {
+        let x = vec![1.0; op.ncols()];
+        let u = vec![1.0; op.nrows()];
+        let expected_forward = op.matvec(&x).unwrap();
+        let expected_transpose = op.mat_transpose_vec(&u).unwrap();
+        store.reset();
+        let mut forward = vec![3.0; op.nrows()];
+        op.matvec_scaled_into(2.0, &x, -1.0, &mut forward).unwrap();
+        assert_eq!(
+            forward,
+            expected_forward
+                .iter()
+                .map(|p| 2.0 * p - 3.0)
+                .collect::<Vec<_>>()
+        );
+        assert_scans(store, matrix, 1);
+        store.reset();
+        let mut transpose = vec![3.0; op.ncols()];
+        op.mat_transpose_vec_scaled_into(2.0, &u, -1.0, &mut transpose)
+            .unwrap();
+        assert_eq!(
+            transpose,
+            expected_transpose
+                .iter()
+                .map(|p| 2.0 * p - 3.0)
+                .collect::<Vec<_>>()
+        );
+        assert_scans(store, matrix, 1);
+        store.reset();
+        store.fail_after.store(0, Ordering::Relaxed);
+        op.matvec_scaled_into(-0.0, &vec![f64::NAN; op.ncols()], 0.0, &mut forward)
+            .unwrap();
+        op.mat_transpose_vec_scaled_into(0.0, &vec![f64::NAN; op.nrows()], 0.0, &mut transpose)
+            .unwrap();
+        assert_eq!(forward, vec![0.0; op.nrows()]);
+        assert_eq!(transpose, vec![0.0; op.ncols()]);
+        assert_scans(store, matrix, 0);
+        store.reset();
+    }
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        exercise(&matrix, &matrix, &store);
+        for center in [None, Some(vec![2.0; 3])] {
+            for scale in [None, Some(vec![-4.0; 3])] {
+                let lazy = LazyMatrix::from_parts(&matrix, center.clone(), scale);
+                exercise(&lazy, &matrix, &store);
+                exercise(&WithIntercept::new(&lazy), &matrix, &store);
+            }
+        }
+    }
+}
+
+#[test]
+fn fused_read_failures_do_not_apply_normalization_or_intercept_corrections() {
+    use lazymatrix::{MatVecScaledInto, WithIntercept};
+    let (matrix, store) = tracked(false);
+    let lazy = LazyMatrix::from_parts(&matrix, Some(vec![2.0; 3]), Some(vec![4.0; 3]));
+    let mut raw = vec![11.0; 5];
+    let mut normalized = raw.clone();
+    store.fail_after.store(2, Ordering::Relaxed);
+    assert!(
+        matrix
+            .matvec_scaled_into(2.0, &vec![0.25; 3], 1.0, &mut raw)
+            .is_err()
+    );
+    store.reset();
+    store.fail_after.store(2, Ordering::Relaxed);
+    assert!(
+        WithIntercept::new(&lazy)
+            .matvec_scaled_into(2.0, &vec![3.0, 1.0, 1.0, 1.0], 1.0, &mut normalized)
+            .is_err()
+    );
+    assert_eq!(normalized, raw);
+    assert_eq!(store.keys.lock().unwrap().len(), 3);
+    store.reset();
+    store.fail_after.store(2, Ordering::Relaxed);
+    let mut out = vec![11.0; 4];
+    let mut scratch = vec![0.0; 3];
+    assert!(
+        WithIntercept::new(&lazy)
+            .mat_transpose_vec_scaled_with_workspace(
+                2.0,
+                &vec![1.0; 5],
+                1.0,
+                &mut out,
+                &mut scratch
+            )
+            .is_err()
+    );
+    assert_eq!(out, [11.0; 4]);
+    assert_eq!(store.keys.lock().unwrap().len(), 3);
 }
 
 #[test]
@@ -243,6 +357,15 @@ fn corrupt_compressed_chunks_return_decoding_errors() {
 
 #[test]
 fn f32_normalization_and_products_match_known_values() {
+    let array = ArrayBuilder::new(vec![2, 1], vec![1, 1], DataType::Float32, 0.0_f32)
+        .build(Arc::new(MemoryStore::new()), "/f32")
+        .unwrap();
+    array
+        .store_array_subset_elements(&array.subset_all(), &[1.0_f32, 3.0])
+        .unwrap();
+    common::check_fused_f32(&ZarrMatrix::<_, f32>::try_new(array).unwrap(), |v| {
+        v.to_vec()
+    });
     let array = ArrayBuilder::new(vec![3, 2], vec![2, 1], DataType::Float32, 0.0f32)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();
@@ -265,6 +388,7 @@ fn f32_normalization_and_products_match_known_values() {
 
 #[test]
 fn edge_padding_is_excluded_and_nan_fill_propagates() {
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
     let array = ArrayBuilder::new(vec![1, 1], vec![2, 2], DataType::Float64, f64::NAN)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();
@@ -274,9 +398,22 @@ fn edge_padding_is_excluded_and_nan_fill_propagates() {
     let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
     assert_eq!(matrix.col_means().unwrap(), [3.0]);
     assert_eq!(matrix.matvec(&vec![2.0]).unwrap(), [6.0]);
+    let mut out = vec![f64::NAN];
+    matrix
+        .matvec_scaled_into(2.0, &vec![2.0], 0.0, &mut out)
+        .unwrap();
+    assert_eq!(out, [12.0]);
+    matrix
+        .mat_transpose_vec_scaled_into(2.0, &vec![2.0], 0.0, &mut out)
+        .unwrap();
+    assert_eq!(out, [12.0]);
     matrix.as_inner().erase_chunk(&[0, 0]).unwrap();
     assert!(matrix.col_means().unwrap()[0].is_nan());
     assert!(matrix.matvec(&vec![0.0]).unwrap()[0].is_nan());
+    matrix
+        .matvec_scaled_into(1.0, &vec![0.0], 0.0, &mut out)
+        .unwrap();
+    assert!(out[0].is_nan());
 }
 
 #[test]

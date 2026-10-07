@@ -3,9 +3,9 @@
 use std::marker::PhantomData;
 
 use crate::{
-    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape,
-    MatrixWrite, Scalar, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
-    WeightedGramInto,
+    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
+    MatVecScaledInto, MatrixErrorType, MatrixShape, MatrixWrite, Scalar, VectorOwned, VectorView,
+    VectorViewMut, WeightedColumnSumsInto, WeightedGramInto,
 };
 
 /// A design operator `[1, predictors]` with an implicit leading intercept.
@@ -21,6 +21,9 @@ use crate::{
 /// normalization may allocate additional scratch. Reusing output therefore does
 /// not promise allocation-free evaluation. Borrowed vector views work wherever
 /// the corresponding predictor product accepts them.
+/// Fused products implement [`MatVecScaledInto`] and [`MatTransposeVecScaledInto`]
+/// when the predictors do. The optional workspace methods reuse the wrapper's
+/// predictor buffer; the inner operator may still allocate normalization scratch.
 ///
 /// Weighted Gram products require both [`WeightedGramInto`] and
 /// [`WeightedColumnSumsInto`] on the predictors. They reuse the predictor Gram
@@ -69,6 +72,179 @@ impl<M: MatrixShape, F> MatrixShape for WithIntercept<M, F> {
 
 impl<M: MatrixErrorType, F> MatrixErrorType for WithIntercept<M, F> {
     type Error = M::Error;
+}
+
+impl<M: MatrixShape, F: Scalar> WithIntercept<M, F> {
+    fn validate_product(&self, input_len: usize, output_len: usize, transpose: bool) {
+        let (input, output) = if transpose {
+            (self.nrows(), self.ncols())
+        } else {
+            (self.ncols(), self.nrows())
+        };
+        assert_eq!(input_len, input, "fused product: dimension mismatch");
+        assert_eq!(
+            output_len, output,
+            "fused product: output dimension mismatch"
+        );
+    }
+
+    /// Apply `out = alpha * [1, predictors] * x + beta * out` with reusable scratch.
+    ///
+    /// Scratch stores the predictor coefficients and has length `ncols() - 1`.
+    /// This reuses only the wrapper's buffer: predictors may allocate their own
+    /// normalization workspace. Exact zero `alpha` leaves scratch untouched and
+    /// skips predictor evaluation. Exact zero `beta` ignores previous output.
+    ///
+    /// # Errors
+    /// Returns the predictor error. Output and scratch may be partial on error;
+    /// the intercept contribution is added only after the predictors succeed.
+    ///
+    /// # Panics
+    /// Panics on incorrect input, output, or scratch lengths, even for zero `alpha`.
+    pub fn matvec_scaled_with_workspace<X, Y>(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+        scratch: &mut X::Owned,
+    ) -> Result<(), M::Error>
+    where
+        X: VectorOwned<F>,
+        Y: VectorViewMut<F>,
+        M: MatVecScaledInto<X::Owned, Y, F>,
+    {
+        self.validate_product(x.len(), out.len(), false);
+        assert_eq!(
+            scratch.len(),
+            self.inner.ncols(),
+            "fused product: scratch dimension mismatch"
+        );
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        if self.inner.ncols() == 0 {
+            crate::traits::scale_output(beta, out);
+        } else {
+            for j in 0..scratch.len() {
+                scratch.set(j, x.get(j + 1));
+            }
+            self.inner.matvec_scaled_into(alpha, scratch, beta, out)?;
+        }
+        let intercept = alpha * x.get(0);
+        for i in 0..out.len() {
+            out.set(i, out.get(i) + intercept);
+        }
+        Ok(())
+    }
+
+    /// Apply `out = alpha * [1, predictors]ᵀ * x + beta * out` with reusable scratch.
+    ///
+    /// Scratch stores the predictor output and has length `ncols() - 1`.
+    /// Predictors may allocate additional normalization workspace. Exact zero
+    /// `alpha` leaves scratch untouched and skips both predictor evaluation and
+    /// the input sum. Exact zero `beta` ignores previous output.
+    ///
+    /// # Errors
+    /// Returns the predictor error. Scratch may be partial on error, but output
+    /// is updated only after the predictors succeed.
+    ///
+    /// # Panics
+    /// Panics on incorrect input, output, or scratch lengths, even for zero `alpha`.
+    pub fn mat_transpose_vec_scaled_with_workspace<X, Y>(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+        scratch: &mut Y::Owned,
+    ) -> Result<(), M::Error>
+    where
+        X: VectorView<F>,
+        Y: VectorOwned<F> + VectorViewMut<F>,
+        M: MatTransposeVecScaledInto<X, Y::Owned, F>,
+    {
+        self.validate_product(x.len(), out.len(), true);
+        assert_eq!(
+            scratch.len(),
+            self.inner.ncols(),
+            "fused product: scratch dimension mismatch"
+        );
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        if self.inner.ncols() != 0 {
+            for j in 0..scratch.len() {
+                scratch.set(
+                    j,
+                    if beta == F::zero() {
+                        F::zero()
+                    } else {
+                        out.get(j + 1)
+                    },
+                );
+            }
+            self.inner
+                .mat_transpose_vec_scaled_into(alpha, x, beta, scratch)?;
+            for j in 0..scratch.len() {
+                out.set(j + 1, scratch.get(j));
+            }
+        }
+        let intercept = alpha * x.sum();
+        out.set(
+            0,
+            if beta == F::zero() {
+                intercept
+            } else {
+                intercept + beta * out.get(0)
+            },
+        );
+        Ok(())
+    }
+}
+
+impl<M, F, X, Y> MatVecScaledInto<X, Y, F> for WithIntercept<M, F>
+where
+    F: Scalar,
+    X: VectorOwned<F>,
+    Y: VectorViewMut<F>,
+    M: MatVecScaledInto<X::Owned, Y, F>,
+{
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        self.validate_product(x.len(), out.len(), false);
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        let mut scratch = X::owned_from_fn(self.inner.ncols(), |_| F::zero());
+        self.matvec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
+    }
+}
+
+impl<M, F, X, Y> MatTransposeVecScaledInto<X, Y, F> for WithIntercept<M, F>
+where
+    F: Scalar,
+    X: VectorView<F>,
+    Y: VectorOwned<F> + VectorViewMut<F>,
+    M: MatTransposeVecScaledInto<X, Y::Owned, F>,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        self.validate_product(x.len(), out.len(), true);
+        if alpha == F::zero() {
+            crate::traits::scale_output(beta, out);
+            return Ok(());
+        }
+        let mut scratch = Y::owned_from_fn(self.inner.ncols(), |_| F::zero());
+        self.mat_transpose_vec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
+    }
 }
 
 impl<M, F, X, Y> MatVecInto<X, Y> for WithIntercept<M, F>
