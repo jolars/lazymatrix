@@ -73,10 +73,10 @@ implements traits independently for every enabled release. Another dependency
 enabling a newer adapter does not remove support for your existing types. The
 `*_all` features are internal markers, not entry points for selecting a backend.
 
-The core and older backends support Rust 1.87. The `nalgebra` feature now selects
+The core supports Rust 1.85. Other backends retain their dependency MSRVs. The `nalgebra` feature now selects
 nalgebra 0.35, which requires Rust 1.89. To retain the previous release and Rust
 1.87 support, replace `nalgebra` with `nalgebra_v0_34` in your feature list.
-The sprs backend supports Rust 1.87 with sprs 0.11.4 (used in the lockfile);
+The sprs backend supports Rust 1.85 with sprs 0.11.4 (used in the lockfile);
 sprs 0.11.5 requires Rust 1.88.
 
 ## Example
@@ -137,7 +137,7 @@ lazy.weighted_gram_into(&array![1.0, 0.5, 2.0], &mut gram).unwrap();
 ```
 
 Inputs can be dense ndarray arrays or views, faer or nalgebra CSC matrices,
-or checked `SprsCsc` matrices or views with `usize` row indices. Output can be
+or checked `SprsCsc` and `SprsCsr` matrices or views with `usize` indices. Output can be
 an owned or mutable-view ndarray, faer, or nalgebra dense matrix, independent
 of the input backend. Weights may be signed, zero, or nonfinite. The operation
 overwrites both triangles and supports strided weights and outputs.
@@ -146,7 +146,9 @@ Kernels center values before multiplying, preserving small variations around
 large offsets. Dense kernels use bounded panels. CSC kernels choose sparse pair
 accumulation or bounded panels according to density; the sparse pair path uses
 O(nrows + ncols) scratch with centering, in addition to the O(ncols²) output.
-Neither creates a full normalized or weighted design matrix. Unsorted or
+CSR kernels use fixed-size row panels and O(nrows × ncols²) arithmetic. They
+scan borrowed rows without converting storage or allocating dense columns.
+None of these kernels creates a full normalized or weighted design matrix. Unsorted or
 duplicate sparse indices and
 nonfinite arithmetic use a slower direct fallback with at most two working
 columns. Scratch is allocated internally on each call. See the trait documentation

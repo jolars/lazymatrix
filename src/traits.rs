@@ -43,7 +43,7 @@
 /// so any floating-point type that satisfies the underlying `num-traits` bounds
 /// (notably `f32` and `f64`) is a `Scalar` automatically.
 pub trait Scalar:
-    num_traits::Float + num_traits::FromPrimitive + std::iter::Sum + std::fmt::Debug + Default + 'static
+    num_traits::Float + num_traits::FromPrimitive + std::iter::Sum + std::fmt::Debug
 {
 }
 

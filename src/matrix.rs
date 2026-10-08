@@ -299,20 +299,8 @@ where
 {
     /// `out = X̃ v = X (S⁻¹ v) − 1 · (cᵀ S⁻¹ v)`.
     fn matvec_into(&self, v: &X, out: &mut Y) -> Result<(), Self::Error> {
-        if let Some(s) = &self.scales {
-            let mut w = v.clone();
-            w.elem_div_assign(s);
-            self.data.matvec_into(&w, out)?;
-            if let Some(c) = &self.centers {
-                out.sub_scalar_assign(w.dot_slice(c));
-            }
-        } else {
-            self.data.matvec_into(v, out)?;
-            if let Some(c) = &self.centers {
-                out.sub_scalar_assign(v.dot_slice(c));
-            }
-        }
-        Ok(())
+        self.data
+            .matvec_normalized_into(v, self.centers(), self.scales(), out)
     }
 }
 
@@ -349,19 +337,8 @@ where
 {
     /// `out = X̃ᵀ u = S⁻¹ (Xᵀ u − c · Σu)`.
     fn mat_transpose_vec_into(&self, u: &X, out: &mut Y) -> Result<(), Self::Error> {
-        let total = if self.centers.is_some() {
-            u.sum_entries()
-        } else {
-            F::zero()
-        };
-        self.data.mat_transpose_vec_into(u, out)?;
-        if let Some(c) = &self.centers {
-            out.scaled_sub_slice(total, c);
-        }
-        if let Some(s) = &self.scales {
-            out.elem_div_assign(s);
-        }
-        Ok(())
+        self.data
+            .mat_transpose_vec_normalized_into(u, self.centers(), self.scales(), out)
     }
 }
 

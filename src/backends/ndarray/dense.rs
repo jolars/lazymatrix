@@ -25,7 +25,7 @@ impl<S: Data> MatrixShape for ArrayBase<S, Ix2> {
 
 impl<F, S> RawColumns<F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     type Column<'a>
@@ -41,7 +41,7 @@ where
 
 impl<F, S> MatVec<Array1<F>> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     fn matvec(&self, x: &Array1<F>) -> Result<Array1<F>, Self::Error> {
@@ -53,7 +53,7 @@ where
 
 impl<F, S> MatTransposeVec<Array1<F>> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     fn mat_transpose_vec(&self, x: &Array1<F>) -> Result<Array1<F>, Self::Error> {
@@ -65,7 +65,7 @@ where
 
 impl<F, S, X, Y> MatVecInto<ArrayBase<X, Ix1>, ArrayBase<Y, Ix1>> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
     X: Data<Elem = F>,
     Y: DataMut<Elem = F>,
@@ -81,7 +81,7 @@ where
 
 impl<F, S, X, Y> MatVecScaledInto<ArrayBase<X, Ix1>, ArrayBase<Y, Ix1>, F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
     X: Data<Elem = F>,
     Y: DataMut<Elem = F>,
@@ -118,7 +118,7 @@ where
 
 impl<F, S, X, Y> MatTransposeVecInto<ArrayBase<X, Ix1>, ArrayBase<Y, Ix1>> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
     X: Data<Elem = F>,
     Y: DataMut<Elem = F>,
@@ -135,7 +135,7 @@ where
 impl<F, S, X, Y> MatTransposeVecScaledInto<ArrayBase<X, Ix1>, ArrayBase<Y, Ix1>, F>
     for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
     X: Data<Elem = F>,
     Y: DataMut<Elem = F>,

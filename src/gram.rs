@@ -2,6 +2,68 @@
 
 use crate::{MatrixWrite, Scalar, VectorView};
 
+/// Normalize borrowed CSR rows in bounded panels, including implicit zeros.
+#[cfg(feature = "sprs_all")]
+pub(crate) fn sparse_row_gram<F, M, W, O>(
+    matrix: &M,
+    weights: &W,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+    out: &mut O,
+) where
+    F: Scalar,
+    M: crate::SparseRows<F> + ?Sized,
+    W: VectorView<F> + ?Sized,
+    O: MatrixWrite<F> + ?Sized,
+{
+    let (n, p) = (matrix.nrows(), matrix.ncols());
+    validate(n, p, weights, centers, scales, out);
+    const TILE: usize = 32;
+    for j in (0..p).step_by(TILE) {
+        let nj = (p - j).min(TILE);
+        for k in (j..p).step_by(TILE) {
+            let nk = (p - k).min(TILE);
+            let mut block = [F::zero(); TILE * TILE];
+            for i in 0..n {
+                let mut left = [F::zero(); TILE];
+                let mut right = [F::zero(); TILE];
+                let (columns, values) = matrix.sparse_row(i);
+                // Sum duplicates before normalization, and retain implicit zeros.
+                for (&column, &value) in columns.iter().zip(values) {
+                    if (j..j + nj).contains(&column) {
+                        left[column - j] = left[column - j] + value;
+                    }
+                    if (k..k + nk).contains(&column) {
+                        right[column - k] = right[column - k] + value;
+                    }
+                }
+                for (b, value) in right[..nk].iter_mut().enumerate() {
+                    *value = normalize(*value, k + b, centers, scales);
+                }
+                let weight = weights.get(i);
+                for (a, &value) in left[..nj].iter().enumerate() {
+                    let lhs = normalize(value, j + a, centers, scales) * weight;
+                    for (destination, &rhs) in block[a * TILE..][..nk].iter_mut().zip(&right[..nk])
+                    {
+                        *destination = *destination + lhs * rhs;
+                    }
+                }
+            }
+            for a in 0..nj {
+                for b in 0..nk {
+                    if j + a <= k + b {
+                        let value = block[a * TILE + b];
+                        out.set(j + a, k + b, value);
+                        if j + a != k + b {
+                            out.set(k + b, j + a, value);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn validate<F, W, O>(
     nrows: usize,
     ncols: usize,
@@ -498,3 +560,58 @@ mod sparse {
 
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) use sparse::{WeightSums, sparse_gram};
+
+#[cfg(all(test, feature = "sprs_all"))]
+mod row_tests {
+    use super::*;
+    use crate::{MatrixShape, SparseRows};
+
+    struct Rows;
+    impl MatrixShape for Rows {
+        fn nrows(&self) -> usize {
+            2
+        }
+        fn ncols(&self) -> usize {
+            3
+        }
+    }
+    impl SparseRows<f64> for Rows {
+        fn sparse_row(&self, row: usize) -> (&[usize], &[f64]) {
+            if row == 0 {
+                (&[2, 0, 2], &[3.0, 1.0, -1.0])
+            } else {
+                (&[], &[])
+            }
+        }
+    }
+    struct Output([[f64; 3]; 3]);
+    impl MatrixShape for Output {
+        fn nrows(&self) -> usize {
+            3
+        }
+        fn ncols(&self) -> usize {
+            3
+        }
+    }
+    impl MatrixWrite<f64> for Output {
+        fn set(&mut self, row: usize, col: usize, value: f64) {
+            self.0[row][col] = value;
+        }
+    }
+
+    #[test]
+    fn row_gram_sums_unsorted_duplicates_before_normalizing() {
+        let mut out = Output([[99.0; 3]; 3]);
+        sparse_row_gram(
+            &Rows,
+            &vec![2.0, -1.0],
+            Some(&[1.0; 3]),
+            Some(&[2.0, 1.0, 0.5]),
+            &mut out,
+        );
+        assert_eq!(
+            out.0,
+            [[-0.25, -0.5, -1.0], [-0.5, 1.0, -6.0], [-1.0, -6.0, 4.0]]
+        );
+    }
+}

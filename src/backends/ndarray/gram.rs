@@ -7,7 +7,7 @@ use ndarray::{Array2, ArrayBase, Data, DataMut, Ix2, s};
 
 impl<F, S> MatrixWrite<F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: DataMut<Elem = F>,
 {
     fn set(&mut self, row: usize, column: usize, value: F) {
@@ -17,7 +17,7 @@ where
 
 impl<F, S> WeightedGramInto<F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     fn weighted_gram_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
@@ -31,7 +31,7 @@ where
 
 impl<F, S> WeightedGramKernel<F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     fn weighted_gram_normalized_into<W, O>(
@@ -135,7 +135,7 @@ where
 
 impl<F, S> crate::WeightedColumnSumsInto<F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     fn weighted_column_sums_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
@@ -151,7 +151,7 @@ where
 
 impl<F, S> crate::WeightedColumnSumsKernel<F> for ArrayBase<S, Ix2>
 where
-    F: Scalar,
+    F: Scalar + 'static,
     S: Data<Elem = F>,
 {
     fn weighted_column_sums_normalized_into<W, O>(

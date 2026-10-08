@@ -125,11 +125,13 @@ fn sprs_centered_gram_matches_oracle_for_sparse_pairs() {
     let (n, p) = (1_000, 32);
     let mut dense = vec![vec![0.0; p]; n];
     let mut triplets = TriMat::new((n, p));
-    for j in 0..p {
-        for i in (j % 17..n).step_by(97) {
-            let value = (i % 7) as f64 - 2.0;
-            dense[i][j] = value;
-            triplets.add_triplet(i, j, value);
+    for (i, row) in dense.iter_mut().enumerate() {
+        for (j, entry) in row.iter_mut().enumerate() {
+            if i >= j % 17 && (i - j % 17) % 97 == 0 {
+                let value = (i % 7) as f64 - 2.0;
+                *entry = value;
+                triplets.add_triplet(i, j, value);
+            }
         }
     }
     let centers: Vec<_> = (0..p).map(|j| 0.1 + j as f64 / 100.0).collect();

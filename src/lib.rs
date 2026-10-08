@@ -57,10 +57,10 @@
 //! feature for each direct backend dependency. The `*_all` features are internal
 //! markers and cannot be enabled without a version feature.
 //!
-//! The core and older backends require Rust 1.87. The `nalgebra` and
+//! The core requires Rust 1.85. Other backends retain their dependency MSRVs. The `nalgebra` and
 //! `nalgebra_v0_35` features require Rust 1.89. The `nalgebra` feature previously
 //! selected 0.34; use `nalgebra_v0_34` to retain that release and Rust 1.87 support.
-//! The sprs backend supports Rust 1.87 with sprs 0.11.4, as locked in this
+//! The sprs backend supports Rust 1.85 with sprs 0.11.4, as locked in this
 //! repository. sprs 0.11.5 requires Rust 1.88.
 //!
 //! Any type implementing the [`traits`] surface (a dense matrix, say) works too.
@@ -185,7 +185,9 @@
 //! # Operational errors and out-of-core storage
 //!
 //! [`WeightedGramInto`] computes `Aᵀ diag(weights) A` for dense ndarray and
-//! `usize`-index CSC inputs from faer, nalgebra, and `SprsCsc` (when enabled).
+//! `usize`-index CSC inputs from faer, nalgebra, and `SprsCsc` (when enabled),
+//! as well as CSR inputs through `SprsCsr`. CSR kernels use bounded row panels
+//! with O(nrows × ncols²) arithmetic and no storage conversion.
 //! [`MatrixWrite`] destinations include owned and mutable-view dense matrices
 //! from ndarray, faer, and nalgebra. The output backend is independent of the
 //! input backend. Both triangles are overwritten, and weights can be signed,

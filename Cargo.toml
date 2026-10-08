@@ -9,7 +9,7 @@ authors = [
     "Johan Larsson <johan@jolars.co>",
     "Viktor Segersall <viktor.segersall@proton.me>",
 ]
-rust-version = "1.87.0"
+rust-version = "1.85.0"
 readme = "README.md"
 keywords = ["matrix", "sparse", "linear-algebra", "centering", "scaling"]
 categories = ["mathematics", "science", "algorithms"]

@@ -126,12 +126,7 @@ where
 }
 
 impl<F> Scalar for F where
-    F: num_traits::Float
-        + num_traits::FromPrimitive
-        + std::iter::Sum
-        + std::fmt::Debug
-        + Default
-        + 'static
+    F: num_traits::Float + num_traits::FromPrimitive + std::iter::Sum + std::fmt::Debug
 {
 }
 

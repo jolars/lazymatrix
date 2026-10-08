@@ -128,6 +128,16 @@ and solver-specific update logic belong in consuming crates.
 
 ## Operator performance
 
+- [ ] Add an explicit eager normalization option for dense matrices.
+  - Normalize dense data once so repeated products can use ordinary backend
+    kernels without applying centering and scaling on each call.
+  - Define ownership and materialization semantics, including whether callers
+    request an owned normalized copy or explicitly permit in-place changes.
+  - Preserve the existing normalization and nonfinite-value policies, and make
+    the original centers and scales available for coefficient transformations.
+  - Compare downstream fitting time and peak allocations with the lazy path.
+    Keep lazy normalization the default for sparse and out-of-core inputs.
+
 - [x] Allow `LazyMatrix` to wrap a borrowed backend matrix.
   - Add forwarding implementations for the matrix capability traits on `&M`, or
     provide an explicit borrowed wrapper with equivalent ergonomics.

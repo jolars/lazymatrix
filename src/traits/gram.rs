@@ -25,6 +25,9 @@ pub trait MatrixWrite<F: Scalar>: MatrixShape {
 /// and O(nrows * ncols²) work to avoid repeated sparse range queries.
 /// Noncanonical columns or nonfinite arithmetic can require O(nrows) scratch
 /// and O(nrows * ncols² + ncols * nnz) work. Output always occupies O(ncols²).
+/// CSR kernels scan borrowed rows into fixed-size panels. Workspace is bounded,
+/// and arithmetic costs O(nrows × ncols²). They do not convert storage.
+///
 /// Gram kernels run serially; an externally enabled BLAS library may use its
 /// own threads.
 ///
