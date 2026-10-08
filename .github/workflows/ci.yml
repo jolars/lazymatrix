@@ -20,6 +20,7 @@ jobs:
         run: rustup component add rustfmt
       - run: cargo fmt --all -- --check
       - run: cargo fmt --manifest-path tests/feature_unification/Cargo.toml --all -- --check
+      - run: cargo fmt --manifest-path tests/core_consumer/Cargo.toml --all -- --check
 
   clippy:
     name: clippy
@@ -31,6 +32,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-features --all-targets --locked -- -D warnings
       - run: cargo clippy --manifest-path tests/feature_unification/Cargo.toml --workspace --all-features --all-targets --locked -- -D warnings
+      - run: cargo clippy --manifest-path tests/core_consumer/Cargo.toml --all-targets --locked -- -D warnings
 
   docs:
     name: rustdoc
@@ -102,6 +104,20 @@ jobs:
           key: core-msrv
       - run: cargo +1.85.0 build --locked --no-default-features
       - run: cargo +1.85.0 build --locked --no-default-features --features sprs_v0_11
+      - run: cargo +1.85.0 test --manifest-path tests/core_consumer/Cargo.toml --locked
+
+  core-wasm:
+    name: Core consumer (WASM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tests/core_consumer
+      - run: cargo +stable install wasm-pack --version 0.15.0 --locked
+      - run: cargo build --locked --no-default-features --target wasm32-unknown-unknown
+      - run: wasm-pack test --node -- --locked
+        working-directory: tests/core_consumer
 
   msrv:
     name: MSRV (Rust 1.87)
@@ -118,7 +134,7 @@ jobs:
 
   versionary:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, core-msrv, msrv]
+    needs: [test, core-msrv, core-wasm, msrv]
     runs-on: ubuntu-latest
     permissions:
       contents: write

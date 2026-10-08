@@ -117,6 +117,12 @@ nalgebra 0.35, which requires Rust 1.89. To retain the previous release and Rust
 The sprs backend supports Rust 1.85 with sprs 0.11.4 (used in the lockfile);
 sprs 0.11.5 requires Rust 1.88.
 
+The core also supports `wasm32-unknown-unknown`. The isolated
+`tests/core_consumer` package tests an external adapter with `f32`, `f64`, and
+borrowed matrices, without enabling a built-in backend. CI runs it on Rust 1.85
+and in Node.js through `wasm-pack`. Run `task test-wasm` to check the WASM build
+and execute these tests locally.
+
 ## Example
 
 ```rust

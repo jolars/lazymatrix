@@ -24,6 +24,7 @@ test_version() {
 }
 
 test_core() {
+    cargo test --manifest-path tests/core_consumer/Cargo.toml --locked
     test_features
     for features in parallel faer nalgebra ndarray sprs zarrs \
         faer,nalgebra,ndarray,sprs faer,nalgebra,ndarray,sprs,parallel \

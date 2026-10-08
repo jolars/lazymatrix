@@ -17,12 +17,14 @@ tasks:
     cmds:
       - cargo fmt --all -- --check
       - cargo fmt --manifest-path tests/feature_unification/Cargo.toml --all -- --check
+      - cargo fmt --manifest-path tests/core_consumer/Cargo.toml --all -- --check
 
   lint:
     desc: Lint all Rust targets and features.
     cmds:
       - cargo clippy --all-features --all-targets --locked -- -D warnings
       - cargo clippy --manifest-path tests/feature_unification/Cargo.toml --workspace --all-features --all-targets --locked -- -D warnings
+      - cargo clippy --manifest-path tests/core_consumer/Cargo.toml --all-targets --locked -- -D warnings
 
   docs:
     desc: Build documentation with warnings denied.
@@ -35,3 +37,10 @@ tasks:
     desc: Test every backend version, parallelism, and feature unification.
     cmds:
       - bash scripts/test-backends.sh
+
+  test-wasm:
+    desc: Test the dependency-light core in Node.js.
+    cmds:
+      - cargo build --locked --no-default-features --target wasm32-unknown-unknown
+      - cmd: wasm-pack test --node -- --locked
+        dir: tests/core_consumer
