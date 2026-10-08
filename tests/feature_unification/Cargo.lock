@@ -909,7 +909,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "lazymatrix"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "faer 0.22.6",
  "faer 0.23.2",
@@ -1962,18 +1962,18 @@ checksum = "9aec5da331524158c6d1a4ac0ab1541149c0b9505fde06423b02f5ef0106b9f0"
 
 [[package]]
 name = "zerocopy"
-version = "0.8.61"
+version = "0.8.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "879fb705ce98c32e41ebdb970fbe1204f8492423b314c6ab0354c3e7b5542866"
+checksum = "86502bf56ac7c77571a32e2647bb2a15894565e981fb2a48d7bde2d91c965a9d"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.61"
+version = "0.8.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "708882a28301d604fa039cc7727607a98d04c4b86dc76ec9cc683f805d709759"
+checksum = "5457206954b06561e2608c7e19cf58b1926586d999c246eebe4502f7e2039d1a"
 dependencies = [
  "proc-macro2",
  "quote",

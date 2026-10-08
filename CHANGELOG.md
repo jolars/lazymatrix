@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/jolars/lazymatrix-rs/compare/v0.5.0...v0.6.0) (2026-10-08)
+
+### Features
+
+- add eager normalization and dense conversion ([`519190a`](https://github.com/jolars/lazymatrix-rs/commit/519190ad44fbfb82f410eb55c3e27863afcad0d6))
+- add normalized product hooks and bounded CSR Gram kernels ([`42a6aef`](https://github.com/jolars/lazymatrix-rs/commit/42a6aef6f053306de7f8a6391ba43f837a25230e))
+
 ## [0.5.0](https://github.com/jolars/lazymatrix-rs/compare/v0.4.0...v0.5.0) (2026-10-07)
 
 ### Features

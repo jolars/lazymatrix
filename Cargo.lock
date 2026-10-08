@@ -1178,9 +1178,9 @@ dependencies = [
 
 [[package]]
 name = "inventory"
-version = "0.3.24"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+checksum = "6928282826c822ad91bf1c9a1cb90a30ba1c26770749929b4656cd6be829cd7c"
 dependencies = [
  "rustversion",
 ]
@@ -1228,7 +1228,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "lazymatrix"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "approx",
  "criterion",
@@ -2730,9 +2730,9 @@ dependencies = [
 
 [[package]]
 name = "wasip2"
-version = "1.0.4+wasi-0.2.12"
+version = "1.0.1+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487"
+checksum = "0562428422c63773dad2c345a1882263bbf4d65cf3f42e90921f787ef5ad58e7"
 dependencies = [
  "wit-bindgen",
 ]
@@ -2926,9 +2926,9 @@ checksum = "9aec5da331524158c6d1a4ac0ab1541149c0b9505fde06423b02f5ef0106b9f0"
 
 [[package]]
 name = "wit-bindgen"
-version = "0.57.1"
+version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "zarrs"
@@ -2987,9 +2987,9 @@ dependencies = [
 
 [[package]]
 name = "zarrs_filesystem"
-version = "0.3.13"
+version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a63fc5f551c941a98a5942814030c937ec979effb35e5edbf7f6334323aefd78"
+checksum = "313fc489b285b21bf451ee20d0c73264703d09d7fb2b43a81bca09a8acca22af"
 dependencies = [
  "bytes",
  "derive_more",
@@ -3071,18 +3071,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.61"
+version = "0.8.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "879fb705ce98c32e41ebdb970fbe1204f8492423b314c6ab0354c3e7b5542866"
+checksum = "86502bf56ac7c77571a32e2647bb2a15894565e981fb2a48d7bde2d91c965a9d"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.61"
+version = "0.8.62"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "708882a28301d604fa039cc7727607a98d04c4b86dc76ec9cc683f805d709759"
+checksum = "5457206954b06561e2608c7e19cf58b1926586d999c246eebe4502f7e2039d1a"
 dependencies = [
  "proc-macro2",
  "quote",
