@@ -2286,3 +2286,223 @@ where
         }
     }
 }
+
+/// Dense output preserving both dimensions even when either dimension is zero.
+pub struct MaterializeOutput<F = f64> {
+    pub rows: usize,
+    pub columns: usize,
+    pub values: Vec<F>,
+}
+impl<F> MatrixShape for MaterializeOutput<F> {
+    fn nrows(&self) -> usize {
+        self.rows
+    }
+    fn ncols(&self) -> usize {
+        self.columns
+    }
+}
+impl<F: lazymatrix::Scalar> lazymatrix::MatrixWrite<F> for MaterializeOutput<F> {
+    fn set(&mut self, row: usize, column: usize, value: F) {
+        self.values[row * self.columns + column] = value;
+    }
+}
+impl<F: lazymatrix::Scalar> lazymatrix::MatrixOwned<F> for MaterializeOutput<F> {
+    fn zeros(rows: usize, columns: usize) -> Self {
+        Self {
+            rows,
+            columns,
+            values: vec![F::zero(); rows * columns],
+        }
+    }
+}
+
+pub fn run_materialization_suite<M>(build: impl Fn(&TestMatrix) -> M)
+where
+    M: lazymatrix::MaterializeDense<f64> + ColumnStats<f64>,
+{
+    use lazymatrix::MatrixOwned;
+    for (rows, cols, density) in [(7, 4, 0.4), (3, 2, 0.0), (0, 3, 0.0), (3, 0, 0.0)] {
+        let tm = random_matrix(4821, rows, cols, density);
+        let source = build(&tm);
+        for center in [Centering::None, Centering::Mean, Centering::Min] {
+            for scale in [
+                Scaling::None,
+                Scaling::Sd,
+                Scaling::Range,
+                Scaling::L1,
+                Scaling::L2,
+                Scaling::MaxAbs,
+            ] {
+                let lazy = LazyMatrix::new(&source, Normalization::new(center, scale)).unwrap();
+                let expected: Vec<_> = materialize(&tm.dense, lazy.centers(), lazy.scales())
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                let eager = lazy.to_eager::<MaterializeOutput>().unwrap();
+                assert_eq!((eager.nrows(), eager.ncols()), (rows, cols));
+                assert_close(&eager.data().values, &expected, EPS);
+                assert_eq!(
+                    eager.centers().map(|x| x.len()),
+                    lazy.centers().map(|x| x.len())
+                );
+                assert_eq!(
+                    eager.scales().map(|x| x.len()),
+                    lazy.scales().map(|x| x.len())
+                );
+                let mut out = MaterializeOutput::zeros(rows, cols);
+                out.values.fill(f64::NAN);
+                let borrowed = lazy.to_eager_into(&mut out).unwrap();
+                assert_close(&borrowed.data().values, &expected, EPS);
+            }
+        }
+        let mut out = MaterializeOutput::zeros(rows, cols);
+        out.values.fill(99.0);
+        for (centers, scales) in [
+            (Some(vec![0.0; cols + 1]), None),
+            (None, Some(vec![1.0; cols + 1])),
+        ] {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                source
+                    .materialize_normalized_into(centers.as_deref(), scales.as_deref(), &mut out)
+                    .unwrap();
+            }));
+            assert!(result.is_err());
+            assert!(out.values.iter().all(|&value| value == 99.0));
+        }
+        if cols > 0 {
+            for zero in [0.0, -0.0] {
+                let scales = vec![zero; cols];
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        source
+                            .materialize_normalized_into(None, Some(&scales), &mut out)
+                            .unwrap();
+                    }))
+                    .is_err()
+                );
+                assert!(out.values.iter().all(|&value| value == 99.0));
+            }
+        }
+        let mut wrong = MaterializeOutput::zeros(rows + 1, cols);
+        wrong.values.fill(99.0);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                source
+                    .materialize_normalized_into(None, None, &mut wrong)
+                    .unwrap();
+            }))
+            .is_err()
+        );
+        assert!(wrong.values.iter().all(|&value| value == 99.0));
+    }
+    let tm = random_matrix(184, 7, 4, 0.4);
+    let source = build(&tm);
+    let lazy = LazyMatrix::from_parts(
+        &source,
+        Some(vec![f64::NAN, f64::INFINITY, -1.0, 1.0]),
+        Some(vec![-2.0, 3.0, f64::NAN, f64::INFINITY]),
+    );
+    let eager = lazy.to_eager::<MaterializeOutput>().unwrap();
+    let expected: Vec<_> = materialize(&tm.dense, lazy.centers(), lazy.scales())
+        .into_iter()
+        .flatten()
+        .collect();
+    for (&value, expected) in eager.data().values.iter().zip(expected) {
+        if expected.is_nan() {
+            assert!(value.is_nan());
+        } else {
+            assert_eq!(value.to_bits(), expected.to_bits());
+        }
+    }
+}
+
+pub fn run_eager_product_suite<M, D, V>(
+    build: impl Fn(&TestMatrix) -> M,
+    to_v: impl Fn(&[f64]) -> V,
+    from_v: impl Fn(&V) -> Vec<f64>,
+) where
+    M: lazymatrix::MaterializeDense<f64> + ColumnStats<f64>,
+    D: lazymatrix::MatrixOwned<f64>
+        + RawColumns<f64>
+        + MatVec<V>
+        + MatTransposeVec<V>
+        + MatVecInto<V>
+        + MatTransposeVecInto<V>
+        + lazymatrix::MatVecScaledInto<V, V, f64>
+        + lazymatrix::MatTransposeVecScaledInto<V, V, f64>,
+    V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
+{
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    let tm = random_matrix(125, 7, 4, 0.5);
+    let lazy =
+        LazyMatrix::new(build(&tm), Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+    let eager = lazy.to_eager::<D>().unwrap();
+    let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
+    let coefficients = random_vec(129, 4);
+    let rows = random_vec(130, 7);
+    let x = to_v(&coefficients);
+    let u = to_v(&rows);
+    let forward = dense_matvec(&dense, &coefficients);
+    let transpose = dense_tmatvec(&dense, &rows);
+    assert_close(&from_v(&eager.matvec(&x).unwrap()), &forward, EPS);
+    assert_close(
+        &from_v(&eager.mat_transpose_vec(&u).unwrap()),
+        &transpose,
+        EPS,
+    );
+    approx::assert_abs_diff_eq!(
+        dot(&forward, &rows),
+        dot(&coefficients, &transpose),
+        epsilon = EPS
+    );
+    let mut y = to_v(&[3.0; 7]);
+    let mut t = to_v(&[3.0; 4]);
+    eager.matvec_scaled_into(2.0, &x, -1.0, &mut y).unwrap();
+    eager
+        .mat_transpose_vec_scaled_into(2.0, &u, -1.0, &mut t)
+        .unwrap();
+    assert_close(
+        &from_v(&y),
+        &forward.iter().map(|v| 2.0 * v - 3.0).collect::<Vec<_>>(),
+        EPS,
+    );
+    assert_close(
+        &from_v(&t),
+        &transpose.iter().map(|v| 2.0 * v - 3.0).collect::<Vec<_>>(),
+        EPS,
+    );
+    let mut destination = D::zeros(7, 4);
+    let borrowed = lazy.to_eager_into(&mut destination).unwrap();
+    borrowed.matvec_into(&x, &mut y).unwrap();
+    borrowed.mat_transpose_vec_into(&u, &mut t).unwrap();
+    assert_close(&from_v(&y), &forward, EPS);
+    assert_close(&from_v(&t), &transpose, EPS);
+    let column = eager.column(0);
+    assert_eq!((column.center(), column.scale()), (0.0, 1.0));
+    approx::assert_abs_diff_eq!(column.dot(&u), transpose[0], epsilon = EPS);
+    let augmented = lazymatrix::WithIntercept::new(&eager);
+    let mut intercept_coefficients = vec![2.0];
+    intercept_coefficients.extend(coefficients);
+    assert_close(
+        &from_v(&augmented.matvec(&to_v(&intercept_coefficients)).unwrap()),
+        &forward.iter().map(|v| v + 2.0).collect::<Vec<_>>(),
+        EPS,
+    );
+    let mut expected_transpose = vec![rows.iter().sum()];
+    expected_transpose.extend(transpose);
+    assert_close(
+        &from_v(&augmented.mat_transpose_vec(&u).unwrap()),
+        &expected_transpose,
+        EPS,
+    );
+}
+
+pub fn check_materialize_f32<M: lazymatrix::MaterializeDense<f32>>(source: &M, raw: &[f32]) {
+    let centers = vec![1.0; source.ncols()];
+    let scales = vec![-2.0; source.ncols()];
+    let eager = LazyMatrix::from_parts(source, Some(centers), Some(scales))
+        .to_eager::<MaterializeOutput<f32>>()
+        .unwrap();
+    let expected: Vec<_> = raw.iter().map(|&x| (x - 1.0) / -2.0).collect();
+    assert_eq!(eager.data().values, expected);
+}

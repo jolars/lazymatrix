@@ -34,6 +34,9 @@
 //! * [`SparseColumns`] — the stronger borrowed access capability for
 //!   contiguous sparse columns.
 //! * [`SparseRows`] — borrowed access to contiguous sparse rows.
+//! * [`MaterializeDense`] — explicit normalized dense materialization from any
+//!   supported input. [`MatrixOwned`] allocates the selected dense backend, and
+//!   [`DenseNormalize`] permits infallible in-place dense normalization.
 //! * [`ReadBlock`] — experimental fallible rectangular reads into caller-owned
 //!   storage, returning [`DenseBlock`] views without hiding I/O in borrowing.
 
@@ -50,6 +53,7 @@ pub trait Scalar:
 mod blocks;
 mod columns;
 mod gram;
+mod materialize;
 mod operator;
 mod rows;
 mod stats;
@@ -60,10 +64,13 @@ mod weighted_sums;
 pub(crate) use blocks::validate_rectangle;
 pub(crate) use operator::scale_output;
 
-pub use crate::normalization::{Centering, Normalization, NormalizationStats, Scaling};
+pub use crate::normalization::{
+    Centering, Normalization, NormalizationParams, NormalizationStats, Scaling,
+};
 pub use blocks::{DenseBlock, ReadBlock};
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};
 pub use gram::{MatrixWrite, WeightedGramInto, WeightedGramKernel};
+pub use materialize::{DenseNormalize, MaterializeDense, MatrixOwned};
 pub use operator::{
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
     MatVecScaledInto, MatrixErrorType, MatrixShape,

@@ -135,3 +135,16 @@ impl<M: MatTransposeVecInto<V>, V> MatTransposeVecInto<Vector<V>> for Matrix<M> 
         self.0.mat_transpose_vec_into(&input.0, &mut output.0)
     }
 }
+
+impl<M: shrinkage::lazymatrix::MaterializeDense<f64>> shrinkage::lazymatrix::MaterializeDense<f64>
+    for Matrix<M>
+{
+    fn materialize_normalized_into<O: shrinkage::lazymatrix::MatrixWrite<f64> + ?Sized>(
+        &self,
+        centers: Option<&[f64]>,
+        scales: Option<&[f64]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        self.0.materialize_normalized_into(centers, scales, out)
+    }
+}

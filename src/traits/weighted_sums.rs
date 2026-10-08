@@ -79,3 +79,29 @@ impl<M: WeightedColumnSumsKernel<F> + ?Sized, F: Scalar> WeightedColumnSumsKerne
         (**self).weighted_column_sums_normalized_into(weights, centers, scales, out)
     }
 }
+
+impl<M: WeightedColumnSumsInto<F> + ?Sized, F: Scalar> WeightedColumnSumsInto<F> for &mut M {
+    fn weighted_column_sums_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: VectorViewMut<F> + ?Sized,
+    {
+        (**self).weighted_column_sums_into(weights, out)
+    }
+}
+
+impl<M: WeightedColumnSumsKernel<F> + ?Sized, F: Scalar> WeightedColumnSumsKernel<F> for &mut M {
+    fn weighted_column_sums_normalized_into<W, O>(
+        &self,
+        weights: &W,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: VectorViewMut<F> + ?Sized,
+    {
+        (**self).weighted_column_sums_normalized_into(weights, centers, scales, out)
+    }
+}

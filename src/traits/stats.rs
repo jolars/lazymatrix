@@ -153,3 +153,56 @@ where
         (**self).col_maxabs_centered(centers)
     }
 }
+
+impl<M, F> ColumnStats<F> for &mut M
+where
+    M: ColumnStats<F> + ?Sized,
+    F: Scalar,
+{
+    fn normalization_stats(
+        &self,
+        spec: Normalization,
+    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        (**self).normalization_stats(spec)
+    }
+
+    fn col_means(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_means()
+    }
+
+    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_sds()
+    }
+
+    fn col_mins(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_mins()
+    }
+
+    fn col_ranges(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_ranges()
+    }
+
+    fn col_maxabs(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_maxabs()
+    }
+
+    fn col_l1(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_l1()
+    }
+
+    fn col_l2(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_l2()
+    }
+
+    fn col_l2_centered(&self, centers: &[F]) -> Result<Vec<F>, Self::Error> {
+        (**self).col_l2_centered(centers)
+    }
+
+    fn col_l1_centered(&self, centers: &[F]) -> Result<Vec<F>, Self::Error> {
+        (**self).col_l1_centered(centers)
+    }
+
+    fn col_maxabs_centered(&self, centers: &[F]) -> Result<Vec<F>, Self::Error> {
+        (**self).col_maxabs_centered(centers)
+    }
+}

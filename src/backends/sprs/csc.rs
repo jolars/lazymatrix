@@ -253,3 +253,14 @@ impl<M: ColumnStats<F>, F: Scalar> ColumnStats<F> for SprsCsc<M> {
 impl<M: crate::MatrixErrorType> crate::MatrixErrorType for SprsCsc<M> {
     type Error = M::Error;
 }
+
+impl<M: crate::MaterializeDense<F>, F: Scalar> crate::MaterializeDense<F> for SprsCsc<M> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        self.inner.materialize_normalized_into(centers, scales, out)
+    }
+}

@@ -188,3 +188,57 @@ fn default_normalization_hook_propagates_statistic_errors() {
         }
     }
 }
+
+#[path = "common/runner.rs"]
+mod common;
+
+impl lazymatrix::MaterializeDense<f64> for Source {
+    fn materialize_normalized_into<O: lazymatrix::MatrixWrite<f64> + ?Sized>(
+        &self,
+        centers: Option<&[f64]>,
+        scales: Option<&[f64]>,
+        out: &mut O,
+    ) -> Result<(), ReadError> {
+        out.set(0, 0, 17.0);
+        if self.fail.get() {
+            return Err(ReadError);
+        }
+        for i in 0..2 {
+            for j in 0..2 {
+                let mut value = (2 * i + j + 1) as f64;
+                if let Some(c) = centers {
+                    value -= c[j];
+                }
+                if let Some(s) = scales {
+                    value /= s[j];
+                }
+                out.set(i, j, value);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn materialization_failure_returns_no_wrapper_and_retry_overwrites_output() {
+    use lazymatrix::MatrixOwned;
+    let source = Source {
+        fail: Cell::new(false),
+        fused_calls: Cell::new(0),
+    };
+    let lazy = LazyMatrix::new(&source, Normalization::default()).unwrap();
+    assert_eq!(source.fused_calls.get(), 1);
+    let mut out = common::MaterializeOutput::zeros(2, 2);
+    out.values.fill(99.0);
+    source.fail.set(true);
+    assert!(matches!(lazy.to_eager_into(&mut out), Err(ReadError)));
+    assert_eq!(out.values, [17.0, 99.0, 99.0, 99.0]);
+    assert!(matches!(
+        lazy.to_eager::<common::MaterializeOutput>(),
+        Err(ReadError)
+    ));
+    source.fail.set(false);
+    let eager = lazy.to_eager_into(&mut out).unwrap();
+    assert_eq!(eager.data().values, [0.0, 0.0, 2.0, 0.0]);
+    assert_eq!(source.fused_calls.get(), 1);
+}

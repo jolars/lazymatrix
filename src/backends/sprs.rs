@@ -214,3 +214,38 @@ where
 {
     type Error = std::convert::Infallible;
 }
+
+impl<F, I, IP, IS, DS, Iptr> crate::MaterializeDense<F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+{
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::sparse_outer(
+            self,
+            self.is_csc(),
+            centers,
+            scales,
+            out,
+            |outer, visit| {
+                for (index, &value) in self
+                    .outer_view(outer)
+                    .expect("in-bounds outer index")
+                    .iter()
+                {
+                    visit(index, value);
+                }
+            },
+        );
+        Ok(())
+    }
+}

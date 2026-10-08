@@ -28,3 +28,13 @@ where
         (**self).sparse_row(i)
     }
 }
+
+impl<M, F> SparseRows<F> for &mut M
+where
+    M: SparseRows<F> + ?Sized,
+    F: Scalar,
+{
+    fn sparse_row(&self, i: usize) -> (&[usize], &[F]) {
+        (**self).sparse_row(i)
+    }
+}

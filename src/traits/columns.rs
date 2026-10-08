@@ -138,3 +138,28 @@ where
         (**self).sparse_column(j)
     }
 }
+
+impl<M, F> RawColumns<F> for &mut M
+where
+    M: RawColumns<F> + ?Sized,
+    F: Scalar,
+{
+    type Column<'a>
+        = M::Column<'a>
+    where
+        Self: 'a;
+
+    fn raw_column(&self, j: usize) -> Self::Column<'_> {
+        (**self).raw_column(j)
+    }
+}
+
+impl<M, F> SparseColumns<F> for &mut M
+where
+    M: SparseColumns<F> + ?Sized,
+    F: Scalar,
+{
+    fn sparse_column(&self, j: usize) -> (&[usize], &[F]) {
+        (**self).sparse_column(j)
+    }
+}

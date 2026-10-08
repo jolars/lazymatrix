@@ -20,6 +20,36 @@
 //! Both centering and scaling are independently optional, giving the four
 //! combinations handled by the `if let Some` branches in the operator impls.
 //!
+//! # Eager normalization
+//!
+//! [`LazyMatrix::to_eager`] explicitly materializes normalized dense data from
+//! a dense, sparse, or Zarr input. The caller chooses the destination backend.
+//! [`LazyMatrix::to_eager_into`] fills existing dense storage and returns an
+//! [`EagerMatrix`] borrowing it. [`LazyMatrix::into_eager`] consumes writable
+//! dense data and normalizes it in its existing allocation.
+//!
+//! Eager operations use the already normalized backend data. Original fitted
+//! centers and scales remain available through [`EagerMatrix::normalization`]
+//! and can be reused with [`LazyMatrix::from_normalization`] for prediction.
+//! Conversion does not recompute statistics. Sparse and Zarr materialization
+//! requires O(nrows * ncols) dense output storage; the lazy path remains the
+//! default. Arithmetic order changes, so rounding and nonfinite product results
+//! can differ from lazy products.
+//!
+//! ```
+//! use lazymatrix::{ColumnStats, EagerMatrix, LazyMatrix, MaterializeDense,
+//!                  MatrixOwned, Normalization};
+//!
+//! fn eager_design<M, D>(x: &M, spec: Normalization)
+//!     -> Result<EagerMatrix<D>, M::Error>
+//! where
+//!     M: ColumnStats<f64> + MaterializeDense<f64>,
+//!     D: MatrixOwned<f64>,
+//! {
+//!     LazyMatrix::new(x, spec)?.to_eager()
+//! }
+//! ```
+//!
 //! # Backends
 //!
 //! The core is generic over the backend matrix `M` and scalar `F` and pulls in
@@ -333,8 +363,10 @@ compile_error!("`zarrs_all` is internal; enable `zarrs` or a `zarrs_v*` feature"
 
 mod backends;
 mod column;
+mod eager;
 mod gram;
 mod intercept;
+mod materialize;
 mod matrix;
 mod normalization;
 mod row;
@@ -346,15 +378,19 @@ pub use backends::sprs::{SprsCsc, SprsCsr};
 #[cfg(feature = "zarrs_all")]
 pub use backends::zarrs::{ZarrMatrix, ZarrMatrixError};
 pub use column::{LazyColumn, LazySparseColumn, SparseColumnRef};
+pub use eager::EagerMatrix;
 pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
-pub use normalization::{Centering, Normalization, NormalizationStats, Scaling};
+pub use normalization::{
+    Centering, Normalization, NormalizationParams, NormalizationStats, Scaling,
+};
 pub use row::LazyRow;
 pub use traits::{
-    ColumnStats, Columns, DenseBlock, DotProduct, DotSlice, ElemDivAssign, L2Norm, LogicalColumn,
-    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
-    MatVecScaledInto, MatrixErrorType, MatrixShape, MatrixWrite, RawColumn, RawColumns, ReadBlock,
-    Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows,
-    SubScalarAssign, SumEntries, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
-    WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
+    ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign, L2Norm,
+    LogicalColumn, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixShape,
+    MatrixWrite, RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign, ScaledAddAssign,
+    ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SumEntries, VectorOwned,
+    VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto,
+    WeightedGramKernel,
 };

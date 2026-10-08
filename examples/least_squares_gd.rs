@@ -1,7 +1,8 @@
 //! Least-squares by gradient descent, driven entirely through the lazy
-//! normalized operator.
+//! or eagerly normalized operator.
 //!
-//! Solves `min_β ½‖X̃β − y‖²` where `X̃ = (X − 1cᵀ)S⁻¹` is never materialized.
+//! Solves `min_β ½‖X̃β − y‖²` first lazily, then with explicitly materialized
+//! dense data, using the same solver.
 //! Every matrix touch goes through [`MatVec`] / [`MatTransposeVec`]:
 //!
 //! * the gradient `X̃ᵀ(X̃β − y)` is one `matvec` then one `mat_transpose_vec`;
@@ -108,6 +109,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("estimated Lipschitz L ≈ {l:.4}, step = 1/L = {step:.4e}");
 
     let (beta, iters, gnorm) = gradient_descent(&lazy, &y, ncols, step, 50_000, 1e-10)?;
+
+    // The same solver accepts explicitly materialized normalized dense data.
+    let eager = lazy.to_eager::<faer::Mat<f64>>()?;
+    let (eager_beta, eager_iters, _) = gradient_descent(&eager, &y, ncols, step, 50_000, 1e-10)?;
+    let mut difference = eager_beta;
+    difference.scaled_add_assign(-1.0, &beta);
+    assert!(difference.norm_l2() < 1e-8);
+    println!("eager dense fit converged in {eager_iters} iters");
 
     let mut coefficient_error = beta.clone();
     coefficient_error.scaled_add_assign(-1.0, &beta_star);

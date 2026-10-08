@@ -328,3 +328,20 @@ where
 impl<F> crate::MatrixErrorType for CscMatrix<F> {
     type Error = std::convert::Infallible;
 }
+
+impl<F: Scalar> crate::MaterializeDense<F> for CscMatrix<F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::sparse_outer(self, true, centers, scales, out, |outer, visit| {
+            let (indices, values) = self.sparse_column(outer);
+            for (&index, &value) in indices.iter().zip(values) {
+                visit(index, value);
+            }
+        });
+        Ok(())
+    }
+}

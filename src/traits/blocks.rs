@@ -134,3 +134,14 @@ pub(crate) fn validate_rectangle(
     assert!(capacity >= len, "block buffer too short");
     len
 }
+
+impl<M: ReadBlock<F> + ?Sized, F: Scalar> ReadBlock<F> for &mut M {
+    fn read_block<'buf>(
+        &self,
+        rows: Range<usize>,
+        columns: Range<usize>,
+        buffer: &'buf mut [F],
+    ) -> Result<DenseBlock<'buf, F>, Self::Error> {
+        (**self).read_block(rows, columns, buffer)
+    }
+}

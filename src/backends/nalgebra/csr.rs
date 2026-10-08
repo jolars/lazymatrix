@@ -38,3 +38,24 @@ impl<F: Scalar> SparseRows<F> for CsrMatrix<F> {
         (&columns[range.clone()], &values[range])
     }
 }
+
+impl<F> crate::MatrixErrorType for CsrMatrix<F> {
+    type Error = std::convert::Infallible;
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for CsrMatrix<F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::sparse_outer(self, false, centers, scales, out, |outer, visit| {
+            let (indices, values) = self.sparse_row(outer);
+            for (&index, &value) in indices.iter().zip(values) {
+                visit(index, value);
+            }
+        });
+        Ok(())
+    }
+}

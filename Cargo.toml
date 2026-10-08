@@ -132,3 +132,8 @@ required-features = ["ndarray_all", "sprs_all"]
 name = "fused_consumer"
 harness = false
 required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all", "zarrs_all"]
+
+[[bench]]
+name = "eager_normalization"
+harness = false
+required-features = ["ndarray_all", "sprs_all"]

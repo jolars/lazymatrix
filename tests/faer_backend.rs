@@ -43,6 +43,67 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn eager_conversion_combines_duplicates_and_ignores_spare_capacity() {
+                use lazymatrix::{MatVec, MaterializeDense, MatrixOwned};
+                let symbolic = faer::sparse::SymbolicSparseColMat::new_unsorted_checked(
+                    3,
+                    1,
+                    vec![0, 4],
+                    Some(vec![3]),
+                    vec![2, 0, 2, 99],
+                );
+                let matrix = SparseColMat::new(symbolic, vec![0.25, -0.0, 0.75, 99.0]);
+                let raw = LazyMatrix::<_, f64>::from_parts(&matrix, None, None)
+                    .to_eager::<Mat<f64>>()
+                    .unwrap();
+                assert_eq!(raw.data()[(0, 0)].to_bits(), (-0.0_f64).to_bits());
+                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.0]), Some(vec![-2.0]));
+                let eager = lazy.to_eager::<Mat<f64>>().unwrap();
+                assert_eq!(
+                    eager.matvec(&Col::from_fn(1, |_| 1.0)).unwrap().as_ref()[0],
+                    0.5
+                );
+                assert_eq!(eager.data()[(2, 0)], -0.0);
+                let symbolic = SymbolicSparseRowMat::new_unsorted_checked(
+                    1,
+                    3,
+                    vec![0, 4],
+                    Some(vec![3]),
+                    vec![2, 0, 2, 99],
+                );
+                let matrix = SparseRowMat::new(symbolic, vec![0.25_f32, -0.0, 0.75, 99.0]);
+                common::check_materialize_f32(&matrix, &[-0.0, 0.0, 1.0]);
+                common::check_materialize_f32(&matrix.as_ref(), &[-0.0, 0.0, 1.0]);
+                let mut out = common::MaterializeOutput::zeros(1, 3);
+                matrix
+                    .materialize_normalized_into(None, None, &mut out)
+                    .unwrap();
+                assert_eq!(out.values[0].to_bits(), (-0.0_f32).to_bits());
+            }
+
+            #[test]
+            fn eager_dense_conversion_supports_mutable_views_and_reuses_allocation() {
+                use lazymatrix::MatVec;
+                let dense = Mat::from_fn(2, 2, |i, j| (2 * i + j + 1) as f64);
+                let pointer = dense.as_ref().col(0).as_ptr();
+                let eager = LazyMatrix::with_centers(dense, vec![1.0, 2.0]).into_eager();
+                assert_eq!(eager.data().as_ref().col(0).as_ptr(), pointer);
+                let mut storage = Mat::full(4, 4, 99.0);
+                {
+                    let mut view = storage.as_mut().submatrix_mut(1, 1, 2, 2);
+                    let lazy = LazyMatrix::with_centers(eager.data(), vec![1.0, 1.0]);
+                    let borrowed = lazy.to_eager_into(&mut view).unwrap();
+                    assert_eq!(borrowed.matvec(&Col::from_fn(2, |_| 1.0)).unwrap()[0], -2.0);
+                    let inplace = LazyMatrix::with_scales(view, vec![2.0, 2.0]).into_eager();
+                    assert_eq!(inplace.matvec(&Col::from_fn(2, |_| 1.0)).unwrap()[0], -1.0);
+                }
+                assert_eq!(storage[(0, 0)], 99.0);
+                assert_eq!(storage[(3, 3)], 99.0);
+                let dense = Mat::from_fn(2, 2, |i, j| (2 * i + j) as f32);
+                common::check_materialize_f32(&dense, &[0.0, 1.0, 2.0, 3.0]);
+            }
+
+            #[test]
             fn fused_products_support_f32() {
                 let matrix = Mat::from_fn(2, 1, |i, _| (2 * i + 1) as f32);
                 let to_v = |v: &[f32]| Col::from_fn(v.len(), |i| v[i]);
@@ -61,6 +122,10 @@ macro_rules! backend_suite {
 
             #[test]
             fn faer_backend_suite() {
+                common::run_materialization_suite(build);
+                common::run_materialization_suite(build_dense);
+                common::run_eager_product_suite::<_, Mat<f64>, _>(build, to_col, from_col);
+                common::run_eager_product_suite::<_, Mat<f64>, _>(build_dense, to_col, from_col);
                 common::run_fused_suite(build, to_col);
                 common::run_fused_suite(build_dense, to_col);
                 common::run_gram_suite(build);

@@ -359,3 +359,54 @@ where
 {
     type Error = std::convert::Infallible;
 }
+
+impl<F: Scalar + nalgebra::Scalar> crate::MatrixOwned<F> for nalgebra::DMatrix<F> {
+    fn zeros(nrows: usize, ncols: usize) -> Self {
+        crate::materialize::validate_allocation::<F>(nrows, ncols);
+        Self::from_element(nrows, ncols, F::zero())
+    }
+}
+
+impl<F, R, C, S> crate::MaterializeDense<F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorage<F, R, C>,
+{
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::validate_output(self, out, centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                out.set(
+                    i,
+                    j,
+                    crate::materialize::normalized(self[(i, j)], j, centers, scales),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<F, R, C, S> crate::DenseNormalize<F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorageMut<F, R, C>,
+{
+    fn normalize_in_place(&mut self, centers: Option<&[F]>, scales: Option<&[F]>) {
+        crate::gram::validate_normalization(self.ncols(), centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                self[(i, j)] = crate::materialize::normalized(self[(i, j)], j, centers, scales);
+            }
+        }
+    }
+}

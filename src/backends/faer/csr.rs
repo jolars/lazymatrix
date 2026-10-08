@@ -86,3 +86,66 @@ impl<F: Scalar> SparseRows<F> for SparseRowMatMut<'_, usize, F> {
         (&view.col_idx()[range.clone()], &view.val()[range])
     }
 }
+
+impl<F> crate::MatrixErrorType for SparseRowMat<usize, F> {
+    type Error = std::convert::Infallible;
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for SparseRowMat<usize, F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::sparse_outer(self, false, centers, scales, out, |outer, visit| {
+            let (indices, values) = self.sparse_row(outer);
+            for (&index, &value) in indices.iter().zip(values) {
+                visit(index, value);
+            }
+        });
+        Ok(())
+    }
+}
+
+impl<F> crate::MatrixErrorType for SparseRowMatRef<'_, usize, F> {
+    type Error = std::convert::Infallible;
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for SparseRowMatRef<'_, usize, F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::sparse_outer(self, false, centers, scales, out, |outer, visit| {
+            let (indices, values) = self.sparse_row(outer);
+            for (&index, &value) in indices.iter().zip(values) {
+                visit(index, value);
+            }
+        });
+        Ok(())
+    }
+}
+
+impl<F> crate::MatrixErrorType for SparseRowMatMut<'_, usize, F> {
+    type Error = std::convert::Infallible;
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for SparseRowMatMut<'_, usize, F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::sparse_outer(self, false, centers, scales, out, |outer, visit| {
+            let (indices, values) = self.sparse_row(outer);
+            for (&index, &value) in indices.iter().zip(values) {
+                visit(index, value);
+            }
+        });
+        Ok(())
+    }
+}

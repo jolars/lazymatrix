@@ -7,6 +7,9 @@ pub struct Allocator;
 static ALLOCATOR: Allocator = Allocator;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
+static BASELINE_BYTES: AtomicUsize = AtomicUsize::new(0);
+static PEAK_BYTES: AtomicUsize = AtomicUsize::new(0);
 static PHASE: AtomicUsize = AtomicUsize::new(0);
 static CALLS: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
 static BYTES: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
@@ -19,7 +22,9 @@ static PREDICTOR_CALLS: AtomicUsize = AtomicUsize::new(0);
 static DESIGN_CALLS: AtomicUsize = AtomicUsize::new(0);
 
 fn record(bytes: usize) {
+    let live = LIVE_BYTES.fetch_add(bytes, Relaxed) + bytes;
     if ENABLED.load(Relaxed) {
+        PEAK_BYTES.fetch_max(live.saturating_sub(BASELINE_BYTES.load(Relaxed)), Relaxed);
         CALLS[0].fetch_add(1, Relaxed);
         BYTES[0].fetch_add(bytes, Relaxed);
         let phase = PHASE.load(Relaxed);
@@ -39,26 +44,34 @@ fn record(bytes: usize) {
 // SAFETY: All requests delegate unchanged to System, including alignment.
 unsafe impl GlobalAlloc for Allocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        record(layout.size());
         // SAFETY: The caller provides a valid allocation layout.
-        unsafe { System.alloc(layout) }
+        let pointer = unsafe { System.alloc(layout) };
+        if !pointer.is_null() {
+            record(layout.size());
+        }
+        pointer
     }
-
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        record(layout.size());
         // SAFETY: The caller provides a valid allocation layout.
-        unsafe { System.alloc_zeroed(layout) }
+        let pointer = unsafe { System.alloc_zeroed(layout) };
+        if !pointer.is_null() {
+            record(layout.size());
+        }
+        pointer
     }
-
     unsafe fn dealloc(&self, pointer: *mut u8, layout: Layout) {
+        LIVE_BYTES.fetch_sub(layout.size(), Relaxed);
         // SAFETY: The caller provides this pointer's original allocation layout.
         unsafe { System.dealloc(pointer, layout) }
     }
-
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, size: usize) -> *mut u8 {
-        record(size);
         // SAFETY: The caller provides System's pointer, original layout, and valid size.
-        unsafe { System.realloc(pointer, layout, size) }
+        let next = unsafe { System.realloc(pointer, layout, size) };
+        if !next.is_null() {
+            LIVE_BYTES.fetch_sub(layout.size(), Relaxed);
+            record(size);
+        }
+        next
     }
 }
 
@@ -105,6 +118,8 @@ pub fn statistics<T>(operation: impl FnOnce() -> T) -> T {
 
 #[derive(Debug)]
 pub struct Counts {
+    pub peak_bytes: usize,
+    pub elapsed_ns: u128,
     pub forward: usize,
     pub transpose: usize,
     pub clones: usize,
@@ -132,10 +147,15 @@ pub fn measure<T>(operation: impl FnOnce() -> T) -> (T, Counts) {
     ]) {
         counter.store(0, Relaxed);
     }
+    BASELINE_BYTES.store(LIVE_BYTES.load(Relaxed), Relaxed);
+    PEAK_BYTES.store(0, Relaxed);
+    let start = std::time::Instant::now();
     ENABLED.store(true, Relaxed);
     let value = operation();
     ENABLED.store(false, Relaxed);
     let counts = Counts {
+        peak_bytes: PEAK_BYTES.load(Relaxed),
+        elapsed_ns: start.elapsed().as_nanos(),
         forward: FORWARD.load(Relaxed),
         transpose: TRANSPOSE.load(Relaxed),
         clones: CLONES.load(Relaxed),
@@ -175,7 +195,7 @@ impl Counts {
             }
         };
         println!(
-            "{consumer},{backend},{},{},{},{normalization},{phase},{iterations},{},{},{},{},{},{},{},{},{},{},{},{}",
+            "{consumer},{backend},{},{},{},{normalization},{phase},{iterations},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             fixture.x.nrows(),
             fixture.x.ncols(),
             fixture.density,
@@ -191,6 +211,8 @@ impl Counts {
             tracked_cell(self.stats_bytes),
             self.predictor_calls,
             self.design_calls,
+            self.peak_bytes,
+            self.elapsed_ns,
         );
     }
 }

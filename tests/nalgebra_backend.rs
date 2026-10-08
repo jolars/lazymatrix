@@ -39,6 +39,46 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn eager_conversion_supports_csr_f32_and_mutable_dense_views() {
+                use lazymatrix::MatVec;
+                let matrix = CsrMatrix::try_from_csr_data(
+                    2,
+                    2,
+                    vec![0, 1, 2],
+                    vec![0, 1],
+                    vec![2.0_f32, 4.0],
+                )
+                .unwrap();
+                common::check_materialize_f32(&matrix, &[2.0, 0.0, 0.0, 4.0]);
+                let dense = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 3.0, 4.0]);
+                let pointer = dense.as_ptr();
+                let eager = LazyMatrix::with_centers(dense, vec![1.0, 2.0]).into_eager();
+                assert_eq!(eager.data().as_ptr(), pointer);
+                let mut storage = DMatrix::from_element(4, 4, 99.0);
+                {
+                    let mut view = storage.view_mut((1, 1), (2, 2));
+                    let borrowed = LazyMatrix::with_centers(eager.data(), vec![1.0, 1.0])
+                        .to_eager_into(&mut view)
+                        .unwrap();
+                    assert_eq!(
+                        borrowed.matvec(&DVector::from_element(2, 1.0)).unwrap()[0],
+                        -2.0
+                    );
+                    let inplace = LazyMatrix::with_scales(view, vec![2.0, 2.0]).into_eager();
+                    assert_eq!(
+                        inplace.matvec(&DVector::from_element(2, 1.0)).unwrap()[0],
+                        -1.0
+                    );
+                }
+                assert_eq!(storage[(0, 0)], 99.0);
+                assert_eq!(storage[(3, 3)], 99.0);
+                common::check_materialize_f32(
+                    &DMatrix::from_row_slice(2, 2, &[0.0_f32, 1.0, 2.0, 3.0]),
+                    &[0.0, 1.0, 2.0, 3.0],
+                );
+            }
+
+            #[test]
             fn sparse_products_overwrite_nonfinite_destinations() {
                 use lazymatrix::{MatTransposeVecInto, MatVecInto};
                 let matrix = build(&common::random_matrix(191, 7, 3, 0.4));
@@ -66,6 +106,14 @@ macro_rules! backend_suite {
 
             #[test]
             fn nalgebra_backend_suite() {
+                common::run_materialization_suite(build);
+                common::run_materialization_suite(build_dense);
+                common::run_eager_product_suite::<_, DMatrix<f64>, _>(build, to_dvec, from_dvec);
+                common::run_eager_product_suite::<_, DMatrix<f64>, _>(
+                    build_dense,
+                    to_dvec,
+                    from_dvec,
+                );
                 common::run_fused_suite(build, to_dvec);
                 common::run_fused_suite(build_dense, to_dvec);
                 common::run_gram_suite(build);

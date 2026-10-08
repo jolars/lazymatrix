@@ -25,6 +25,10 @@ fn build(tm: &TestMatrix) -> CsMat<f64> {
 
 #[test]
 fn sprs_backend_suite() {
+    common::run_materialization_suite(build);
+    common::run_materialization_suite(|tm| build(tm).to_csr());
+    common::run_materialization_suite(|tm| SprsCsc::try_new(build(tm)).unwrap());
+    common::run_materialization_suite(|tm| SprsCsr::try_new(build(tm).to_csr()).unwrap());
     common::run_fused_suite(build, |v| v.to_vec());
     common::run_fused_suite(|tm| build(tm).to_csr(), |v| v.to_vec());
     common::run_fused_suite(|tm| SprsCsc::try_new(build(tm)).unwrap(), |v| v.to_vec());
@@ -75,6 +79,18 @@ fn sprs_weighted_norms_preserve_f32_implicit_contributions() {
             .weighted_norm_squared_with_sum(&weights, weights.iter().sum()),
         1.0
     );
+}
+
+#[test]
+fn eager_conversion_supports_f32_views_and_other_index_widths() {
+    let matrix = CsMat::new_csc((3, 2), vec![0, 1, 2], vec![0, 2], vec![-0.0_f32, 4.0]);
+    common::check_materialize_f32(&matrix.view(), &[-0.0, 0.0, 0.0, 0.0, 0.0, 4.0]);
+    common::check_materialize_f32(&matrix.to_csr(), &[-0.0, 0.0, 0.0, 0.0, 0.0, 4.0]);
+    common::check_materialize_f32(&matrix.slice_outer(1..2), &[0.0, 0.0, 4.0]);
+    let mut triplets = sprs::TriMatI::<f32, u32>::new((3, 2));
+    triplets.add_triplet(2, 1, 4.0);
+    let matrix = SprsCsc::try_new(triplets.to_csc::<u64>()).unwrap();
+    common::check_materialize_f32(&matrix, &[0.0, 0.0, 0.0, 0.0, 0.0, 4.0]);
 }
 
 #[test]

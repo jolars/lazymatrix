@@ -110,3 +110,37 @@ where
         (**self).weighted_gram_normalized_into(weights, centers, scales, out)
     }
 }
+
+impl<M, F> WeightedGramInto<F> for &mut M
+where
+    M: WeightedGramInto<F> + ?Sized,
+    F: Scalar,
+{
+    fn weighted_gram_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: MatrixWrite<F> + ?Sized,
+    {
+        (**self).weighted_gram_into(weights, out)
+    }
+}
+
+impl<M, F> WeightedGramKernel<F> for &mut M
+where
+    M: WeightedGramKernel<F> + ?Sized,
+    F: Scalar,
+{
+    fn weighted_gram_normalized_into<W, O>(
+        &self,
+        weights: &W,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: MatrixWrite<F> + ?Sized,
+    {
+        (**self).weighted_gram_normalized_into(weights, centers, scales, out)
+    }
+}

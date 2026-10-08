@@ -61,6 +61,38 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn eager_conversion_supports_strided_outputs_and_fortran_allocation_reuse() {
+                use lazymatrix::{WeightedGramInto, WeightedColumnSumsInto, WithIntercept};
+                let dense = array![[1.0, 2.0], [3.0, 4.0]];
+                let lazy = LazyMatrix::with_centers(&dense, vec![1.0, 2.0]);
+                let mut storage = Array2::from_elem((4, 4), 99.0);
+                {
+                    let mut view = storage.slice_mut(s![..;2, ..;2]);
+                    let eager = lazy.to_eager_into(&mut view).unwrap();
+                    assert_eq!(eager.matvec(&array![1.0, 1.0]).unwrap().to_vec(), [0.0, 4.0]);
+                    let mut gram = Array2::zeros((2, 2));
+                    eager.weighted_gram_into(&[1.0, 1.0], &mut gram).unwrap();
+                    assert!(gram.iter().all(|&value| value == 4.0));
+                    let mut sums = vec![0.0; 2];
+                    eager.weighted_column_sums_into(&[1.0, 1.0], &mut sums).unwrap();
+                    assert_eq!(sums, [2.0, 2.0]);
+                    let augmented = WithIntercept::new(&eager);
+                    let mut gram = Array2::zeros((3, 3));
+                    augmented.weighted_gram_into(&[1.0, 1.0], &mut gram).unwrap();
+                    assert_eq!(gram[(0, 0)], 2.0);
+                    assert_eq!(gram[(0, 1)], 2.0);
+                }
+                assert_eq!(storage[(1, 1)], 99.0);
+                let dense = Array2::from_shape_fn((2, 2).f(), |(i, j)| (2 * i + j) as f32);
+                let pointer = dense.as_ptr();
+                let strides = dense.strides().to_vec();
+                let eager = LazyMatrix::with_centers(dense, vec![1.0, 1.0]).into_eager();
+                assert_eq!(eager.data().as_ptr(), pointer);
+                assert_eq!(eager.data().strides(), strides);
+                common::check_materialize_f32(eager.data(), &[-1.0, 0.0, 1.0, 2.0]);
+            }
+
+            #[test]
             fn intercept_accepts_strided_vectors_and_outputs() {
                 use lazymatrix::{WithIntercept, WeightedGramInto, WeightedColumnSumsInto, MatVecScaledInto, MatTransposeVecScaledInto};
                 let storage = Array2::from_shape_fn((6, 4), |(i, j)| (i + j) as f64);
@@ -115,7 +147,10 @@ macro_rules! backend_suite {
             fn ndarray_backend_suite() {
                 for build in [build, build_fortran] {
                     common::run_gram_suite(build);
-                    common::run_fused_suite(build, |v| Array1::from_vec(v.to_vec()));
+                    common::run_materialization_suite(build);
+                common::run_materialization_suite(build_fortran);
+                common::run_eager_product_suite::<_, Array2<f64>, _>(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
+                common::run_fused_suite(build, |v| Array1::from_vec(v.to_vec()));
                     common::run_backend_suite(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
                     common::run_logical_columns_suite(build);
                 }

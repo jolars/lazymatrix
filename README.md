@@ -38,6 +38,44 @@ allocate scratch internally when needed. The
 [consumer benchmarks](benches/fused_consumer.md) compare their runtime and
 allocations in repeated least-squares steps.
 
+## Eager normalization
+
+Use the same conversion API for dense matrices, sparse matrices, and Zarr
+arrays. The destination type selects the dense backend:
+
+```rust
+use lazymatrix::{Centering, LazyMatrix, Normalization, Scaling};
+use ndarray::Array2;
+
+// `x` can be dense, sparse, or a ZarrMatrix.
+let lazy = LazyMatrix::new(&x, Normalization::new(Centering::Mean, Scaling::Sd))?;
+let eager = lazy.to_eager::<Array2<f64>>()?;
+
+// Reuse dense output storage instead of allocating a matrix.
+let mut destination = Array2::zeros((lazy.nrows(), lazy.ncols()));
+let borrowed_eager = lazy.to_eager_into(&mut destination)?;
+```
+
+`EagerMatrix` implements the same operator traits as `LazyMatrix`, forwarding
+products directly to its normalized data. `centers()`, `scales()`, and
+`normalization()` retain the original fitted parameters without applying them
+again. Additional capabilities follow the selected dense backend. Reuse those
+parameters on prediction data with
+`LazyMatrix::from_normalization(&x_new, eager.normalization().clone())`.
+
+For owned dense input, `LazyMatrix::new(x_dense, spec)?.into_eager()` normalizes
+in the original allocation. Consuming a mutable dense view modifies its borrowed
+storage. The allocating and reusable-output conversions preserve the input.
+
+Sparse and Zarr conversions explicitly allocate or fill the full dense output,
+including centered implicit zeros. Sparse kernels use one working row or column;
+Zarr reads chunks serially. Output may be partial after a read error, and no
+wrapper is returned. Entrywise normalization changes the arithmetic order from
+lazy products, so floating-point and nonfinite product results can differ.
+
+See [eager normalization measurements](benches/eager_normalization.md) for
+conversion, repeated products, and downstream fitting comparisons.
+
 ## Install
 
 The core trait and operator API has no linear algebra dependency beyond

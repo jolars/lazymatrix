@@ -2,7 +2,7 @@
 
 use super::faer;
 
-use faer::{Col, ColMut, ColRef, Mat, MatRef};
+use faer::{Col, ColMut, ColRef, Mat, MatMut, MatRef};
 
 use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan,
@@ -240,6 +240,7 @@ macro_rules! impl_dense_ops {
 
 impl_dense_ops!(Mat<F>);
 impl_dense_ops!(MatRef<'_, F>);
+impl_dense_ops!(MatMut<'_, F>);
 
 fn means<F>(
     nrows: usize,
@@ -368,6 +369,7 @@ macro_rules! impl_dense_stats {
 
 impl_dense_stats!(Mat<F>);
 impl_dense_stats!(MatRef<'_, F>);
+impl_dense_stats!(MatMut<'_, F>);
 
 impl<F> crate::MatrixErrorType for Mat<F> {
     type Error = std::convert::Infallible;
@@ -375,4 +377,108 @@ impl<F> crate::MatrixErrorType for Mat<F> {
 
 impl<F> crate::MatrixErrorType for MatRef<'_, F> {
     type Error = std::convert::Infallible;
+}
+
+impl<F> crate::MatrixErrorType for MatMut<'_, F> {
+    type Error = std::convert::Infallible;
+}
+impl<F: Scalar> RawColumns<F> for MatMut<'_, F> {
+    type Column<'a>
+        = ColRef<'a, F>
+    where
+        Self: 'a;
+    fn raw_column(&self, j: usize) -> Self::Column<'_> {
+        self.as_ref().col(j)
+    }
+}
+impl<F: Scalar> crate::MatrixOwned<F> for Mat<F> {
+    fn zeros(nrows: usize, ncols: usize) -> Self {
+        crate::materialize::validate_allocation::<F>(nrows, ncols);
+        Mat::from_fn(nrows, ncols, |_, _| F::zero())
+    }
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for Mat<F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::validate_output(self, out, centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                out.set(
+                    i,
+                    j,
+                    crate::materialize::normalized(self[(i, j)], j, centers, scales),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for MatRef<'_, F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::validate_output(self, out, centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                out.set(
+                    i,
+                    j,
+                    crate::materialize::normalized(self[(i, j)], j, centers, scales),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<F: Scalar> crate::MaterializeDense<F> for MatMut<'_, F> {
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::validate_output(self, out, centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                out.set(
+                    i,
+                    j,
+                    crate::materialize::normalized(self[(i, j)], j, centers, scales),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<F: Scalar> crate::DenseNormalize<F> for Mat<F> {
+    fn normalize_in_place(&mut self, centers: Option<&[F]>, scales: Option<&[F]>) {
+        crate::gram::validate_normalization(self.ncols(), centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                self[(i, j)] = crate::materialize::normalized(self[(i, j)], j, centers, scales);
+            }
+        }
+    }
+}
+
+impl<F: Scalar> crate::DenseNormalize<F> for MatMut<'_, F> {
+    fn normalize_in_place(&mut self, centers: Option<&[F]>, scales: Option<&[F]>) {
+        crate::gram::validate_normalization(self.ncols(), centers, scales);
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                self[(i, j)] = crate::materialize::normalized(self[(i, j)], j, centers, scales);
+            }
+        }
+    }
 }

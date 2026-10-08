@@ -265,3 +265,103 @@ where
         (**self).mat_transpose_vec_scaled_into(alpha, x, beta, out)
     }
 }
+
+impl<M: MatrixErrorType + ?Sized> MatrixErrorType for &mut M {
+    type Error = M::Error;
+}
+
+impl<M: MatrixShape + ?Sized> MatrixShape for &mut M {
+    fn nrows(&self) -> usize {
+        (**self).nrows()
+    }
+
+    fn ncols(&self) -> usize {
+        (**self).ncols()
+    }
+}
+
+impl<M, V> MatVec<V> for &mut M
+where
+    M: MatVec<V> + ?Sized,
+{
+    fn matvec(&self, x: &V) -> Result<V, Self::Error> {
+        (**self).matvec(x)
+    }
+}
+
+impl<M, X, Y> MatVecInto<X, Y> for &mut M
+where
+    M: MatVecInto<X, Y> + ?Sized,
+{
+    fn matvec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
+        (**self).matvec_into(x, out)
+    }
+    fn matvec_normalized_into<F: super::Scalar>(
+        &self,
+        x: &X,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Result<(), Self::Error>
+    where
+        X: Clone + super::ElemDivAssign<F> + super::DotSlice<F>,
+        Y: super::SubScalarAssign<F>,
+    {
+        (**self).matvec_normalized_into(x, centers, scales, out)
+    }
+}
+
+impl<M, X, Y, F> MatVecScaledInto<X, Y, F> for &mut M
+where
+    M: MatVecScaledInto<X, Y, F> + ?Sized,
+{
+    fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
+        (**self).matvec_scaled_into(alpha, x, beta, out)
+    }
+}
+
+impl<M, V> MatTransposeVec<V> for &mut M
+where
+    M: MatTransposeVec<V> + ?Sized,
+{
+    fn mat_transpose_vec(&self, x: &V) -> Result<V, Self::Error> {
+        (**self).mat_transpose_vec(x)
+    }
+}
+
+impl<M, X, Y> MatTransposeVecInto<X, Y> for &mut M
+where
+    M: MatTransposeVecInto<X, Y> + ?Sized,
+{
+    fn mat_transpose_vec_into(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
+        (**self).mat_transpose_vec_into(x, out)
+    }
+    fn mat_transpose_vec_normalized_into<F: super::Scalar>(
+        &self,
+        x: &X,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Result<(), Self::Error>
+    where
+        X: super::SumEntries<F>,
+        Y: super::ScaledSubSlice<F> + super::ElemDivAssign<F>,
+    {
+        (**self).mat_transpose_vec_normalized_into(x, centers, scales, out)
+    }
+}
+
+impl<M, X, Y, F> MatTransposeVecScaledInto<X, Y, F> for &mut M
+where
+    M: MatTransposeVecScaledInto<X, Y, F> + ?Sized,
+{
+    fn mat_transpose_vec_scaled_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        (**self).mat_transpose_vec_scaled_into(alpha, x, beta, out)
+    }
+}

@@ -56,3 +56,51 @@ impl Normalization {
         Self { center, scale }
     }
 }
+
+/// Fitted column normalization, reusable on matrices with the same column count.
+///
+/// Present scales are nonzero. Computed normalization replaces exact zero
+/// scales with one before constructing these parameters. Explicit parameters
+/// preserve negative scales and nonfinite values.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NormalizationParams<F = f64> {
+    ncols: usize,
+    pub(crate) centers: Option<Vec<F>>,
+    pub(crate) scales: Option<Vec<F>>,
+}
+
+impl<F: crate::Scalar> NormalizationParams<F> {
+    /// Construct validated explicit parameters.
+    ///
+    /// # Panics
+    /// Panics if either vector has a different length from `ncols`, or if a
+    /// scale is exact positive or negative zero.
+    pub fn from_parts(ncols: usize, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
+        crate::gram::validate_normalization(ncols, centers.as_deref(), scales.as_deref());
+        Self {
+            ncols,
+            centers,
+            scales,
+        }
+    }
+
+    /// Number of columns these parameters describe.
+    pub fn ncols(&self) -> usize {
+        self.ncols
+    }
+
+    /// Fitted column centers, if centering is active.
+    pub fn centers(&self) -> Option<&[F]> {
+        self.centers.as_deref()
+    }
+
+    /// Fitted column scales, if scaling is active.
+    pub fn scales(&self) -> Option<&[F]> {
+        self.scales.as_deref()
+    }
+
+    /// Recover the fitted centers and scales without copying.
+    pub fn into_parts(self) -> NormalizationStats<F> {
+        (self.centers, self.scales)
+    }
+}

@@ -5,9 +5,14 @@
 `src/lib.rs` contains crate documentation, module declarations, and public
 re-exports. The main implementation is divided as follows:
 
-- `src/normalization.rs` defines `Centering`, `Scaling`, and `Normalization`.
+- `src/normalization.rs` defines `Centering`, `Scaling`, `Normalization`, and
+  reusable fitted `NormalizationParams`.
 - `src/matrix.rs` implements `LazyMatrix`, construction, column and row access, and
   operator behavior.
+- `src/eager.rs` implements `EagerMatrix`, which retains fitted parameters as
+  metadata and forwards operations to already normalized dense storage.
+  `src/materialize.rs` and `src/traits/materialize.rs` provide explicit dense
+  conversion and in-place dense normalization capabilities.
 - `src/column.rs` contains logical and sparse borrowed column views.
 - `src/row.rs` contains the borrowed normalized sparse row view.
 - `src/intercept.rs` implements `WithIntercept`, an implicit leading column of
@@ -74,10 +79,15 @@ X_tilde v = X(S^-1 v) - 1(c^T S^-1 v)
 X_tilde^T u = S^-1(X^T u - c sum(u))
 ```
 
-Centering and scaling are independently optional. Never materialize the centered
-matrix: doing so turns structural zeros into nonzeros and defeats sparse
-storage. Backends must multiply the original `X` and fold normalization into the
-operator calculation.
+Centering and scaling are independently optional. Lazy operators never
+materialize the centered matrix: doing so turns structural zeros into nonzeros
+and defeats sparse storage. Lazy backends multiply the original `X` and fold
+normalization into the operator calculation. Explicit `to_eager` and
+`to_eager_into` conversions may materialize any supported input into dense
+storage; `into_eager` modifies writable dense storage in place. Eager operators
+must not apply their retained fitted parameters again. Materialization sums raw
+sparse duplicates before normalizing, including implicit zeros, and uses one
+working row or column rather than a second full design matrix.
 
 Preserve these normalization semantics:
 
@@ -112,8 +122,9 @@ the input backend.
 
 The zarrs 0.22 backend supports synchronous two-dimensional floating-point
 arrays and Rust 1.87. Read chunks serially, preserve configured fill values, and
-exclude edge padding. Keep working vectors in RAM and never materialize the full
-array. Chunk buffers and codec workspaces depend on storage chunk size,
+exclude edge padding. Keep working vectors in RAM. Lazy products and statistics
+never materialize the full array. Explicit eager conversion streams chunks into
+caller-selected dense storage. Chunk buffers and codec workspaces depend on storage chunk size,
 including outer shards. Borrowing capabilities must not hide decoding or I/O.
 Tests use counting and failing stores; larger-than-RAM benchmarks remain manual.
 

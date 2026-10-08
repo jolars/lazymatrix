@@ -23,6 +23,22 @@ macro_rules! faer_adapter {
         mod $name {
             use super::*;
             use crate::backend_aliases::$backend as faer;
+            pub(super) fn materialized<O: lazymatrix::MatrixWrite<f64>>(out: &mut O) {
+                let matrix = faer::sparse::SparseColMat::try_new_from_triplets(
+                    3,
+                    2,
+                    &[
+                        faer::sparse::Triplet::new(0, 0, 1.0),
+                        faer::sparse::Triplet::new(1, 0, 2.0),
+                        faer::sparse::Triplet::new(1, 1, 3.0),
+                        faer::sparse::Triplet::new(2, 1, 6.0),
+                    ],
+                )
+                .unwrap();
+                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
+                    .to_eager_into(out)
+                    .unwrap();
+            }
             pub(super) fn products(
                 tm: &TestMatrix,
                 spec: Normalization,
@@ -82,6 +98,19 @@ macro_rules! nalgebra_adapter {
             use super::*;
             use crate::backend_aliases::$backend as nalgebra;
             use crate::backend_aliases::$sparse as nalgebra_sparse;
+            pub(super) fn materialized<O: lazymatrix::MatrixWrite<f64>>(out: &mut O) {
+                let matrix = nalgebra_sparse::CscMatrix::try_from_csc_data(
+                    3,
+                    2,
+                    vec![0, 2, 4],
+                    vec![0, 1, 1, 2],
+                    vec![1.0, 2.0, 3.0, 6.0],
+                )
+                .unwrap();
+                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
+                    .to_eager_into(out)
+                    .unwrap();
+            }
             pub(super) fn products(
                 tm: &TestMatrix,
                 spec: Normalization,
@@ -140,6 +169,12 @@ macro_rules! ndarray_adapter {
         mod $name {
             use super::*;
             use crate::backend_aliases::$backend as ndarray;
+            pub(super) fn materialized<O: lazymatrix::MatrixWrite<f64>>(out: &mut O) {
+                let matrix = ndarray::array![[1.0, 0.0], [2.0, 3.0], [0.0, 6.0]];
+                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
+                    .to_eager_into(out)
+                    .unwrap();
+            }
             pub(super) fn products(
                 tm: &TestMatrix,
                 spec: Normalization,
@@ -179,6 +214,24 @@ ndarray_adapter!(ndarray_0_17, ndarray_0_17);
 mod sprs {
     use super::*;
     use crate::backend_aliases::sprs;
+    #[cfg(any(
+        feature = "faer_all",
+        feature = "nalgebra_all",
+        feature = "ndarray_all"
+    ))]
+    pub(super) fn materialized<O: lazymatrix::MatrixWrite<f64>>(out: &mut O) {
+        let matrix = sprs::CsMat::new_csc(
+            (3, 2),
+            vec![0, 2, 4],
+            vec![0, 1, 1, 2],
+            vec![1.0, 2.0, 3.0, 6.0],
+        );
+        for matrix in [&matrix, &matrix.to_csr()] {
+            LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
+                .to_eager_into(out)
+                .unwrap();
+        }
+    }
     pub(super) fn products(tm: &TestMatrix, spec: Normalization, v: &[f64], u: &[f64]) -> Products {
         let mut triplets = sprs::TriMat::new((tm.nrows, tm.ncols));
         for &(row, col, value) in &tm.triplets {
@@ -330,3 +383,158 @@ gram_output_suite!(gram_ndarray_0_16, ndarray_0_16);
 
 #[cfg(feature = "ndarray_v0_17")]
 gram_output_suite!(gram_ndarray_0_17, ndarray_0_17);
+
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all"
+))]
+fn check_materialization_destination<
+    O: lazymatrix::MatrixWrite<f64> + lazymatrix::RawColumns<f64>,
+>(
+    out: &mut O,
+) {
+    use lazymatrix::RawColumn;
+    fn check<O: lazymatrix::RawColumns<f64>>(out: &O) {
+        for col in 0..2 {
+            out.raw_column(col).for_each_stored(|row, value| {
+                assert_eq!(value, [[0.0, -0.5], [0.5, 0.0], [-0.5, 0.5]][row][col]);
+            });
+        }
+    }
+    #[cfg(feature = "faer_v0_22")]
+    {
+        faer_0_22::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "faer_v0_23")]
+    {
+        faer_0_23::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "faer_v0_24")]
+    {
+        faer_0_24::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "nalgebra_v0_32")]
+    {
+        nalgebra_0_32::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "nalgebra_v0_33")]
+    {
+        nalgebra_0_33::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "nalgebra_v0_34")]
+    {
+        nalgebra_0_34::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "nalgebra_v0_35")]
+    {
+        nalgebra_0_35::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "ndarray_v0_15")]
+    {
+        ndarray_0_15::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "ndarray_v0_16")]
+    {
+        ndarray_0_16::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "ndarray_v0_17")]
+    {
+        ndarray_0_17::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "sprs_all")]
+    {
+        sprs::materialized(out);
+        check(out);
+    }
+}
+
+#[cfg(feature = "faer_v0_22")]
+#[test]
+fn materialization_to_faer_0_22() {
+    let mut out =
+        <backend_aliases::faer_0_22::Mat<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "faer_v0_23")]
+#[test]
+fn materialization_to_faer_0_23() {
+    let mut out =
+        <backend_aliases::faer_0_23::Mat<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "faer_v0_24")]
+#[test]
+fn materialization_to_faer_0_24() {
+    let mut out =
+        <backend_aliases::faer_0_24::Mat<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "nalgebra_v0_32")]
+#[test]
+fn materialization_to_nalgebra_0_32() {
+    let mut out =
+        <backend_aliases::nalgebra_0_32::DMatrix<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "nalgebra_v0_33")]
+#[test]
+fn materialization_to_nalgebra_0_33() {
+    let mut out =
+        <backend_aliases::nalgebra_0_33::DMatrix<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "nalgebra_v0_34")]
+#[test]
+fn materialization_to_nalgebra_0_34() {
+    let mut out =
+        <backend_aliases::nalgebra_0_34::DMatrix<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "nalgebra_v0_35")]
+#[test]
+fn materialization_to_nalgebra_0_35() {
+    let mut out =
+        <backend_aliases::nalgebra_0_35::DMatrix<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "ndarray_v0_15")]
+#[test]
+fn materialization_to_ndarray_0_15() {
+    let mut out =
+        <backend_aliases::ndarray_0_15::Array2<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "ndarray_v0_16")]
+#[test]
+fn materialization_to_ndarray_0_16() {
+    let mut out =
+        <backend_aliases::ndarray_0_16::Array2<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}
+
+#[cfg(feature = "ndarray_v0_17")]
+#[test]
+fn materialization_to_ndarray_0_17() {
+    let mut out =
+        <backend_aliases::ndarray_0_17::Array2<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+    check_materialization_destination(&mut out);
+}

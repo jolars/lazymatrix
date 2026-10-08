@@ -33,6 +33,7 @@ fn build(tm: &common::TestMatrix, chunk: [u64; 2]) -> ZarrMatrix<MemoryStore> {
 #[test]
 fn zarrs_backend_suite() {
     for chunks in [[3, 2], [1, 7], [16, 1], [32, 32]] {
+        common::run_materialization_suite(|tm| build(tm, chunks));
         common::run_fused_suite(|tm| build(tm, chunks), |v| v.to_vec());
         common::run_backend_suite(|tm| build(tm, chunks), |v| v.to_vec(), |v| v.clone());
     }
@@ -659,4 +660,51 @@ fn intercept_adds_no_storage_reads_and_forwards_failures() {
         .matvec_into(&vec![2.0, 1.0, 1.0, 1.0], &mut forward)
         .unwrap();
     assert_eq!(forward, [2.0, 4.25, 6.5, 8.75, 11.0]);
+}
+
+#[test]
+fn eager_conversion_reads_one_scan_and_retries_after_storage_failure() {
+    use lazymatrix::{Centering, MatrixOwned, Scaling};
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let lazy =
+            LazyMatrix::new(&matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+        assert_scans(&store, &matrix, 2);
+        store.reset();
+        let eager = lazy.to_eager::<common::MaterializeOutput>().unwrap();
+        assert_scans(&store, &matrix, 1);
+        let expected = eager.data().values.clone();
+        let mut out = common::MaterializeOutput::zeros(5, 3);
+        out.values.fill(99.0);
+        store.reset();
+        store.fail_after.store(1, Ordering::Relaxed);
+        assert!(lazy.to_eager_into(&mut out).is_err());
+        assert!(out.values.contains(&99.0));
+        assert!(out.values.iter().any(|&value| value != 99.0));
+        store.reset();
+        let eager = lazy.to_eager_into(&mut out).unwrap();
+        assert_eq!(eager.data().values, expected);
+        assert_scans(&store, &matrix, 1);
+        store.reset();
+        let mut wrong = common::MaterializeOutput::zeros(1, 1);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = lazy.to_eager_into(&mut wrong);
+            }))
+            .is_err()
+        );
+        assert!(store.keys.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn eager_conversion_preserves_f32_fill_values_and_excludes_edge_padding() {
+    let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], DataType::Float32, 5.0_f32)
+        .build(Arc::new(MemoryStore::new()), "/matrix")
+        .unwrap();
+    array
+        .store_chunk_elements(&[1, 0], &[1.0_f32, 3.0, f32::NAN, f32::NAN])
+        .unwrap();
+    let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
+    common::check_materialize_f32(&matrix, &[5.0, 5.0, 5.0, 5.0, 1.0, 3.0]);
 }

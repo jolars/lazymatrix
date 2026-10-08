@@ -20,6 +20,26 @@ pub fn check() {
     .unwrap();
     let input = Col::from_fn(2, |i| [2.0, -1.0][i]);
     let rows = Col::from_fn(3, |i| [1.0, 2.0, -1.0][i]);
+    {
+        use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
+        let lazy =
+            LazyMatrix::new(&dense, Normalization::new(Centering::Mean, Scaling::Range)).unwrap();
+        let eager = lazy.to_eager::<Mat<f64>>().unwrap();
+        assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
+        let result = eager.matvec(&Col::from_fn(2, |i| [2.0, -1.0][i])).unwrap();
+        assert!((result[0] - 0.5).abs() < 1e-12);
+        let mut destination = <Mat<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+        let borrowed = lazy.to_eager_into(&mut destination).unwrap();
+        let result = borrowed
+            .matvec(&Col::from_fn(2, |i| [2.0, -1.0][i]))
+            .unwrap();
+        assert!((result[2] + 1.5).abs() < 1e-12);
+        let eager = LazyMatrix::from_normalization(dense.clone(), eager.normalization().clone())
+            .into_eager();
+        assert!(
+            (eager.matvec(&Col::from_fn(2, |i| [2.0, -1.0][i])).unwrap()[1] - 1.0).abs() < 1e-12
+        );
+    }
     oracle::check(
         dense.as_ref(),
         input.clone(),

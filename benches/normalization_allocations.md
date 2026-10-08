@@ -24,7 +24,10 @@ storage. Fixture creation and storage conversion happen outside measurement.
 Every fitting path is warmed before sampling. The allocator counts Rust
 allocation and reallocation requests and cumulative requested bytes, including
 result construction. These counts exclude allocations made inside native BLAS
-and LAPACK, and they do not measure peak memory or throughput.
+and LAPACK, and this original CSV does not measure peak memory or throughput. The updated
+harness also records peak extra live requested bytes and elapsed nanoseconds,
+and compares eager conversion and fitting with the lazy path. See the
+[eager measurements](eager_normalization.md) and their separate CSV.
 
 ## Shrinkage's backtracking proximal gradient
 

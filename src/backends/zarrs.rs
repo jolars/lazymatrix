@@ -352,3 +352,25 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> MatT
         Ok(out)
     }
 }
+
+impl<S, F> crate::MaterializeDense<F> for ZarrMatrix<S, F>
+where
+    S: ReadableStorageTraits + ?Sized + 'static,
+    F: Scalar + ElementOwned,
+{
+    fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::materialize::validate_output(self, out, centers, scales);
+        self.for_each_value(|row, col, value| {
+            out.set(
+                row,
+                col,
+                crate::materialize::normalized(value, col, centers, scales),
+            );
+        })
+    }
+}

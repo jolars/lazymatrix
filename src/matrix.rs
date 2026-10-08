@@ -1,5 +1,5 @@
 use crate::column::{LazyColumn, LazySparseColumn, SparseColumnRef};
-use crate::normalization::Normalization;
+use crate::normalization::{Normalization, NormalizationParams};
 use crate::row::LazyRow;
 use crate::traits::{
     ColumnStats, Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
@@ -20,8 +20,7 @@ use crate::traits::{
 #[derive(Clone, Debug)]
 pub struct LazyMatrix<M, F = f64> {
     data: M,
-    centers: Option<Vec<F>>,
-    scales: Option<Vec<F>>,
+    normalization: NormalizationParams<F>,
 }
 
 impl<M, F: Scalar> LazyMatrix<M, F>
@@ -39,24 +38,29 @@ where
     /// `ncols`, or if a scale is `+0.0` or `-0.0`. The zero-scale panic reports
     /// the zero-based column index.
     pub fn from_parts(data: M, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
-        let ncols = data.ncols();
-        if let Some(c) = &centers {
-            assert_eq!(c.len(), ncols, "centers length must equal ncols");
-        }
-        if let Some(s) = &scales {
-            assert_eq!(s.len(), ncols, "scales length must equal ncols");
-            for (column, &scale) in s.iter().enumerate() {
-                assert!(
-                    scale != F::zero(),
-                    "scale at column {column} must be nonzero"
-                );
-            }
-        }
+        let normalization = NormalizationParams::from_parts(data.ncols(), centers, scales);
+        Self::from_normalization(data, normalization)
+    }
+
+    /// Wrap raw data using previously fitted parameters.
+    ///
+    /// # Panics
+    /// Panics if the matrix column count differs from the fitted column count.
+    pub fn from_normalization(data: M, normalization: NormalizationParams<F>) -> Self {
+        assert_eq!(
+            data.ncols(),
+            normalization.ncols(),
+            "normalization column count must equal ncols"
+        );
         Self {
             data,
-            centers,
-            scales,
+            normalization,
         }
+    }
+
+    /// Borrow fitted parameters for reuse on prediction data.
+    pub fn normalization(&self) -> &NormalizationParams<F> {
+        &self.normalization
     }
 
     /// Wrap a matrix with column centering only.
@@ -93,12 +97,12 @@ where
 
     /// The column centers `c`, if centering is active.
     pub fn centers(&self) -> Option<&[F]> {
-        self.centers.as_deref()
+        self.normalization.centers.as_deref()
     }
 
     /// The column scales `s`, if scaling is active.
     pub fn scales(&self) -> Option<&[F]> {
-        self.scales.as_deref()
+        self.normalization.scales.as_deref()
     }
 
     /// Borrow the underlying (un-normalized) matrix.
@@ -114,8 +118,14 @@ where
         assert!(j < self.ncols(), "column index out of bounds");
         LazyColumn::new(
             self.data.raw_column(j),
-            self.centers.as_ref().map_or_else(F::zero, |c| c[j]),
-            self.scales.as_ref().map_or_else(F::one, |s| s[j]),
+            self.normalization
+                .centers
+                .as_ref()
+                .map_or_else(F::zero, |c| c[j]),
+            self.normalization
+                .scales
+                .as_ref()
+                .map_or_else(F::one, |s| s[j]),
         )
     }
 
@@ -128,8 +138,14 @@ where
         let (row_indices, values) = self.data.sparse_column(j);
         LazyColumn::new(
             SparseColumnRef::new(row_indices, values, self.nrows()),
-            self.centers.as_ref().map_or_else(F::zero, |c| c[j]),
-            self.scales.as_ref().map_or_else(F::one, |s| s[j]),
+            self.normalization
+                .centers
+                .as_ref()
+                .map_or_else(F::zero, |c| c[j]),
+            self.normalization
+                .scales
+                .as_ref()
+                .map_or_else(F::one, |s| s[j]),
         )
     }
 
@@ -189,7 +205,11 @@ where
     /// Consume the wrapper, returning the underlying matrix and the
     /// center/scale vectors.
     pub fn into_parts(self) -> (M, Option<Vec<F>>, Option<Vec<F>>) {
-        (self.data, self.centers, self.scales)
+        (
+            self.data,
+            self.normalization.centers,
+            self.normalization.scales,
+        )
     }
 }
 
@@ -279,11 +299,11 @@ where
         // transpose op below does NOT clone `u`: it reads `Σu` first, then only
         // reads `u` through the backend product.
         let mut w = v.clone();
-        if let Some(s) = &self.scales {
+        if let Some(s) = &self.normalization.scales {
             w.elem_div_assign(s); // w = S⁻¹ v
         }
         let mut y = self.data.matvec(&w)?;
-        if let Some(c) = &self.centers {
+        if let Some(c) = &self.normalization.centers {
             y.sub_scalar_assign(w.dot_slice(c)); // y −= 1 · (cᵀ w)
         }
         Ok(y)
@@ -312,16 +332,16 @@ where
 {
     /// `X̃ᵀ u = S⁻¹ (Xᵀ u − c · Σu)`.
     fn mat_transpose_vec(&self, u: &V) -> Result<V, Self::Error> {
-        let total = if self.centers.is_some() {
+        let total = if self.normalization.centers.is_some() {
             u.sum_entries()
         } else {
             F::zero()
         };
         let mut t = self.data.mat_transpose_vec(u)?;
-        if let Some(c) = &self.centers {
+        if let Some(c) = &self.normalization.centers {
             t.scaled_sub_slice(total, c); // t −= Σu · c
         }
-        if let Some(s) = &self.scales {
+        if let Some(s) = &self.normalization.scales {
             t.elem_div_assign(s); // t = S⁻¹ t
         }
         Ok(t)
@@ -378,12 +398,17 @@ where
             self.ncols(),
             "matvec_scaled_into: scratch dimension mismatch"
         );
-        if let Some(scales) = self.scales.as_ref().filter(|_| alpha != F::zero()) {
+        if let Some(scales) = self
+            .normalization
+            .scales
+            .as_ref()
+            .filter(|_| alpha != F::zero())
+        {
             for (j, &scale) in scales.iter().enumerate() {
                 scratch.set(j, x.get(j) / scale);
             }
             self.data.matvec_scaled_into(alpha, scratch, beta, out)?;
-            if let Some(centers) = &self.centers {
+            if let Some(centers) = &self.normalization.centers {
                 let correction: F = (0..self.ncols()).map(|j| scratch.get(j) * centers[j]).sum();
                 for i in 0..out.len() {
                     out.set(i, out.get(i) - alpha * correction);
@@ -391,7 +416,12 @@ where
             }
         } else {
             self.data.matvec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+            if let Some(centers) = self
+                .normalization
+                .centers
+                .as_ref()
+                .filter(|_| alpha != F::zero())
+            {
                 let correction: F = (0..self.ncols()).map(|j| x.get(j) * centers[j]).sum();
                 for i in 0..out.len() {
                     out.set(i, out.get(i) - alpha * correction);
@@ -434,16 +464,25 @@ where
             self.ncols(),
             "mat_transpose_vec_scaled_into: scratch dimension mismatch"
         );
-        if let Some(scales) = self.scales.as_ref().filter(|_| alpha != F::zero()) {
+        if let Some(scales) = self
+            .normalization
+            .scales
+            .as_ref()
+            .filter(|_| alpha != F::zero())
+        {
             self.data
                 .mat_transpose_vec_scaled_into(F::one(), x, F::zero(), scratch)?;
-            let total = if self.centers.is_some() {
+            let total = if self.normalization.centers.is_some() {
                 x.sum()
             } else {
                 F::zero()
             };
             for (j, &scale) in scales.iter().enumerate() {
-                let center = self.centers.as_ref().map_or_else(F::zero, |c| c[j]);
+                let center = self
+                    .normalization
+                    .centers
+                    .as_ref()
+                    .map_or_else(F::zero, |c| c[j]);
                 let product = alpha * ((scratch.get(j) - center * total) / scale);
                 out.set(
                     j,
@@ -457,7 +496,12 @@ where
         } else {
             self.data
                 .mat_transpose_vec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+            if let Some(centers) = self
+                .normalization
+                .centers
+                .as_ref()
+                .filter(|_| alpha != F::zero())
+            {
                 let total = x.sum();
                 for (j, &center) in centers.iter().enumerate() {
                     out.set(j, out.get(j) - alpha * center * total);
@@ -486,12 +530,17 @@ where
             self.nrows(),
             "matvec_scaled_into: output dimension mismatch"
         );
-        if self.scales.is_some() && alpha != F::zero() {
+        if self.normalization.scales.is_some() && alpha != F::zero() {
             let mut scratch = X::owned_from_fn(self.ncols(), |_| F::zero());
             self.matvec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
         } else {
             self.data.matvec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+            if let Some(centers) = self
+                .normalization
+                .centers
+                .as_ref()
+                .filter(|_| alpha != F::zero())
+            {
                 let correction: F = (0..self.ncols()).map(|j| x.get(j) * centers[j]).sum();
                 for i in 0..out.len() {
                     out.set(i, out.get(i) - alpha * correction);
@@ -526,13 +575,18 @@ where
             self.ncols(),
             "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
-        if self.scales.is_some() && alpha != F::zero() {
+        if self.normalization.scales.is_some() && alpha != F::zero() {
             let mut scratch = Y::owned_from_fn(self.ncols(), |_| F::zero());
             self.mat_transpose_vec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
         } else {
             self.data
                 .mat_transpose_vec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self.centers.as_ref().filter(|_| alpha != F::zero()) {
+            if let Some(centers) = self
+                .normalization
+                .centers
+                .as_ref()
+                .filter(|_| alpha != F::zero())
+            {
                 let total = x.sum();
                 for (j, &center) in centers.iter().enumerate() {
                     out.set(j, out.get(j) - alpha * center * total);
@@ -590,5 +644,85 @@ where
         );
         self.data
             .weighted_column_sums_normalized_into(weights, self.centers(), self.scales(), out)
+    }
+}
+
+impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, F> {
+    /// Allocate normalized dense storage in the selected backend.
+    ///
+    /// Sparse and storage-backed inputs are explicitly materialized. Fitted
+    /// statistics are retained without recomputation. This requires O(nrows *
+    /// ncols) output storage, plus backend workspace. Allocation size overflow
+    /// panics; allocation failures follow the selected backend's behavior.
+    ///
+    /// # Errors
+    /// Returns the source error if reading the matrix fails.
+    pub fn to_eager<D: crate::MatrixOwned<F>>(&self) -> Result<crate::EagerMatrix<D, F>, M::Error> {
+        crate::materialize::validate_allocation::<F>(self.nrows(), self.ncols());
+        let mut data = D::zeros(self.nrows(), self.ncols());
+        crate::materialize::validate_output(self, &data, self.centers(), self.scales());
+        self.data
+            .materialize_normalized_into(self.centers(), self.scales(), &mut data)?;
+        Ok(crate::EagerMatrix::from_normalized(
+            data,
+            self.normalization.clone(),
+        ))
+    }
+
+    /// Overwrite dense storage and return a normalized operator borrowing it.
+    ///
+    /// No matrix allocation is made. Fitted parameters are cloned, and the
+    /// backend may allocate workspace. The wrapper borrows only the output.
+    ///
+    /// The output remains exclusively borrowed while the wrapper is in use:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{LazyMatrix, MaterializeDense, MatrixWrite};
+    /// fn cannot_reuse_output<M: MaterializeDense<f64>, D: MatrixWrite<f64>>(
+    ///     matrix: &LazyMatrix<M>, out: &mut D,
+    /// ) {
+    ///     let eager = matrix.to_eager_into(out).unwrap();
+    ///     out.set(0, 0, 0.0);
+    ///     let _ = eager.nrows();
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    /// On a source error, output may be partial and no wrapper is returned.
+    ///
+    /// # Panics
+    /// Panics before writing if the output shape differs from the input shape.
+    pub fn to_eager_into<'a, D: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        out: &'a mut D,
+    ) -> Result<crate::EagerMatrix<&'a mut D, F>, M::Error> {
+        crate::materialize::validate_output(self, out, self.centers(), self.scales());
+        self.data
+            .materialize_normalized_into(self.centers(), self.scales(), out)?;
+        Ok(crate::EagerMatrix::from_normalized(
+            out,
+            self.normalization.clone(),
+        ))
+    }
+}
+
+impl<M: crate::DenseNormalize<F>, F: Scalar> LazyMatrix<M, F> {
+    /// Consume writable dense data, normalizing it in its existing allocation.
+    ///
+    /// Mutable views modify their borrowed storage. All statistics have already
+    /// been fitted, and no new statistics or full matrix allocation are needed.
+    ///
+    /// Borrowed immutable and sparse storage do not support in-place conversion:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{LazyMatrix, MatrixShape};
+    /// fn needs_writable_dense_storage<M: MatrixShape>(matrix: LazyMatrix<M>) {
+    ///     let _ = matrix.into_eager();
+    /// }
+    /// ```
+    pub fn into_eager(mut self) -> crate::EagerMatrix<M, F> {
+        self.data
+            .normalize_in_place(self.normalization.centers(), self.normalization.scales());
+        crate::EagerMatrix::from_normalized(self.data, self.normalization)
     }
 }

@@ -17,6 +17,33 @@ pub fn check() {
     let input = DVector::from_column_slice(&[2.0, -1.0]);
     let rows = DVector::from_column_slice(&[1.0, 2.0, -1.0]);
     let view: DMatrixView<'_, f64> = dense.as_view();
+    {
+        use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
+        let lazy =
+            LazyMatrix::new(&dense, Normalization::new(Centering::Mean, Scaling::Range)).unwrap();
+        let eager = lazy.to_eager::<DMatrix<f64>>().unwrap();
+        assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
+        let result = eager
+            .matvec(&DVector::from_column_slice(&[2.0, -1.0]))
+            .unwrap();
+        assert!((result[0] - 0.5).abs() < 1e-12);
+        let mut destination = <DMatrix<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);
+        let borrowed = lazy.to_eager_into(&mut destination).unwrap();
+        let result = borrowed
+            .matvec(&DVector::from_column_slice(&[2.0, -1.0]))
+            .unwrap();
+        assert!((result[2] + 1.5).abs() < 1e-12);
+        let eager = LazyMatrix::from_normalization(dense.clone(), eager.normalization().clone())
+            .into_eager();
+        assert!(
+            (eager
+                .matvec(&DVector::from_column_slice(&[2.0, -1.0]))
+                .unwrap()[1]
+                - 1.0)
+                .abs()
+                < 1e-12
+        );
+    }
     oracle::check(
         view,
         input.clone(),
