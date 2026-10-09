@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/jolars/lazymatrix/compare/v0.6.0...v0.7.0) (2026-10-09)
+
+### Features
+
+- add CSR operators and sparse SGD example ([`ded5211`](https://github.com/jolars/lazymatrix/commit/ded52118c183e861ff819d5988227a7be6b82270))
+- serve Markdown to website agents ([`cbe6d61`](https://github.com/jolars/lazymatrix/commit/cbe6d618adfcc48d34478d827b60e7724d82563e))
+- add website agent discovery header ([`d0505ff`](https://github.com/jolars/lazymatrix/commit/d0505ff042aa22f2347354e94979ce259b62b0eb))
+- add project website and benchmark comparisons ([`b6aba62`](https://github.com/jolars/lazymatrix/commit/b6aba62cde70c4443c92bcab46ed1dc19e423bec))
+
+### Bug Fixes
+
+- wait for benchmark controls to become ready ([`9a448ca`](https://github.com/jolars/lazymatrix/commit/9a448caec398ee38e53bb073502057b42534363e))
+- update website build dependencies ([`8b11f26`](https://github.com/jolars/lazymatrix/commit/8b11f26b6b5f7cf4ab7a57ded062ff00d79fd628))
+- invoke the website deployment script ([`7efaaa9`](https://github.com/jolars/lazymatrix/commit/7efaaa92b21ed54b3ba05c2a98a52dee13dd2d90))
+
 ## [0.6.0](https://github.com/jolars/lazymatrix/compare/v0.5.0...v0.6.0) (2026-10-08)
 
 ### Features
