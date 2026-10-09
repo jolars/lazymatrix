@@ -18,6 +18,9 @@ the methodology in `benchmarks.md` together when publishing new measurements.
 Generated files are ignored by Git. Local development also prepares the data;
 restart the development server after replacing the source CSV.
 
+The workspace overrides select patched Vite and XML-parser dependencies for
+VitePress 1.x. Revisit those overrides when upgrading VitePress.
+
 ## Deployment
 
 GitHub Actions builds and checks the site for pull requests. Pushes to `main`
