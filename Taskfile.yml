@@ -72,4 +72,4 @@ tasks:
     dir: website
     cmds:
       - pnpm build
-      - pnpm deploy
+      - pnpm run deploy
