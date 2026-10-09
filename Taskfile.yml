@@ -10,6 +10,7 @@ tasks:
       - task: fmt
       - task: lint
       - task: docs
+      - task: website:check
       - task: test
 
   fmt:
@@ -44,3 +45,31 @@ tasks:
       - cargo build --locked --no-default-features --target wasm32-unknown-unknown
       - cmd: wasm-pack test --node -- --locked
         dir: tests/core_consumer
+
+  website:install:
+    desc: Install locked website dependencies.
+    dir: website
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  website:dev:
+    desc: Serve the website locally with live reload.
+    dir: website
+    cmds:
+      - pnpm dev
+
+  website:check:
+    desc: Check formatting, build the website, and validate Worker packaging.
+    deps: [website:install]
+    dir: website
+    cmds:
+      - pnpm format:check
+      - pnpm build
+      - pnpm deploy:check
+
+  website:deploy:
+    desc: Deploy the website to Cloudflare Workers.
+    dir: website
+    cmds:
+      - pnpm build
+      - pnpm deploy

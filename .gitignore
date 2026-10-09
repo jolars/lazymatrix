@@ -1,4 +1,13 @@
 # Devenv
+website/node_modules/
+website/.vitepress/cache/
+website/.vitepress/dist/
+website/.vitepress/theme/benchmark-results.json
+website/public/benchmarks/
+website/.wrangler/
+website/.env*
+website/.dev.vars*
+
 .devenv*
 devenv.local.nix
 devenv.local.yaml

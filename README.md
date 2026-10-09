@@ -1,8 +1,10 @@
 # lazymatrix
 
-[![CI](https://github.com/jolars/lazymatrix-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix-rs/actions/workflows/ci.yml)
+[![CI](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lazymatrix.svg)](https://crates.io/crates/lazymatrix)
 [![docs.rs](https://img.shields.io/docsrs/lazymatrix)](https://docs.rs/lazymatrix)
+
+[Website](https://lazymatrix.org) · [Guide](https://lazymatrix.org/guide/getting-started) · [Benchmarks](https://lazymatrix.org/benchmarks)
 
 Lazy column normalization for design matrices in Rust. `lazymatrix` presents
 

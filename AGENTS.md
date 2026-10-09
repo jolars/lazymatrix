@@ -63,6 +63,12 @@ Integration tests are in `tests/`. The backend suites reuse
 between implementations. Runnable demonstrations belong in `examples/`, and
 Criterion benchmarks belong in `benches/`. See `TODO.md` for planned API work.
 
+`website/` contains the VitePress landing page, guide, and benchmark comparisons
+at `https://lazymatrix.org`. API documentation lives on docs.rs. Keep benchmark
+data and methodology synchronized; the site build reads the checked-in CSV in
+`benches/normalization_allocations/` and does not run benchmarks. GitHub Actions
+checks pull requests and deploys pushes to `main` to Cloudflare Workers.
+
 ## Development Status
 
 LazyMatrix is in early development. Breaking changes are expected. Prefer a
@@ -182,6 +188,9 @@ sums, update rules, or an entire solver to the crate.
   the all-feature test matrix.
 - `task ci` runs formatting, Clippy, documentation, and all tests—the local
   equivalent of GitHub CI.
+- `task website:dev` serves the website locally.
+- `task website:check` installs locked dependencies, checks formatting, builds
+  the website, checks local links and math, and validates Worker packaging.
 - `cargo bench --locked --bench column_sds` runs the column-statistics
   benchmarks.
 - `cargo run --locked --example coordinate_descent --features faer` runs an
