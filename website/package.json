@@ -1,0 +1,23 @@
+{
+  "name": "lazymatrix-website",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "dev": "node scripts/prepare-benchmarks.mjs && vitepress dev . --host 127.0.0.1",
+    "build": "node scripts/prepare-benchmarks.mjs && vitepress build . && node scripts/check-site.mjs",
+    "preview": "vitepress preview . --host 127.0.0.1",
+    "preview:worker": "wrangler dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "deploy:check": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "csv-parse": "^6.1.0",
+    "markdown-it-mathjax3": "4.3.2",
+    "prettier": "^3.6.2",
+    "vitepress": "1.6.4",
+    "wrangler": "4.149.0"
+  }
+}
