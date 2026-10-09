@@ -1,4 +1,4 @@
-//! Borrowed raw rows for faer CSR matrices and views.
+//! Products, column statistics, and borrowed raw rows for faer CSR matrices and views.
 //!
 //! CSC storage does not provide contiguous rows:
 //!
@@ -149,3 +149,150 @@ impl<F: Scalar> crate::MaterializeDense<F> for SparseRowMatMut<'_, usize, F> {
         Ok(())
     }
 }
+
+#[cfg(feature = "parallel")]
+fn parallelism() -> faer::Par {
+    faer::Par::rayon(0)
+}
+#[cfg(not(feature = "parallel"))]
+fn parallelism() -> faer::Par {
+    faer::Par::Seq
+}
+
+macro_rules! impl_products {
+    ($matrix:ty) => {
+        impl<F: Scalar + super::faer_traits::ComplexField> crate::MatVec<faer::Col<F>> for $matrix {
+            fn matvec(&self, x: &faer::Col<F>) -> Result<faer::Col<F>, Self::Error> {
+                let mut out = faer::Col::zeros(self.nrows());
+                crate::MatVecInto::matvec_into(self, x, &mut out)?;
+                Ok(out)
+            }
+        }
+        impl<F: Scalar + super::faer_traits::ComplexField> crate::MatTransposeVec<faer::Col<F>>
+            for $matrix
+        {
+            fn mat_transpose_vec(&self, x: &faer::Col<F>) -> Result<faer::Col<F>, Self::Error> {
+                let mut out = faer::Col::zeros(self.ncols());
+                crate::MatTransposeVecInto::mat_transpose_vec_into(self, x, &mut out)?;
+                Ok(out)
+            }
+        }
+        impl<F: Scalar + super::faer_traits::ComplexField> crate::MatVecInto<faer::Col<F>>
+            for $matrix
+        {
+            fn matvec_into(
+                &self,
+                x: &faer::Col<F>,
+                out: &mut faer::Col<F>,
+            ) -> Result<(), Self::Error> {
+                crate::MatVecScaledInto::matvec_scaled_into(self, F::one(), x, F::zero(), out)
+            }
+        }
+        impl<F: Scalar + super::faer_traits::ComplexField> crate::MatTransposeVecInto<faer::Col<F>>
+            for $matrix
+        {
+            fn mat_transpose_vec_into(
+                &self,
+                x: &faer::Col<F>,
+                out: &mut faer::Col<F>,
+            ) -> Result<(), Self::Error> {
+                crate::MatTransposeVecScaledInto::mat_transpose_vec_scaled_into(
+                    self,
+                    F::one(),
+                    x,
+                    F::zero(),
+                    out,
+                )
+            }
+        }
+        impl<F: Scalar + super::faer_traits::ComplexField>
+            crate::MatVecScaledInto<faer::Col<F>, faer::Col<F>, F> for $matrix
+        {
+            fn matvec_scaled_into(
+                &self,
+                alpha: F,
+                x: &faer::Col<F>,
+                beta: F,
+                out: &mut faer::Col<F>,
+            ) -> Result<(), Self::Error> {
+                assert_eq!(
+                    x.nrows(),
+                    self.ncols(),
+                    "matvec_scaled_into: dimension mismatch"
+                );
+                assert_eq!(
+                    out.nrows(),
+                    self.nrows(),
+                    "matvec_scaled_into: output dimension mismatch"
+                );
+                if alpha == F::zero() {
+                    crate::traits::scale_output(beta, out);
+                    return Ok(());
+                }
+                let accumulation = if beta == F::zero() {
+                    faer::Accum::Replace
+                } else {
+                    crate::traits::scale_output(beta, out);
+                    faer::Accum::Add
+                };
+                super::transpose::multiply_csr(
+                    self.rb(),
+                    x,
+                    out,
+                    alpha,
+                    accumulation,
+                    parallelism(),
+                );
+                Ok(())
+            }
+        }
+        impl<F: Scalar + super::faer_traits::ComplexField>
+            crate::MatTransposeVecScaledInto<faer::Col<F>, faer::Col<F>, F> for $matrix
+        {
+            fn mat_transpose_vec_scaled_into(
+                &self,
+                alpha: F,
+                x: &faer::Col<F>,
+                beta: F,
+                out: &mut faer::Col<F>,
+            ) -> Result<(), Self::Error> {
+                assert_eq!(
+                    x.nrows(),
+                    self.nrows(),
+                    "mat_transpose_vec_scaled_into: dimension mismatch"
+                );
+                assert_eq!(
+                    out.nrows(),
+                    self.ncols(),
+                    "mat_transpose_vec_scaled_into: output dimension mismatch"
+                );
+                if alpha == F::zero() {
+                    crate::traits::scale_output(beta, out);
+                    return Ok(());
+                }
+                let accumulation = if beta == F::zero() {
+                    faer::Accum::Replace
+                } else {
+                    crate::traits::scale_output(beta, out);
+                    faer::Accum::Add
+                };
+                faer::sparse::linalg::matmul::sparse_dense_matmul(
+                    out.as_mat_mut(),
+                    accumulation,
+                    self.rb().transpose(),
+                    x.as_mat(),
+                    alpha,
+                    parallelism(),
+                );
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_products!(SparseRowMat<usize, F>);
+impl_products!(SparseRowMatRef<'_, usize, F>);
+impl_products!(SparseRowMatMut<'_, usize, F>);
+crate::csr_stats::impl_column_stats!(SparseRowMat<usize, F>);
+crate::csr_stats::impl_column_stats!(SparseRowMatRef<'_, usize, F>);
+crate::csr_stats::impl_column_stats!(SparseRowMatMut<'_, usize, F>);

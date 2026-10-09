@@ -21,6 +21,10 @@ test_fixtures() {
 test_version() {
     test_features --features "$1"
     test_features --features "$1,parallel"
+    if [[ $1 == faer_v* ]]; then
+        cargo test --locked --no-default-features --features "$1" --example least_squares_sgd
+        cargo run --locked --no-default-features --features "$1" --example least_squares_sgd
+    fi
 }
 
 test_core() {

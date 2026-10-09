@@ -30,6 +30,33 @@ macro_rules! backend_suite {
                 DVector::from_column_slice(v)
             }
 
+            fn build_csr(tm: &TestMatrix) -> CsrMatrix<f64> {
+                let mut coo = CooMatrix::new(tm.nrows, tm.ncols);
+                for &(i, j, value) in &tm.triplets {
+                    coo.push(i, j, value);
+                }
+                CsrMatrix::from(&coo)
+            }
+
+            #[test]
+            fn csr_backend_suite() {
+                common::run_backend_suite(build_csr, to_dvec, from_dvec);
+                common::run_fused_suite(build_csr, to_dvec);
+                common::run_materialization_suite(build_csr);
+                common::run_eager_product_suite::<_, DMatrix<f64>, _>(
+                    build_csr, to_dvec, from_dvec,
+                );
+                let matrix = CsrMatrix::try_from_csr_data(
+                    2,
+                    1,
+                    vec![0, 1, 2],
+                    vec![0, 0],
+                    vec![1.0_f32, 3.0],
+                )
+                .unwrap();
+                common::check_fused_f32(&matrix, DVector::from_column_slice);
+            }
+
             fn from_dvec(v: &DVector<f64>) -> Vec<f64> {
                 v.as_slice().to_vec()
             }

@@ -64,6 +64,31 @@ macro_rules! faer_adapter {
                     (0..z.nrows()).map(|i| z[i]).collect(),
                 )
             }
+            pub(super) fn products_csr(
+                tm: &TestMatrix,
+                spec: Normalization,
+                v: &[f64],
+                u: &[f64],
+            ) -> Products {
+                use faer::Col;
+                use faer::sparse::{SparseRowMat, Triplet};
+
+                let t: Vec<Triplet<usize, usize, f64>> = tm
+                    .triplets
+                    .iter()
+                    .map(|&(r, c, v)| Triplet::new(r, c, v))
+                    .collect();
+                let matrix = SparseRowMat::try_new_from_triplets(tm.nrows, tm.ncols, &t).unwrap();
+                let lazy = LazyMatrix::new(matrix, spec).unwrap();
+                let y = lazy.matvec(&Col::from_fn(v.len(), |i| v[i])).unwrap();
+                let z = lazy
+                    .mat_transpose_vec(&Col::from_fn(u.len(), |i| u[i]))
+                    .unwrap();
+                (
+                    (0..y.nrows()).map(|i| y[i]).collect(),
+                    (0..z.nrows()).map(|i| z[i]).collect(),
+                )
+            }
             #[cfg(feature = "ndarray_all")]
             pub(super) fn gram<O: lazymatrix::MatrixWrite<f32>>(out: &mut O) {
                 use lazymatrix::WeightedGramInto;
@@ -125,6 +150,31 @@ macro_rules! nalgebra_adapter {
                     coo.push(r, c, v);
                 }
                 let lazy = LazyMatrix::new(CscMatrix::from(&coo), spec).unwrap();
+                (
+                    lazy.matvec(&DVector::from_column_slice(v))
+                        .unwrap()
+                        .as_slice()
+                        .to_vec(),
+                    lazy.mat_transpose_vec(&DVector::from_column_slice(u))
+                        .unwrap()
+                        .as_slice()
+                        .to_vec(),
+                )
+            }
+            pub(super) fn products_csr(
+                tm: &TestMatrix,
+                spec: Normalization,
+                v: &[f64],
+                u: &[f64],
+            ) -> Products {
+                use nalgebra::DVector;
+                use nalgebra_sparse::{CooMatrix, CsrMatrix};
+
+                let mut coo = CooMatrix::new(tm.nrows, tm.ncols);
+                for &(r, c, v) in &tm.triplets {
+                    coo.push(r, c, v);
+                }
+                let lazy = LazyMatrix::new(CsrMatrix::from(&coo), spec).unwrap();
                 (
                     lazy.matvec(&DVector::from_column_slice(v))
                         .unwrap()
@@ -290,18 +340,32 @@ fn all_enabled_releases_agree() {
     let backends: &[(&str, ProductFn)] = &[
         #[cfg(feature = "faer_v0_22")]
         ("faer_0_22", faer_0_22::products),
+        #[cfg(feature = "faer_v0_22")]
+        ("faer_0_22_csr", faer_0_22::products_csr),
         #[cfg(feature = "faer_v0_23")]
         ("faer_0_23", faer_0_23::products),
+        #[cfg(feature = "faer_v0_23")]
+        ("faer_0_23_csr", faer_0_23::products_csr),
         #[cfg(feature = "faer_v0_24")]
         ("faer_0_24", faer_0_24::products),
+        #[cfg(feature = "faer_v0_24")]
+        ("faer_0_24_csr", faer_0_24::products_csr),
         #[cfg(feature = "nalgebra_v0_32")]
         ("nalgebra_0_32", nalgebra_0_32::products),
+        #[cfg(feature = "nalgebra_v0_32")]
+        ("nalgebra_0_32_csr", nalgebra_0_32::products_csr),
         #[cfg(feature = "nalgebra_v0_33")]
         ("nalgebra_0_33", nalgebra_0_33::products),
+        #[cfg(feature = "nalgebra_v0_33")]
+        ("nalgebra_0_33_csr", nalgebra_0_33::products_csr),
         #[cfg(feature = "nalgebra_v0_34")]
         ("nalgebra_0_34", nalgebra_0_34::products),
+        #[cfg(feature = "nalgebra_v0_34")]
+        ("nalgebra_0_34_csr", nalgebra_0_34::products_csr),
         #[cfg(feature = "nalgebra_v0_35")]
         ("nalgebra_0_35", nalgebra_0_35::products),
+        #[cfg(feature = "nalgebra_v0_35")]
+        ("nalgebra_0_35_csr", nalgebra_0_35::products_csr),
         #[cfg(feature = "ndarray_v0_15")]
         ("ndarray_0_15", ndarray_0_15::products),
         #[cfg(feature = "ndarray_v0_16")]

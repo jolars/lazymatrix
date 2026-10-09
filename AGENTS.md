@@ -15,6 +15,7 @@ re-exports. The main implementation is divided as follows:
   conversion and in-place dense normalization capabilities.
 - `src/column.rs` contains logical and sparse borrowed column views.
 - `src/row.rs` contains the borrowed normalized sparse row view.
+  `src/csr_stats.rs` shares column reductions over borrowed CSR rows.
 - `src/intercept.rs` implements `WithIntercept`, an implicit leading column of
   ones added after predictor normalization. `src/weighted_sums.rs` and
   `src/traits/weighted_sums.rs` provide directly centered weighted-column sums
@@ -167,17 +168,19 @@ optional center and scale slices. Its logical length is the column count, even
 when no entries are stored. The background varies by column; expose it and the
 stored scaled corrections without allocating a dense row. Preserve storage
 order and duplicates, and sum duplicate raw values before direct normalization.
-Faer and nalgebra CSR operators and statistics remain prospective work described
-in `TODO.md`.
+Faer and nalgebra CSR matrices and faer views provide native products and column
+statistics. CSR statistics scan rows serially with O(ncols) workspace, combine
+duplicates at each cell, and include implicit zeros. Do not convert CSR to CSC
+for these operations.
 
 ## Example-Driven Design
 
 Keep solver algorithms and state in `examples/` or downstream crates. Examples
-such as `least_squares_gd` and `coordinate_descent` demonstrate consumers and
-expose missing matrix capabilities, but solvers do not belong in the library or
-its correctness suite. Add a reusable operator or logical-column operation when
-an example reveals a genuine matrix need; do not add residual policies, cached
-sums, update rules, or an entire solver to the crate.
+such as `least_squares_gd`, `least_squares_sgd`, and `coordinate_descent`
+demonstrate consumers and expose missing matrix capabilities, but solvers do not
+belong in the library or its correctness suite. Add a reusable operator or
+logical-column operation when an example reveals a genuine matrix need; do not
+add residual policies, cached sums, update rules, or an entire solver to the crate.
 
 ## Build, Test, and Development Commands
 

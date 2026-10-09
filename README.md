@@ -281,9 +281,12 @@ indices require one working column.
 `SparseRows` borrows raw column-index and value slices from CSR storage in O(1)
 time, including explicitly stored zeros. It supports faer's `SparseRowMat`,
 `SparseRowMatRef`, and `SparseRowMatMut` with `usize` indices, and
-nalgebra-sparse's `CsrMatrix`. These CSR types provide shape and borrowed
-row access; their operator and column-statistics implementations remain future
-work.
+nalgebra-sparse's `CsrMatrix`. These CSR types also provide products and column
+statistics, so `LazyMatrix::new` can fit normalization directly from CSR storage.
+Products use native backend kernels without converting orientation. Column
+statistics scan rows serially in O(nrows + ncols + nnz) time using O(ncols)
+workspace, including when `parallel` is enabled. Duplicate raw values are summed
+at each cell before computing statistics; faer scans exclude spare capacity.
 
 For sprs, use the checked `SprsCsr` wrapper:
 
@@ -320,8 +323,8 @@ describe the original matrix, before normalization.
 `LazyMatrix::row(i)` requires `SparseRows` and borrows raw storage and the full
 optional center and scale slices without allocating. `centers()` and `scales()`
 expose those slices; `center(j)` and `scale(j)` return effective parameters of
-zero and one when normalization is inactive. Explicit parameters let faer and
-nalgebra CSR matrices use row views without column-statistics implementations.
+zero and one when normalization is inactive. Use `LazyMatrix::new` to fit
+parameters from CSR storage, or supply explicit fitted parameters for reuse.
 
 A logical entry is `(raw[j] - center(j)) / scale(j)`. Sum duplicate raw entries
 before normalizing. The affine representation has a background
@@ -332,10 +335,18 @@ the affine parts can differ from direct normalization because of floating-point
 rounding or nonfinite arithmetic.
 
 Enable `parallel` alongside a backend to compute column statistics with Rayon.
-For sprs, CSC columns run independently in parallel; CSR statistics scan rows
-serially to accumulate columns without converting storage.
+CSC columns run independently in parallel; CSR statistics scan rows serially
+to accumulate columns without converting storage.
 See [`examples/`](examples/) for complete solver examples that consume the
-operator.
+operator. [`least_squares_sgd`](examples/least_squares_sgd.rs) uses borrowed CSR
+rows for single-observation and minibatch updates. It keeps the common centering
+background in deferred coefficient state, so each batch visits only its stored
+entries. Full products check convergence once per epoch.
+
+```sh
+cargo run --locked --example least_squares_sgd --features faer
+cargo run --locked --example least_squares_sgd --features faer -- 8
+```
 
 ## Fallible operations
 

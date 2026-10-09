@@ -473,6 +473,13 @@ fn benchmark(c: &mut Criterion) {
                 bench_matrix(c, &format!("faer_csc/{label}"), &matrix, |v| {
                     faer::Col::from_fn(v.len(), |j| v[j])
                 });
+                let csr = faer::sparse::SparseRowMat::<usize, f64>::try_new_from_triplets(
+                    rows, columns, &triplets,
+                )
+                .unwrap();
+                bench_matrix(c, &format!("faer_csr/{label}"), &csr, |v| {
+                    faer::Col::from_fn(v.len(), |j| v[j])
+                });
                 let mut coo = nalgebra_sparse::CooMatrix::new(rows, columns);
                 let mut coo_sprs = sprs::TriMat::new((rows, columns));
                 for &(i, j, value) in &tm.triplets {
@@ -483,6 +490,12 @@ fn benchmark(c: &mut Criterion) {
                     c,
                     &format!("nalgebra_csc/{label}"),
                     &nalgebra_sparse::CscMatrix::from(&coo),
+                    nalgebra::DVector::from_column_slice,
+                );
+                bench_matrix(
+                    c,
+                    &format!("nalgebra_csr/{label}"),
+                    &nalgebra_sparse::CsrMatrix::from(&coo),
                     nalgebra::DVector::from_column_slice,
                 );
                 bench_matrix(

@@ -56,8 +56,10 @@
 //! no linear-algebra dependency by itself. Concrete implementations are provided
 //! behind feature flags:
 //!
-//! * `faer` — `faer::Mat` and `faer::sparse::SparseColMat` over `faer::Col`.
-//! * `nalgebra` — `nalgebra::DMatrix` and `nalgebra_sparse::CscMatrix` over
+//! * `faer` — `faer::Mat`, `faer::sparse::SparseColMat`, and
+//!   `faer::sparse::SparseRowMat` over `faer::Col`.
+//! * `nalgebra` — `nalgebra::DMatrix`, `nalgebra_sparse::CscMatrix`, and
+//!   `nalgebra_sparse::CsrMatrix` over
 //!   `nalgebra::DVector`.
 //! * `ndarray` — `ndarray::Array2` and borrowed, strided matrix views over
 //!   `ndarray::Array1`.
@@ -166,9 +168,13 @@
 //! [`SparseRows`] borrows raw column-index and value slices from CSR storage in
 //! O(1) time, preserving explicitly stored zeros. It is available for faer's
 //! `SparseRowMat`, `SparseRowMatRef`, and `SparseRowMatMut` with `usize` indices,
-//! and nalgebra-sparse's `CsrMatrix`. These CSR types provide shape and borrowed
-//! row access; their operator and column-statistics implementations remain future
-//! work. With sprs, wrap a CSR matrix or view in `SprsCsr::try_new`. The wrapper
+//! and nalgebra-sparse's `CsrMatrix`. These CSR types also implement products and
+//! column statistics, so [`LazyMatrix::new`] fits normalization directly from
+//! CSR storage. Products use native kernels without converting orientation.
+//! Statistics scan rows serially in O(nrows + ncols + nnz) time with O(ncols)
+//! workspace, including when `parallel` is enabled. Duplicate values are summed
+//! at each cell, and faer scans exclude spare capacity.
+//! With sprs, wrap a CSR matrix or view in `SprsCsr::try_new`. The wrapper
 //! returns CSC inputs unchanged as `Err` and forwards existing products and
 //! statistics. Borrowing rows requires `usize` column indices, while pointer
 //! indices may use any supported width. The slices describe the original
@@ -180,6 +186,8 @@
 //! even for an empty raw row. Centering generally makes the logical row dense:
 //! [`LazyRow::implicit_value`] exposes the background at a column, and
 //! [`LazyRow::stored_corrections`] iterates over the scaled raw entries.
+//! The `least_squares_sgd` example uses these parts for sparse single-observation
+//! and minibatch updates, keeping deferred coefficient state in the consumer.
 
 //! # An implicit intercept
 //!
@@ -363,6 +371,8 @@ compile_error!("`zarrs_all` is internal; enable `zarrs` or a `zarrs_v*` feature"
 
 mod backends;
 mod column;
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
+mod csr_stats;
 mod eager;
 mod gram;
 mod intercept;

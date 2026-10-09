@@ -115,14 +115,18 @@ and solver-specific update logic belong in consuming crates.
     generally dense even when its raw row is sparse.
   - Test reconstruction of logical rows against a dense oracle.
 
-- [ ] Complete CSR operator and statistics support when it has a concrete
-  consumer.
+- [x] Complete CSR operator and statistics support, exercised by a sparse SGD
+  example.
   - sprs already supports CSC and CSR operators and statistics because its
     matrix type stores orientation at runtime. `SprsCsc` and `SprsCsr` check
     storage orientation for borrowed columns and rows, respectively.
   - faer `SparseRowMat` and nalgebra-sparse `CsrMatrix` already implement
-    `MatrixShape` and `SparseRows`. Add `MatVec`, `MatTransposeVec`, their
-    reusable-output counterparts, and `ColumnStats` when needed.
+    `MatrixShape` and `SparseRows`. They now also implement `MatVec`,
+    `MatTransposeVec`, their reusable-output and fused scaled counterparts,
+    and `ColumnStats`, including faer's borrowed and mutable views.
+  - `examples/least_squares_sgd.rs` demonstrates single-observation and
+    minibatch updates over lazily normalized CSR rows, with deferred centering
+    state kept in the example.
   - Reuse the backend-generic oracle and adjoint tests.
   - Do not implement `SparseColumns` by performing an expensive gather.
 

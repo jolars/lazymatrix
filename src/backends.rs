@@ -1,4 +1,4 @@
-mod support;
+pub(crate) mod support;
 
 #[cfg(feature = "faer_all")]
 mod faer;

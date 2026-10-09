@@ -16,8 +16,8 @@ cargo add ndarray@0.17
 
 | Feature    | Storage                                 | Backend release selected |
 | ---------- | --------------------------------------- | ------------------------ |
-| `faer`     | Dense and CSC sparse matrices           | faer 0.24                |
-| `nalgebra` | Dense and CSC sparse matrices           | nalgebra 0.35            |
+| `faer`     | Dense, CSC, and CSR sparse matrices     | faer 0.24                |
+| `nalgebra` | Dense, CSC, and CSR sparse matrices     | nalgebra 0.35            |
 | `ndarray`  | Dense arrays and views                  | ndarray 0.17             |
 | `sprs`     | CSC and CSR sparse matrices             | sprs 0.11                |
 | `zarrs`    | Synchronous two-dimensional Zarr arrays | zarrs 0.22               |

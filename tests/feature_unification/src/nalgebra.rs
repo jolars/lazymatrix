@@ -4,7 +4,7 @@ mod oracle;
 /// Exercise this consumer's backend types after Cargo unifies features.
 pub fn check() {
     use nalgebra::{DMatrix, DMatrixView, DVector};
-    use nalgebra_sparse::CscMatrix;
+    use nalgebra_sparse::{CscMatrix, CsrMatrix};
     let dense = DMatrix::from_row_slice(3, 2, &[1.0, 0.0, 2.0, 3.0, 0.0, 6.0]);
     let sparse = CscMatrix::try_from_csc_data(
         3,
@@ -51,5 +51,20 @@ pub fn check() {
         DVector::zeros(3),
         DVector::zeros(2),
     );
-    oracle::check(sparse, input, rows, DVector::zeros(3), DVector::zeros(2));
+    oracle::check(
+        sparse,
+        input.clone(),
+        rows.clone(),
+        DVector::zeros(3),
+        DVector::zeros(2),
+    );
+    let csr = CsrMatrix::try_from_csr_data(
+        3,
+        2,
+        vec![0, 1, 3, 4],
+        vec![0, 0, 1, 1],
+        vec![1.0, 2.0, 3.0, 6.0],
+    )
+    .unwrap();
+    oracle::check(csr, input, rows, DVector::zeros(3), DVector::zeros(2));
 }

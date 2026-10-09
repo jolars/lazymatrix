@@ -105,6 +105,10 @@ name = "least_squares_gd"
 required-features = ["faer_all"]
 
 [[example]]
+name = "least_squares_sgd"
+required-features = ["faer_all"]
+
+[[example]]
 name = "coordinate_descent"
 required-features = ["faer_all"]
 

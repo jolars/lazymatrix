@@ -34,6 +34,98 @@ macro_rules! backend_suite {
                 Col::from_fn(v.len(), |i| v[i])
             }
 
+            fn build_csr(tm: &TestMatrix) -> SparseRowMat<usize, f64> {
+                let triplets: Vec<_> = tm
+                    .triplets
+                    .iter()
+                    .map(|&(i, j, value)| Triplet::new(i, j, value))
+                    .collect();
+                SparseRowMat::try_new_from_triplets(tm.nrows, tm.ncols, &triplets).unwrap()
+            }
+
+            #[test]
+            fn csr_backend_suite() {
+                common::run_backend_suite(build_csr, to_col, from_col);
+                common::run_fused_suite(build_csr, to_col);
+                common::run_materialization_suite(build_csr);
+                common::run_eager_product_suite::<_, Mat<f64>, _>(build_csr, to_col, from_col);
+                let tm = common::random_matrix(192, 7, 3, 0.4);
+                let mut matrix = build_csr(&tm);
+                common::check_fused_operator(&matrix.as_ref(), &tm.dense, 3, &to_col);
+                common::check_fused_operator(&matrix.rb_mut(), &tm.dense, 3, &to_col);
+                let mut matrix = SparseRowMat::try_new_from_triplets(
+                    2,
+                    1,
+                    &[
+                        Triplet::new(0_usize, 0_usize, 1.0_f32),
+                        Triplet::new(1, 0, 3.0_f32),
+                    ],
+                )
+                .unwrap();
+                common::check_fused_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
+                common::check_fused_f32(&matrix.as_ref(), |v| Col::from_fn(v.len(), |i| v[i]));
+                common::check_fused_f32(&matrix.rb_mut(), |v| Col::from_fn(v.len(), |i| v[i]));
+            }
+
+            #[test]
+            fn csr_statistics_combine_duplicates_and_exclude_spare_capacity() {
+                use lazymatrix::{ColumnStats, MatTransposeVec, MatVec};
+                let symbolic = SymbolicSparseRowMat::new_unsorted_checked(
+                    3,
+                    2,
+                    vec![0, 4, 5, 7],
+                    Some(vec![3, 0, 1]),
+                    vec![1, 0, 1, 99, 99, 0, 99],
+                );
+                let mut matrix =
+                    SparseRowMat::new(symbolic, vec![2.0, 0.0, -3.0, 99.0, 99.0, 4.0, 99.0]);
+                let check = |matrix: &dyn ColumnStats<f64, Error = std::convert::Infallible>| {
+                    common::assert_close(
+                        &matrix.col_means().unwrap(),
+                        &[4.0 / 3.0, -1.0 / 3.0],
+                        1e-10,
+                    );
+                    common::assert_close(&matrix.col_mins().unwrap(), &[0.0, -1.0], 1e-10);
+                    common::assert_close(&matrix.col_ranges().unwrap(), &[4.0, 1.0], 1e-10);
+                    common::assert_close(&matrix.col_l1().unwrap(), &[4.0, 1.0], 1e-10);
+                    common::assert_close(&matrix.col_l2().unwrap(), &[4.0, 1.0], 1e-10);
+                    common::assert_close(&matrix.col_maxabs().unwrap(), &[4.0, 1.0], 1e-10);
+                    common::assert_close(
+                        &matrix.col_sds().unwrap(),
+                        &[(32.0_f64 / 9.0).sqrt(), (2.0_f64 / 9.0).sqrt()],
+                        1e-10,
+                    );
+                    common::assert_close(
+                        &matrix.col_l1_centered(&[1.0, 2.0]).unwrap(),
+                        &[5.0, 7.0],
+                        1e-10,
+                    );
+                    common::assert_close(
+                        &matrix.col_l2_centered(&[1.0, 2.0]).unwrap(),
+                        &[11.0_f64.sqrt(), 17.0_f64.sqrt()],
+                        1e-10,
+                    );
+                    common::assert_close(
+                        &matrix.col_maxabs_centered(&[1.0, 2.0]).unwrap(),
+                        &[3.0, 3.0],
+                        1e-10,
+                    );
+                };
+                check(&matrix);
+                check(&matrix.as_ref());
+                check(&matrix.rb_mut());
+                common::assert_close(
+                    &from_col(&matrix.matvec(&to_col(&[2.0, 3.0])).unwrap()),
+                    &[-3.0, 0.0, 8.0],
+                    1e-10,
+                );
+                common::assert_close(
+                    &from_col(&matrix.mat_transpose_vec(&to_col(&[2.0, 3.0, 4.0])).unwrap()),
+                    &[16.0, -2.0],
+                    1e-10,
+                );
+            }
+
             fn from_col(c: &Col<f64>) -> Vec<f64> {
                 (0..c.nrows()).map(|i| c[i]).collect()
             }
