@@ -12,7 +12,19 @@ export default defineConfig({
   cleanUrls: true,
   srcExclude: ["README.md"],
   sitemap: { hostname: origin },
-  markdown: { math: true },
+  markdown: {
+    math: true,
+    config(md) {
+      // Retain the TeX source so Markdown exports preserve equations.
+      for (const name of ["math_inline", "math_block"]) {
+        const render = md.renderer.rules[name]!;
+        md.renderer.rules[name] = (tokens, index, ...args) => {
+          const tex = md.utils.escapeHtml(tokens[index].content);
+          return `<span data-tex="${tex}" data-display="${name === "math_block"}">${render(tokens, index, ...args)}</span>`;
+        };
+      }
+    },
+  },
   head: [
     ["link", { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" }],
   ],

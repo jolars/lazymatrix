@@ -42,6 +42,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm build
+      - run: pnpm test
       - run: pnpm deploy:check
       - uses: actions/upload-artifact@v7
         with:

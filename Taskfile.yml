@@ -65,6 +65,7 @@ tasks:
     cmds:
       - pnpm format:check
       - pnpm build
+      - pnpm test
       - pnpm deploy:check
 
   website:deploy:

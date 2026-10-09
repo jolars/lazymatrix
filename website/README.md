@@ -42,8 +42,26 @@ task website:deploy
 
 `pnpm preview:worker`, run from this directory after building, previews the
 static assets through Wrangler, including URL redirects and the custom 404 page.
-The Worker serves VitePress's generated files directly and requires no custom
-server code. Benchmark collection stays separate from the website build.
+The Worker serves VitePress's generated files through its assets binding.
+Benchmark collection stays separate from the website build.
+
+## Markdown for agents
+
+The build converts each rendered page's content into Markdown, including code,
+TeX equations, and the benchmark table. It strips navigation, scripts, styles,
+and interactive controls. `worker.mjs` negotiates the representation using the
+`Accept` header. HTML remains the default; explicit `text/markdown` requests
+receive `Content-Type: text/markdown; charset=utf-8`. Both representations use
+`Vary: Accept` and retain their own asset validators. This works without
+Cloudflare's paid Markdown for Agents setting. No token-count header is emitted
+because the site does not use a tokenizer.
+
+After building, `pnpm test` checks negotiation in the local Workers runtime.
+To inspect a response with `pnpm preview:worker` running:
+
+```sh
+curl -i -H 'Accept: text/markdown' http://localhost:8787/guide/how-it-works
+```
 
 `public/_headers` adds a homepage `Link` response header with the registered
 `describedby` relation pointing to `public/llms.txt`, a plain-text documentation
