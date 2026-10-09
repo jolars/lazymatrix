@@ -1,0 +1,15 @@
+# LazyMatrix
+
+> LazyMatrix is a Rust library for centering and scaling matrices without materializing them.
+
+The website contains the user guide and benchmark comparisons. The Rust API
+reference is hosted on docs.rs. LazyMatrix is in early development, and breaking
+changes are expected.
+
+## Documentation
+
+- [Getting started](https://lazymatrix.org/guide/getting-started): Installation, backend selection, and eager conversion.
+- [How it works](https://lazymatrix.org/guide/how-it-works): Normalization identities and sparse storage behavior.
+- [Rust API reference](https://docs.rs/lazymatrix): Public types, traits, and methods.
+- [Benchmarks](https://lazymatrix.org/benchmarks): Construction, repeated operations, and memory costs.
+- [Source code](https://github.com/jolars/lazymatrix): Implementation, examples, and releases.

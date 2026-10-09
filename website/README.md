@@ -45,5 +45,11 @@ static assets through Wrangler, including URL redirects and the custom 404 page.
 The Worker serves VitePress's generated files directly and requires no custom
 server code. Benchmark collection stays separate from the website build.
 
+`public/_headers` adds a homepage `Link` response header with the registered
+`describedby` relation pointing to `public/llms.txt`, a plain-text documentation
+index for agents. VitePress copies both files into the build, and Cloudflare
+applies the header when serving the homepage. Use `pnpm preview:worker` to check
+response headers; the VitePress preview does not apply `_headers` rules.
+
 On NixOS, the repository's devenv provides a loader wrapper for the installed
 workerd binary. Run the Worker preview from `website/` inside that environment.
