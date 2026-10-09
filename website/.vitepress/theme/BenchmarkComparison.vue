@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import results from "./benchmark-results.json";
 
 const labels = {
@@ -11,6 +11,11 @@ const labels = {
 const backend = ref("sprs_to_ndarray");
 const size = ref("2048×128");
 const density = ref(0.1);
+// Keep early selections from being lost while the page becomes interactive.
+const ready = ref(false);
+onMounted(() => {
+  ready.value = true;
+});
 const backends = [...new Set(results.map((r) => r.backend))];
 const sizes = [...new Set(results.map((r) => `${r.n}×${r.p}`))];
 const densities = [...new Set(results.map((r) => r.density))];
@@ -44,7 +49,7 @@ const kib = (value) => (value / 1024).toFixed(1);
     <div class="controls">
       <label>
         Source → dense destination
-        <select v-model="backend">
+        <select v-model="backend" :disabled="!ready">
           <option v-for="b in backends" :key="b" :value="b">
             {{ labels[b] ?? b }}
           </option>
@@ -52,13 +57,13 @@ const kib = (value) => (value / 1024).toFixed(1);
       </label>
       <label>
         Rows × columns
-        <select v-model="size">
+        <select v-model="size" :disabled="!ready">
           <option v-for="s in sizes" :key="s" :value="s">{{ s }}</option>
         </select>
       </label>
       <label>
         Target density
-        <select v-model="density">
+        <select v-model="density" :disabled="!ready">
           <option v-for="d in densities" :key="d" :value="d">
             {{ d * 100 }}%
           </option>
