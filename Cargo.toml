@@ -6,6 +6,7 @@ license = "MIT OR Apache-2.0"
 description = "Lazy normalized design matrices: apply column centering/scaling without materializing (X - 1cᵀ)S⁻¹, preserving sparsity."
 repository = "https://github.com/jolars/lazymatrix"
 homepage = "https://lazymatrix.org"
+exclude = ["website/**"]
 authors = [
     "Johan Larsson <johan@jolars.co>",
     "Viktor Segersall <viktor.segersall@proton.me>",

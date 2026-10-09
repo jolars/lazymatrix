@@ -11,7 +11,9 @@ const rows = parse(await readFile(source, "utf8"), {
 });
 const groups = new Map();
 for (const row of rows) {
-  if (row.normalization !== "standardized") continue;
+  if (row.consumer !== "shrinkage" || row.normalization !== "standardized") {
+    continue;
+  }
   const key = [row.consumer, row.backend, row.n, row.p, row.density].join(":");
   if (!groups.has(key)) {
     groups.set(key, {
