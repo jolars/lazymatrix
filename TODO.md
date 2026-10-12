@@ -4,6 +4,53 @@ This file records design work identified during the initial API audit. The crate
 should expose normalized matrices and their storage capabilities; solver state
 and solver-specific update logic belong in consuming crates.
 
+## Python and neural-framework integration
+
+Identified October 12, 2026, for the `normreg-nn` research consumer. Lazy
+centering and scaling, reusable fitted parameters, and sparse CSR/CSC access
+already exist. The blockers below concern exposing those capabilities to Python
+and using them in neural first layers. Keep FFI and framework adapters in
+companion packages; the Rust core remains independent of Python and solvers.
+
+- [ ] Prototype a PyTorch adapter using supplied centers and scales before
+  requiring Rust bindings or Rust execution in the training loop.
+  - Compute `(X - 1c^T) S^-1 W + b` through sparse multiplication and a dense
+    centering correction without materializing the normalized input.
+  - Keep `W` trainable in normalized coordinates and derive `S^-1 W` during each
+    forward pass. Training independent raw-scale weights would change the
+    optimization dynamics despite equivalent initial predictions.
+  - Store fixed normalization parameters as buffers and verify predictions and
+    parameter gradients against an explicitly normalized dense reference.
+    Establish supported sparse layouts, dtypes, devices, and bias behavior.
+  - Measure peak memory and throughput before claiming a performance benefit. A
+    native framework forward pass does not require Rust autograd or GPU kernels.
+    TensorFlow support can follow the first working consumer.
+
+- [ ] Design a companion Python binding for sparse statistics and fitted
+  `NormalizationParams`; no binding or Python packaging currently exists.
+  - Define SciPy CSR/CSC ownership, index conversion, copying, duplicate-entry
+    handling, and dtype support explicitly. Do not promise zero-copy transfer
+    until lifetimes and mutation rules have been established.
+  - Export and reconstruct centers and scales with column-count validation,
+    preserving constant-column and nonfinite-value semantics. Specify a portable
+    representation for reuse in framework buffers and checkpoints.
+  - Fit statistics on training data and reuse them unchanged for validation and
+    prediction. Online updates of statistics are a separate algorithm.
+  - Keep research scaling exponents in the consumer initially, using explicit
+    scales; determine whether a reusable core extension is actually needed.
+  - Verify cross-language parameter and operator parity, recoverable boundary
+    errors, installation, and wheel distribution before offering a public API.
+
+- [ ] If a consumer needs Rust-backed neural products, use the existing
+  multiple-right-hand-side operator task to add sparse matrix--dense matrix
+  products and transpose products. The current public product traits operate
+  on vectors; repeated vector calls are a reference path, not evidence of
+  efficient batched execution.
+  - Benchmark against native framework products before choosing Rust for the
+    training loop. Define backward integration and device transfers only if that
+    route is justified. These are not blockers for the native PyTorch adapter
+    using exported normalization parameters.
+
 ## Backend version compatibility
 
 - [x] Make versioned backend features additive under Cargo feature unification.
@@ -122,8 +169,8 @@ and solver-specific update logic belong in consuming crates.
     storage orientation for borrowed columns and rows, respectively.
   - faer `SparseRowMat` and nalgebra-sparse `CsrMatrix` already implement
     `MatrixShape` and `SparseRows`. They now also implement `MatVec`,
-    `MatTransposeVec`, their reusable-output and fused scaled counterparts,
-    and `ColumnStats`, including faer's borrowed and mutable views.
+    `MatTransposeVec`, their reusable-output and fused scaled counterparts, and
+    `ColumnStats`, including faer's borrowed and mutable views.
   - `examples/least_squares_sgd.rs` demonstrates single-observation and
     minibatch updates over lazily normalized CSR rows, with deferred centering
     state kept in the example.
