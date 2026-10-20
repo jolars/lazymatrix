@@ -4,6 +4,10 @@ hero:
   name: LazyMatrix
   text: Center and scale matrices without materializing them.
   tagline: Normalized design matrices for Rust. Keep sparse matrices sparse, reuse fitted parameters, and choose when to materialize.
+  image:
+    light: /logo.png
+    dark: /logo-dark.png
+    alt: A matrix relaxing in a beach chair under a palm tree.
   actions:
     - theme: brand
       text: Get started

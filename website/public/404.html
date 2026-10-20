@@ -28,6 +28,14 @@
         color: #38634f;
         text-underline-offset: 0.2em;
       }
+      .site-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .site-title img {
+        object-fit: contain;
+      }
       @media (prefers-color-scheme: dark) {
         :root {
           color: #dfdfe5;
@@ -41,7 +49,16 @@
   </head>
   <body>
     <main>
-      <a href="/">LazyMatrix</a>
+      <a href="/" class="site-title">
+        <picture>
+          <source
+            media="(prefers-color-scheme: dark)"
+            srcset="/logo-sunchair-dark.png"
+          />
+          <img src="/logo-sunchair.png" width="32" height="32" alt="" />
+        </picture>
+        LazyMatrix
+      </a>
       <h1>Page not found</h1>
       <p>
         This page may have moved. Return to the <a href="/">home page</a>, read

@@ -65,7 +65,11 @@ export default defineConfig({
     return html;
   },
   themeConfig: {
-    logo: "/favicon.svg",
+    logo: {
+      light: "/logo-sunchair.png",
+      dark: "/logo-sunchair-dark.png",
+      alt: "LazyMatrix logo",
+    },
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Benchmarks", link: "/benchmarks" },

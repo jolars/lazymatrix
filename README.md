@@ -1,4 +1,4 @@
-# lazymatrix
+# lazymatrix <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/jolars/lazymatrix/main/assets/logo-dark.png" /><img src="https://raw.githubusercontent.com/jolars/lazymatrix/main/assets/logo.png" align="right" width="189" alt="LazyMatrix logo" /></picture>
 
 [![CI](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lazymatrix.svg)](https://crates.io/crates/lazymatrix)
