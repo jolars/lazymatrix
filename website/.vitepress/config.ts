@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 
 const origin = "https://lazymatrix.org";
 const repository = "https://github.com/jolars/lazymatrix";
+const ogImage = `${origin}/og.png`;
+const ogImageAlt =
+  "LazyMatrix: Your matrix deserves a break. A matrix relaxing in a beach chair under a palm tree.";
 
 export default defineConfig({
   title: "LazyMatrix",
@@ -47,13 +50,29 @@ export default defineConfig({
     ],
     ["meta", { name: "apple-mobile-web-app-title", content: "LazyMatrix" }],
     ["link", { rel: "manifest", href: "/site.webmanifest" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "LazyMatrix" }],
+    ["meta", { property: "og:image", content: ogImage }],
+    ["meta", { property: "og:image:type", content: "image/png" }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { property: "og:image:alt", content: ogImageAlt }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:image", content: ogImage }],
+    ["meta", { name: "twitter:image:alt", content: ogImageAlt }],
   ],
-  transformHead({ pageData }) {
+  transformHead({ pageData, title, description }) {
     if (pageData.relativePath === "404.md") return [];
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")
       .replace(/\.md$/, "");
-    return [["link", { rel: "canonical", href: `${origin}/${path}` }]];
+    const url = `${origin}/${path}`;
+    return [
+      ["link", { rel: "canonical", href: url }],
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { property: "og:url", content: url }],
+    ];
   },
   transformHtml(html, _id, { page }) {
     if (page === "404.md") {
