@@ -1,488 +1,102 @@
-# lazymatrix <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/jolars/lazymatrix/main/assets/logo-dark.png" /><img src="https://raw.githubusercontent.com/jolars/lazymatrix/main/assets/logo.png" align="right" width="189" alt="LazyMatrix logo" /></picture>
+# LazyMatrix <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/jolars/lazymatrix/main/assets/logo-dark.png" /><img src="https://raw.githubusercontent.com/jolars/lazymatrix/main/assets/logo.png" align="right" width="189" alt="LazyMatrix logo" /></picture>
 
 [![CI](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lazymatrix.svg)](https://crates.io/crates/lazymatrix)
 [![docs.rs](https://img.shields.io/docsrs/lazymatrix)](https://docs.rs/lazymatrix)
 
-[Website](https://lazymatrix.org) · [Guide](https://lazymatrix.org/guide/getting-started) · [Benchmarks](https://lazymatrix.org/benchmarks)
+LazyMatrix is a Rust library for column normalization of design matrices. It
+applies centering and scaling through matrix operations, preserving sparse
+storage without creating a normalized copy. It supports dense and sparse
+matrices, borrowed views, and chunked Zarr arrays.
 
-Lazy column normalization for design matrices in Rust. `lazymatrix` presents
+See the [documentation](https://lazymatrix.org) for guides, benchmarks, and
+links to the API reference.
 
-```text
-X̃ = (X − 1cᵀ) S⁻¹
-```
+## Installation
 
-as a linear operator without materializing the centered matrix. This matters for
-sparse matrices, where subtracting a column center would turn structural zeros
-into nonzeros. Matrix–vector products instead use the original matrix:
-
-```text
-X̃v  = X(S⁻¹v) − 1(cᵀS⁻¹v)
-X̃ᵀu = S⁻¹(Xᵀu − c Σu)
-```
-
-Centering and scaling are independently optional. The crate also provides
-borrowed logical column views and sparse column and row access for algorithms
-that work directly with stored entries.
-
-All supported matrix backends, `LazyMatrix`, and `WithIntercept` provide fused
-`MatVecScaledInto` and `MatTransposeVecScaledInto` products:
-`out = alpha * A * x + beta * out`, with `Aᵀ` for the transpose form. Exact zero
-`alpha` skips the product and storage reads; exact zero `beta` ignores prior
-output values. Dimensions are checked even when either coefficient is zero.
-
-`LazyMatrix::matvec_scaled_with_workspace` and
-`mat_transpose_vec_scaled_with_workspace` reuse normalization scratch of length
-`ncols()`. `WithIntercept` exposes the same methods with scratch length
-`ncols() - 1`; these reuse the wrapper's predictor buffer, while the inner
-operator may still allocate normalization scratch. Ordinary fused products
-allocate scratch internally when needed. The
-[consumer benchmarks](benches/fused_consumer.md) compare their runtime and
-allocations in repeated least-squares steps.
-
-## Eager normalization
-
-Use the same conversion API for dense matrices, sparse matrices, and Zarr
-arrays. The destination type selects the dense backend:
-
-```rust
-use lazymatrix::{Centering, LazyMatrix, Normalization, Scaling};
-use ndarray::Array2;
-
-// `x` can be dense, sparse, or a ZarrMatrix.
-let lazy = LazyMatrix::new(&x, Normalization::new(Centering::Mean, Scaling::Sd))?;
-let eager = lazy.to_eager::<Array2<f64>>()?;
-
-// Reuse dense output storage instead of allocating a matrix.
-let mut destination = Array2::zeros((lazy.nrows(), lazy.ncols()));
-let borrowed_eager = lazy.to_eager_into(&mut destination)?;
-```
-
-`EagerMatrix` implements the same operator traits as `LazyMatrix`, forwarding
-products directly to its normalized data. `centers()`, `scales()`, and
-`normalization()` retain the original fitted parameters without applying them
-again. Additional capabilities follow the selected dense backend. Reuse those
-parameters on prediction data with
-`LazyMatrix::from_normalization(&x_new, eager.normalization().clone())`.
-
-For owned dense input, `LazyMatrix::new(x_dense, spec)?.into_eager()` normalizes
-in the original allocation. Consuming a mutable dense view modifies its borrowed
-storage. The allocating and reusable-output conversions preserve the input.
-
-Sparse and Zarr conversions explicitly allocate or fill the full dense output,
-including centered implicit zeros. Sparse kernels use one working row or column;
-Zarr reads chunks serially. Output may be partial after a read error, and no
-wrapper is returned. Entrywise normalization changes the arithmetic order from
-lazy products, so floating-point and nonfinite product results can differ.
-
-See [eager normalization measurements](benches/eager_normalization.md) for
-conversion, repeated products, and downstream fitting comparisons.
-
-## Install
-
-The core trait and operator API has no linear algebra dependency beyond
-`num-traits`. Enable a backend for ready-made matrix implementations:
+Enable the feature for your matrix library and add a matching backend
+dependency. For ndarray:
 
 ```sh
-cargo add lazymatrix --features faer
-# or
-cargo add lazymatrix --features nalgebra
-# or, for dense arrays
 cargo add lazymatrix --features ndarray
-# or, for sprs sparse matrices
-cargo add lazymatrix --features sprs
-# or, for chunked Zarr arrays
-cargo add lazymatrix --features zarrs
+cargo add ndarray@0.17
 ```
 
-Unversioned features select the newest supported release. Use a versioned
-feature to stay on a particular release line:
+The core library requires Rust 1.85 or newer. Optional backends can require a
+newer compiler; the `nalgebra` feature requires Rust 1.89.
 
-| Backend | Versioned features | Unversioned feature selects |
-| --- | --- | --- |
-| faer | `faer_v0_22`, `faer_v0_23`, `faer_v0_24` | 0.24 |
-| nalgebra | `nalgebra_v0_32`, `nalgebra_v0_33`, `nalgebra_v0_34`, `nalgebra_v0_35` | 0.35 |
-| ndarray | `ndarray_v0_15`, `ndarray_v0_16`, `ndarray_v0_17` | 0.17 |
-| sprs | `sprs_v0_11` | 0.11 |
-| zarrs | `zarrs_v0_22` | 0.22 |
+## Usage
 
-For example, `cargo add lazymatrix --features nalgebra_v0_34` enables nalgebra
-0.34 and nalgebra-sparse 0.11. Set your direct backend dependency to the same
-release line. If Cargo enables multiple releases of one backend, lazymatrix
-implements traits independently for every enabled release. Another dependency
-enabling a newer adapter does not remove support for your existing types. The
-`*_all` features are internal markers, not entry points for selecting a backend.
-
-The core supports Rust 1.85. Other backends retain their dependency MSRVs. The `nalgebra` feature now selects
-nalgebra 0.35, which requires Rust 1.89. To retain the previous release and Rust
-1.87 support, replace `nalgebra` with `nalgebra_v0_34` in your feature list.
-The sprs backend supports Rust 1.85 with sprs 0.11.4 (used in the lockfile);
-sprs 0.11.5 requires Rust 1.88.
-
-The core also supports `wasm32-unknown-unknown`. The isolated
-`tests/core_consumer` package tests an external adapter with `f32`, `f64`, and
-borrowed matrices, without enabling a built-in backend. CI runs it on Rust 1.85
-and in Node.js through `wasm-pack`. Run `task test-wasm` to check the WASM build
-and execute these tests locally.
-
-## Example
-
-```rust
-use lazymatrix::{
-    Centering, LazyMatrix, MatVec, Normalization, Scaling,
-};
-use nalgebra::{DMatrix, DVector};
-
-let x = DMatrix::from_row_slice(
-    3,
-    2,
-    &[1.0, 0.0, 2.0, 3.0, 0.0, 4.0],
-);
-let x = LazyMatrix::new(
-    x,
-    Normalization::new(Centering::Mean, Scaling::Sd),
-).unwrap();
-
-let y = x.matvec(&DVector::from_vec(vec![1.0, -1.0])).unwrap();
-```
-
-The same interface works with faer and nalgebra dense matrices, their borrowed
-views, and CSC sparse matrices. The ndarray backends support dense arrays,
-including borrowed, transposed, and strided views:
+Fit column means and standard deviations, then multiply by the normalized
+matrix:
 
 ```rust
 use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
 use ndarray::array;
 
-let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-let lazy = LazyMatrix::new(
-    x.view(),
-    Normalization::new(Centering::Mean, Scaling::Sd),
-).unwrap();
-let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
-```
-
-Allocating ndarray products use `Array1` vectors. Reusable-output products can
-write into mutable, strided vector views. A lazy forward product needs an owned
-input because it may clone and scale that input; call `to_owned()` on an
-immutable input view first. Logical-column operations and reusable transpose
-products accept immutable vector views directly. Borrowed column access preserves
-the original strides and takes O(1) time; dense logical-column operations take
-O(nrows) time.
-
-`WeightedGramInto` computes `Aᵀ diag(weights) A` into a reusable dense matrix:
-
-```rust
-use lazymatrix::{LazyMatrix, WeightedGramInto};
-use ndarray::{Array2, array};
-
-let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-let lazy = LazyMatrix::with_centers(x.view(), vec![1.0, 2.0]);
-let mut gram = Array2::zeros((2, 2));
-lazy.weighted_gram_into(&array![1.0, 0.5, 2.0], &mut gram).unwrap();
-```
-
-Inputs can be dense ndarray arrays or views, faer or nalgebra CSC matrices,
-or checked `SprsCsc` and `SprsCsr` matrices or views with `usize` indices. Output can be
-an owned or mutable-view ndarray, faer, or nalgebra dense matrix, independent
-of the input backend. Weights may be signed, zero, or nonfinite. The operation
-overwrites both triangles and supports strided weights and outputs.
-
-Kernels center values before multiplying, preserving small variations around
-large offsets. Dense kernels use bounded panels. CSC kernels choose sparse pair
-accumulation or bounded panels according to density; the sparse pair path uses
-O(nrows + ncols) scratch with centering, in addition to the O(ncols²) output.
-CSR kernels use fixed-size row panels and O(nrows × ncols²) arithmetic. They
-scan borrowed rows without converting storage or allocating dense columns.
-None of these kernels creates a full normalized or weighted design matrix. Unsorted or
-duplicate sparse indices and
-nonfinite arithmetic use a slower direct fallback with at most two working
-columns. Scratch is allocated internally on each call. See the trait documentation
-for complexity and error contracts, and `examples/weighted_gram.rs` for a dense
-and sparse demonstration.
-The [weighted Gram benchmarks](benches/weighted_gram.md) compare both kernels
-with repeated operator products and dense matrix multiplication, including BLAS.
-
-`WithIntercept` adds a leading constant column after predictor normalization:
-
-```rust
-use lazymatrix::{LazyMatrix, MatVec, WeightedGramInto, WithIntercept};
-use ndarray::{Array2, array};
-
-let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-let predictors = LazyMatrix::with_centers(x.view(), vec![1.0, 2.0]);
-let design = WithIntercept::new(&predictors);
-let y = design.matvec(&array![2.0, 1.0, -1.0]).unwrap();
-let mut gram = Array2::zeros((3, 3));
-design.weighted_gram_into(&array![1.0, 0.5, 2.0], &mut gram).unwrap();
-```
-
-The intercept occupies coefficient zero and stays equal to one when predictors
-are centered. The wrapper also accepts unnormalized operators. Products preserve
-the underlying error type and storage access pattern, including chunked reads.
-Ordinary reusable products allocate coefficient scratch. Fused workspace
-methods reuse that buffer; no column of ones or design matrix is created.
-`as_inner()` exposes predictor normalization metadata, and
-`into_inner()` recovers the predictors. Fitting, penalty exclusions, and
-coefficient transformations remain with the caller.
-
-Intercept Gram products reuse the predictor output block and compute the cross
-terms in a separate pass through `WeightedColumnSumsInto`. Its kernels apply
-centering before accumulation, including sparse implicit zeros, to preserve
-small variations around large offsets. These capabilities cover the existing
-dense ndarray and CSC Gram inputs; adding an intercept does not add Gram support
-to other storage types. Ordinary forward and transpose products retain the
-underlying operator's factored normalization arithmetic.
-
-The sprs backend supports owned CSC and CSR matrices and borrowed views. Use
-`Vec` for allocating products, or enable an ndarray feature to use that
-release's `Array1`. Reusable-output products accept any supported dense vector
-view, including strided ndarray inputs and destinations. The `sprs` feature
-does not select an ndarray backend version.
-
-Wrap CSC storage in `SprsCsc` to borrow logical or sparse columns:
-
-```rust
-use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling, SprsCsc};
-use sprs::CsMat;
-
-let x = CsMat::new_csc(
-    (3, 2),
-    vec![0, 2, 3],
-    vec![0, 2, 1],
-    vec![1.0, 3.0, 2.0],
-);
-let csc = SprsCsc::try_new(x.view()).unwrap();
-let lazy = LazyMatrix::new(csc, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
-let y = lazy.matvec(&vec![1.0, -1.0]).unwrap();
-let column = lazy.sparse_column(0);
-assert_eq!(column.row_indices(), &[0, 2]);
-```
-
-`SprsCsc::try_new` checks orientation in O(1) time and returns a CSR input
-unchanged as `Err`. Convert CSR explicitly with `to_csc()` or `into_csc()` when
-column access is needed. Products and statistics also work directly on
-`CsMat` or `CsMatView` in either orientation. They visit stored entries without
-materializing the normalized matrix. CSC statistics take O(ncols + nnz) time;
-CSR statistics take O(nrows + ncols + nnz) time and O(ncols) workspace.
-
-Logical columns borrow sprs vector views for any supported index type.
-`SparseColumns` requires `usize` row indices so it can return slices without
-copying. A centered column dot takes O(nrows + nnz_column); `dot_with_sum`
-uses a caller-supplied vector sum to take O(nnz_column).
-
-Weighted column norms accumulate normalized entries directly in
-O(nrows + nnz_column) time, including implicit zeros. A cached total weight
-cannot preserve small implicit-row weights when subtracting a much larger
-stored-weight sum, so `weighted_norm_squared_with_sum` uses the same scan.
-Sorted, unique columns need constant scratch space; unsorted or duplicate
-indices require one working column.
-
-`SparseRows` borrows raw column-index and value slices from CSR storage in O(1)
-time, including explicitly stored zeros. It supports faer's `SparseRowMat`,
-`SparseRowMatRef`, and `SparseRowMatMut` with `usize` indices, and
-nalgebra-sparse's `CsrMatrix`. These CSR types also provide products and column
-statistics, so `LazyMatrix::new` can fit normalization directly from CSR storage.
-Products use native backend kernels without converting orientation. Column
-statistics scan rows serially in O(nrows + ncols + nnz) time using O(ncols)
-workspace, including when `parallel` is enabled. Duplicate raw values are summed
-at each cell before computing statistics; faer scans exclude spare capacity.
-
-For sprs, use the checked `SprsCsr` wrapper:
-
-```rust
-use lazymatrix::{LazyMatrix, SparseRows, SprsCsr};
-use sprs::CsMat;
-
-let x = CsMat::new(
-    (2, 3),
-    vec![0, 2, 3],
-    vec![0, 2, 1],
-    vec![1.0, 0.0, 2.0],
-);
-let csr = SprsCsr::try_new(x.view()).unwrap();
-let (columns, values) = csr.sparse_row(0);
-assert_eq!(columns, &[0, 2]);
-assert_eq!(values, &[1.0, 0.0]);
-
-let lazy = LazyMatrix::from_parts(csr, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]));
-let row = lazy.row(0);
-assert_eq!(row.len(), 3);
-assert_eq!(row.column_indices(), &[0, 2]);
-assert_eq!(row.values(), &[1.0, 0.0]);
-assert_eq!(row.implicit_value(1), 0.5);
-assert_eq!(row.stored_corrections().collect::<Vec<_>>(), vec![(0, 0.5), (2, 0.0)]);
-```
-
-`SprsCsr::try_new` checks orientation without copying and returns a CSC input
-unchanged as `Err`. The wrapper forwards products and statistics, so it can
-also be passed to `LazyMatrix::new`. Row borrowing requires `usize` column
-indices; pointer indices may use any supported width. The returned slices
-describe the original matrix, before normalization.
-
-`LazyMatrix::row(i)` requires `SparseRows` and borrows raw storage and the full
-optional center and scale slices without allocating. `centers()` and `scales()`
-expose those slices; `center(j)` and `scale(j)` return effective parameters of
-zero and one when normalization is inactive. Use `LazyMatrix::new` to fit
-parameters from CSR storage, or supply explicit fitted parameters for reuse.
-
-A logical entry is `(raw[j] - center(j)) / scale(j)`. Sum duplicate raw entries
-before normalizing. The affine representation has a background
-`-center(j) / scale(j)` and stored corrections `raw_value / scale(j)`. Centering
-can therefore make a logical row dense even when its stored entries are empty.
-Consuming the corrections takes O(nnz_row) time and allocates nothing. Adding
-the affine parts can differ from direct normalization because of floating-point
-rounding or nonfinite arithmetic.
-
-Enable `parallel` alongside a backend to compute column statistics with Rayon.
-CSC columns run independently in parallel; CSR statistics scan rows serially
-to accumulate columns without converting storage.
-See [`examples/`](examples/) for complete solver examples that consume the
-operator. [`least_squares_sgd`](examples/least_squares_sgd.rs) uses borrowed CSR
-rows for single-observation and minibatch updates. It keeps the common centering
-background in deferred coefficient state, so each batch visits only its stored
-entries. Full products check convergence once per epoch.
-
-```sh
-cargo run --locked --example least_squares_sgd --features faer
-cargo run --locked --example least_squares_sgd --features faer -- 8
-```
-
-## Fallible operations
-
-Matrix products, column statistics, and `LazyMatrix::new` now return `Result`.
-This is a breaking API change: use `?` to propagate errors, or unwrap results
-when using an in-memory backend. Existing in-memory backends use
-`std::convert::Infallible`; storage backends can return read and decoding errors.
-
-Custom backends implement `MatrixErrorType` once and use its associated `Error`
-type across all four operator traits and `ColumnStats`. Borrowing a matrix or
-wrapping it in `LazyMatrix` preserves that error type. Shape queries, borrowed
-column and row operations, and explicit-parameter construction remain infallible.
-Dimension mismatches still panic. After a failed reusable-output product, the
-output may be partial and must be discarded or overwritten by a successful call.
-
-`ColumnStats::normalization_stats` computes the optional centers and raw scales
-as a `NormalizationStats<F>` pair. Its default dispatches to individual
-statistics. Storage backends can override it to share scans; `LazyMatrix::new`
-then replaces exact zero scales with one, preserving nonfinite values.
-
-`LazyMatrix::from_parts` and `LazyMatrix::with_scales` reject explicit zero scales
-with a panic that reports the column index. Both positive and negative zero are
-rejected. Explicit parameters are otherwise preserved unchanged, including
-negative scales, tiny nonzero scales, and nonfinite centers or scales. These
-constructors do not guarantee finite arithmetic results.
-
-## Out-of-core matrices
-
-The experimental `ReadBlock<F>` capability reads caller-chosen rectangles into
-an initialized `&mut [F]`. `ZarrMatrix` implements it independently of borrowed
-column and row access. A successful read returns a `DenseBlock` borrowing the
-packed row-major buffer prefix; its dimensions exclude storage padding. Values
-are raw, without normalization. The view must cease to be used before the buffer
-can be reused.
-
-```rust
-use lazymatrix::{MatrixShape, ReadBlock};
-
-fn first_block<M: ReadBlock<f64>>(matrix: &M) -> Result<(), M::Error> {
-    let rows = matrix.nrows().min(32);
-    let columns = matrix.ncols().min(8);
-    let mut buffer = vec![0.0; 32 * 8];
-    let block = matrix.read_block(0..rows, 0..columns, &mut buffer)?;
-    assert_eq!(block.values().len(), rows * columns);
-    Ok(())
-}
-```
-
-Invalid ranges and insufficient buffer length panic before storage access. Empty
-rectangles perform no reads. On an operational error, discard the entire
-requested prefix; a successful retry overwrites it. The unused buffer tail is
-unchanged on both success and failure. Reads decode intersecting Zarr chunks
-serially and preserve configured fill values. Total memory also includes decoded
-storage chunks and codec workspace, including outer shards. Repeated reads from
-the same chunk may decode it again.
-
-The sibling Shrinkage prototype uses this capability for validation and proximal
-product passes while retaining normalization in `LazyMatrix`. Solver state and
-backtracking remain in Shrinkage.
-
-A borrowed ndarray view can refer to a memory-mapped file. The `ndarray_mmap`
-example creates a private temporary `.npy` file in column-major order, fills it
-through a writable mapping, and normalizes a read-only `ArrayView2` without
-allocating an owned matrix:
-
-```sh
-cargo run --locked --release --example ndarray_mmap --features ndarray -- 10000 32
-```
-
-This example requires ndarray 0.17. Memory mappings depend on the backing file
-remaining unmodified while views exist, including by other processes. Mapping a
-file lets the OS manage page residency; it does not impose a resident-memory
-limit. Column-major storage keeps this backend's column-statistics scans
-contiguous.
-
-The `zarrs` feature supplies `ZarrMatrix` for synchronous, two-dimensional Zarr
-arrays with `f32` or `f64` elements. Enable zarrs 0.22 in your direct dependency
-as well. The adapter supports Rust 1.87 and does not select an ndarray backend.
-
-```rust
-use std::sync::Arc;
-use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling, ZarrMatrix};
-use zarrs::{array::Array, filesystem::FilesystemStore};
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let store = Arc::new(FilesystemStore::new("data.zarr")?);
-    let array = Array::open(store, "/matrix")?;
-    let matrix = ZarrMatrix::<_, f64>::try_new(array)?;
-    let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd))?;
-    let result = lazy.matvec(&vec![1.0; lazy.ncols()])?;
-    println!("{} rows", result.len());
+    let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
+    let normalization = Normalization::new(Centering::Mean, Scaling::Sd);
+    let lazy = LazyMatrix::new(x.view(), normalization)?;
+
+    let y = lazy.matvec(&array![1.0, -1.0])?;
+    println!("{y}");
     Ok(())
 }
 ```
 
-Each product reads one chunk at a time. Normalization uses zero scans when
-inactive, one when sufficient, and at most two otherwise. Missing chunks retain
-the configured fill value, including nonzero or nonfinite values. Partial edge
-chunks contribute only entries inside the array. The array must remain unchanged
-throughout normalization and subsequent use; the adapter does not provide
-snapshot isolation.
+The operator borrows the original matrix and keeps the fitted centers and
+scales. Centering and scaling are independently optional. Reuse fitted
+parameters on new observations with `LazyMatrix::from_normalization`.
 
-Allocating products use `Vec<F>`. Reusable-output products accept the existing
-vector-view capabilities, including enabled backend vector types. The adapter
-provides no borrowed columns or rows. Working vectors and column statistics stay
-in RAM, together with chunk buffers and codec workspaces. Choose chunks that fit
-in memory; for sharded arrays, the relevant bound is the outer storage chunk.
-There is no byte budget, cache, prefetching, or parallel chunk scanning.
-
-Filesystem and gzip support are enabled by this crate. Additional codecs can be
-enabled through your direct zarrs dependency. An unsupported codec is reported
-when zarrs opens the array.
-
-The self-contained filesystem example creates data chunk by chunk:
+The [examples](examples/) cover gradient descent, stochastic gradient descent,
+coordinate descent, weighted Gram matrices, and file-backed input. Run one from
+a checkout with:
 
 ```sh
-cargo run --locked --release --example zarrs_chunked --features zarrs -- 10000 32
+cargo run --locked --example coordinate_descent --features faer
 ```
 
-Both examples accept optional row and column counts and print operation timings.
-For larger-than-RAM measurements, first build the examples, then run the binaries
-with GNU time installed:
+## Features
 
-```sh
-cargo build --locked --release --examples --features ndarray,zarrs
-env time -v target/release/ndarray_mmap 1000000 256
-env time -v target/release/zarrs_chunked 1000000 256
-```
+- Mean or minimum centering, with scaling by standard deviation, L1 or L2 norm,
+  maximum absolute value, or range.
+- Forward and transpose matrix–vector products, reusable output buffers, and
+  weighted Gram matrices.
+- Borrowed logical columns and sparse column and row views for supported
+  storage.
+- An implicit intercept column through `WithIntercept`.
+- Explicit dense conversion through `to_eager` and `to_eager_into`, or in-place
+  normalization of writable dense storage through `into_eager`.
+- Chunked Zarr input for matrices larger than RAM.
 
-Increase dimensions so `rows * cols * 8` exceeds available RAM, while vectors and
-chunks still fit. Set `TMPDIR` to a directory on disk and account for temporary
-disk space. Record peak RSS and timings separately from correctness tests, and
-distinguish page-cache effects from disk throughput: these examples generate
-their own files before reading them, so a run on data smaller than RAM is not a
-cold-I/O benchmark. CI uses small fixtures and verifies chunk-read counts without
-allocating a larger-than-RAM dataset.
+## Matrix backends
+
+No matrix backend is enabled by default. Choose a feature to use an existing
+matrix library:
+
+  | Feature    | Supported releases     | Storage                                 |
+  | ---------- | ---------------------- | --------------------------------------- |
+  | `faer`     | 0.22, 0.23, 0.24       | Dense, CSC, and CSR matrices            |
+  | `nalgebra` | 0.32, 0.33, 0.34, 0.35 | Dense, CSC, and CSR matrices            |
+  | `ndarray`  | 0.15, 0.16, 0.17       | Dense arrays and views                  |
+  | `sprs`     | 0.11                   | CSC and CSR matrices                    |
+  | `zarrs`    | 0.22                   | Synchronous two-dimensional Zarr arrays |
+
+The short feature names select the newest supported release. Use a versioned
+feature such as `nalgebra_v0_34` for an older release, and match your direct
+backend dependency to it. Enable `parallel` alongside a backend for parallel
+column statistics where supported.
+
+Custom backends can implement the crate's matrix and vector traits. See the [API
+reference](https://docs.rs/lazymatrix) for capabilities and supported types.
+
+## Documentation
+
+- [Getting started](https://lazymatrix.org/guide/getting-started)
+- [How it works](https://lazymatrix.org/guide/how-it-works)
+- [API reference](https://docs.rs/lazymatrix)
+- [Benchmarks](https://lazymatrix.org/benchmarks)
 
 ## License
 
