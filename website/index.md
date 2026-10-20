@@ -2,8 +2,9 @@
 layout: home
 hero:
   name: LazyMatrix
-  text: Center and scale matrices without materializing them.
-  tagline: Normalized design matrices for Rust. Keep sparse matrices sparse, reuse fitted parameters, and choose when to materialize.
+  text: Give your matrix a break.
+  tagline: Normalized design matrices for Rust. Keep sparse matrices sparse,
+    reuse fitted parameters, and choose when to materialize.
   image:
     light: /logo.png
     dark: /logo-dark.png
@@ -32,12 +33,12 @@ features:
 LazyMatrix represents
 
 $$
-\widetilde{X} = (X - \mathbf{1}c^\top)S^{-1}
+  \widetilde{X} = (X - \mathbf{1}c^\top)S^{-1}
 $$
 
-without storing the centered matrix. Here, $c$ holds the column centers, and
-$S$ is diagonal with the column scales. Products use the original storage and
-apply normalization algebraically.
+without storing the centered matrix. Here, $c$ holds the column centers, and $S$
+is diagonal with the column scales. Products use the original storage and apply
+normalization algebraically.
 
 ```sh
 cargo add lazymatrix --features ndarray
@@ -58,10 +59,10 @@ let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
 ```
 
 Read the [guide](/guide/getting-started) for installation and eager conversion,
-or see [how it works](/guide/how-it-works) for the normalization identities.
-The [benchmark comparisons](/benchmarks) explain the costs of construction,
-repeated operations, and additional memory.
+or see [how it works](/guide/how-it-works) for the normalization identities. The
+[benchmark comparisons](/benchmarks) explain the costs of construction, repeated
+operations, and additional memory.
 
-LazyMatrix is in early development, and breaking changes are expected.
-Find releases on [crates.io](https://crates.io/crates/lazymatrix) and source code
-on [GitHub](https://github.com/jolars/lazymatrix).
+LazyMatrix is in early development, and breaking changes are expected. Find
+releases on [crates.io](https://crates.io/crates/lazymatrix) and source code on
+[GitHub](https://github.com/jolars/lazymatrix).
