@@ -38,7 +38,7 @@ test("serves clean Markdown for every page with equations, code, and tables", as
       /<\/?(?:html|script|style|svg|mjx-container)|Skip to content|Edit this page on GitHub/,
     );
     if (path === "/") {
-      assert.match(body, /# LazyMatrix Center/);
+      assert.match(body, /^# LazyMatrix\b/);
       assert.match(body, /\$\$\n\\widetilde\{X\}/);
       assert.match(body, /```rust\nuse lazymatrix/);
       assert.match(response.headers.get("Link"), /llms\.txt/);
