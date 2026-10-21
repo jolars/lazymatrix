@@ -50,6 +50,16 @@
         };
       };
 
+      prettier = {
+        enable = true;
+        files = "^website/";
+
+        settings = {
+          binPath = "./website/node_modules/.bin/prettier";
+          ignore-path = [ "website/.prettierignore" ];
+        };
+      };
+
       rustfmt = {
         enable = true;
       };
