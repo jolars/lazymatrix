@@ -92,8 +92,10 @@ const expanded = math(
     </div>
 
     <div class="expanded-result">
-      <p>Without LazyMatrix, you either have to forget about normalizing the matrix, or realize the
-      normalized matrix as a dense one:</p>
+      <p>
+        Without LazyMatrix, you either have to forget about normalizing the
+        matrix, or realize the normalized matrix as a dense one:
+      </p>
       <div
         class="equation-scroll result-math"
         tabindex="0"
@@ -103,11 +105,10 @@ const expanded = math(
       ></div>
       <p>
         The <span class="highlight-color">blue</span> values were implicit
-        zeros. LazyMatrix keeps
-        <strong>X</strong> and the two short vectors <strong>c</strong> and
-        <strong>s</strong>. The repeated centers, diagonal matrix, and
-        normalized entries above describe the operation; they never need to be
-        stored as matrices.
+        zeros. LazyMatrix keeps <strong>X</strong> and the two short vectors
+        <strong>c</strong> and <strong>s</strong>. The repeated centers,
+        diagonal matrix, and normalized entries above describe the operation;
+        they never need to be stored as matrices.
       </p>
     </div>
   </figure>
