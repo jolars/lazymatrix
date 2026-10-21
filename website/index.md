@@ -28,6 +28,10 @@ features:
     details: Convert to dense storage explicitly, normalize writable dense storage in place, and retain fitted parameters for prediction.
 ---
 
+<script setup>
+import NormalizationDemo from "./.vitepress/theme/components/NormalizationDemo.vue";
+</script>
+
 ## A normalized matrix, used as an operator
 
 LazyMatrix represents
@@ -40,23 +44,38 @@ without storing the centered matrix. Here, $c$ holds the column centers, and $S$
 is diagonal with the column scales. Products use the original storage and apply
 normalization algebraically.
 
+Here is what each one represents, with $C = \mathbf{1}c^\top$:
+
+<NormalizationDemo />
+
+## Example
+
+First, add the crate to your project with the `ndarray` feature:
+
 ```sh
 cargo add lazymatrix --features ndarray
 cargo add ndarray@0.17
 ```
 
+Then, use the `LazyMatrix` type to wrap an existing matrix and apply
+normalization. Here, we center by the mean and scale by the maximum absolute
+value of each column. Then, we multiply the normalized matrix by a vector.
+
 ```rust
 use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
 use ndarray::array;
 
-let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
+let x = array![[3.0, 6.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 9.0]];
 let lazy = LazyMatrix::new(
     x.view(),
-    Normalization::new(Centering::Mean, Scaling::Sd),
+    Normalization::new(Centering::Mean, Scaling::MaxAbs),
 ).unwrap();
 
-let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
+let y = lazy.matvec(&array![1.0, 1.0, 1.0]).unwrap();
+assert_eq!(y, array![1.0, -0.5, -0.5]);
 ```
+
+## Where to go next
 
 Read the [guide](/guide/getting-started) for installation and eager conversion,
 or see [how it works](/guide/how-it-works) for the normalization identities. The
