@@ -12,7 +12,7 @@
   --vp-c-brand-soft: rgba(132, 183, 152, 0.14);
 }
 
-.vp-doc mjx-container[display="true"] {
+.vp-doc .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.5rem 0;

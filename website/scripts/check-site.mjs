@@ -45,8 +45,10 @@ for (const page of [
   "benchmarks.html",
 ]) {
   const html = await readFile(join(root, page), "utf8");
-  if (!html.includes("<mjx-container"))
+  if (!html.includes('class="katex"'))
     errors.push(`${page}: math was not rendered`);
+  if (html.includes("katex-error"))
+    errors.push(`${page}: math failed to render`);
 }
 const benchmarkPage = await readFile(join(root, "benchmarks.html"), "utf8");
 if (!benchmarkPage.includes("Eager build + fit")) {
