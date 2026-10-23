@@ -17,3 +17,9 @@
   overflow-y: hidden;
   padding: 0.5rem 0;
 }
+
+@media (min-width: 960px) {
+  .benchmarks-page .VPDoc:not(.has-sidebar) .content {
+    max-width: 1104px;
+  }
+}

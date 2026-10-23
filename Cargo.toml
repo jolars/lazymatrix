@@ -143,3 +143,8 @@ required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all", "zar
 name = "eager_normalization"
 harness = false
 required-features = ["ndarray_all", "sprs_all"]
+
+[[bench]]
+name = "normalization_memory"
+harness = false
+required-features = ["ndarray_all", "sprs_all"]

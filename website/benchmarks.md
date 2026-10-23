@@ -1,6 +1,8 @@
 ---
 title: Benchmarks
-description: Compare construction time, fitting time, and additional memory for lazy and eager normalized matrices.
+description: See how nonzero density and matrix size affect runtime, memory, and the cost of repeated lazy and eager normalized products.
+aside: false
+pageClass: benchmarks-page
 ---
 
 <script setup>
@@ -9,44 +11,47 @@ import BenchmarkComparison from './.vitepress/theme/BenchmarkComparison.vue'
 
 # Benchmarks
 
-Lazy normalization preserves the original matrix representation. Eager
-normalization pays a construction cost and then operates on normalized dense
-storage. Which choice helps depends on matrix size, sparsity, backend, and the
-operations your algorithm repeats.
+Centering a sparse matrix generally turns its implicit zeros into nonzero values.
+Lazy normalization keeps the original sparse storage and applies centering and
+scaling during each operation. Eager normalization constructs a dense normalized
+matrix once and uses it for subsequent operations.
 
-## Initial fitting measurements
+The plots compare these choices across **seven nonzero densities, from 0.1% to
+100%**, and three shapes: many more rows than columns ($n/p = 16$), square
+($n = p$), and many more columns than rows ($p/n = 16$). Choose a matrix size
+to compare all three shapes at the same number of entries. Their dense storage
+occupies 2, 32, or 128 MiB.
 
-These measurements compare a Gaussian ridge fit through lazy and eager operators,
-with an intercept and penalty of 0.1. Both paths fit the same problem, and the
-harness checks coefficients, intercepts, and objectives after converting eager
-coefficients back with the fitted parameters.
-
-::: info Exploratory measurements
-These are single instrumented runs, collected while other builds were active.
-They illustrate the tradeoffs and are not stable performance rankings. Run the
-benchmarks on your target hardware before choosing a representation.
-:::
+Start with mean centering and SD scaling, then switch to scaling alone to see a
+case where normalization preserves structural zeros. Each sparse backend has its
+own dense destination; the backend control changes both together.
 
 <BenchmarkComparison />
 
-[Download all raw measurements](/benchmarks/eager-results.csv), including the
-centered-only cases. The chart and table are generated from the checked-in CSV.
+## Read the memory figures
 
-## Read memory figures across phases
+The full lifecycle measurement starts with the sparse input already allocated.
+It records the largest increase in live requested Rust bytes while fitting
+parameters, constructing the operator, and running ten forward/transpose pairs,
+then adds the input's values, indices, and column pointers. Both paths retain the
+source input. The eager dense output stays included during all subsequent work.
+Phase peaks are never summed.
 
-The allocator records the peak live requested Rust bytes **above the live bytes
-at the start of each phase**. Eager construction includes its dense output, but
-eager fitting starts with that output already allocated. A lower eager-fit peak
-therefore does not imply lower overall memory.
+The normalized-storage view counts the representation and retained parameters.
+The workspace view subtracts that retained storage from the lifecycle peak;
+its maximum can come from fitting, construction, or products. Input and output
+vectors count as workspace. The detailed table reports all three views.
 
-The measurements exclude native BLAS/LAPACK allocations, allocator overhead,
-and resident-memory effects. Total process memory also depends on whether the
-original input stays live. For owned writable dense inputs, `into_eager` can
-normalize the original storage instead of creating a second matrix.
+These figures exclude allocator overhead, native-library allocations, resident
+memory effects, and unrelated process state. They count requested bytes, with
+reallocation recorded at its resulting size. Dropping the sparse source after
+eager construction would reduce retained storage during products. Dense inputs
+that support `into_eager` can instead normalize their existing storage in place;
+these plots compare sparse inputs with an explicitly allocated dense output.
 
 ## Separate setup from repeated work
 
-For $k$ repetitions of a fixed operation, compare
+The last plot projects total time for $k$ forward/transpose pairs:
 
 $$
 \begin{aligned}
@@ -56,38 +61,85 @@ T_{\mathrm{eager}}(k) &= T_{\mathrm{fit}} + T_{\mathrm{materialize}}
 \end{aligned}
 $$
 
-When $t_{\mathrm{eager}} < t_{\mathrm{lazy}}$, materialization pays for itself
-after roughly
+Here each $t$ is the sum of separately measured forward and transpose times.
+Both paths use the same fitted parameters. When eager products are faster, the
+estimated crossover is
 
 $$
-k > \frac{T_{\mathrm{materialize}}}
+k = \frac{T_{\mathrm{materialize}}}
          {t_{\mathrm{lazy}} - t_{\mathrm{eager}}}.
 $$
 
-This estimate assumes the same fitted parameters and fixed operation costs.
-The fitting measurements above cover complete solver runs, whose operation counts
-can differ slightly. They should not be used to infer a per-product break-even
-point. Sparse lazy products can also remain faster than dense eager products.
+This projection assumes fixed product costs and reuses the same vectors and
+matrix. It does not model solver convergence, changing cache behavior, or memory
+pressure from other application state. If eager products are slower per pair,
+the model has no crossover. Scaling alone preserves structural zeros, so its
+dense eager conversion is a comparison with this crate's dense materialization
+API, not an optimized sparse scaling baseline.
 
 ## Methodology and reproduction
 
-The allocation profiles were collected on October 8, 2026, with Rust 1.89.0 in
-release mode on an Intel Core Ultra 7 155U. Fixtures use seed 205, sizes
-$512 \times 32$ and $2048 \times 128$, and target densities of 100% and 10%.
-OpenBLAS and OpenMP use one thread. Fixture generation and source-storage
-conversion occur outside measurement, and each fitting path is warmed first.
+Fixtures use `ChaCha8Rng` with seed 205 and the following shapes. Each row keeps
+the element count fixed while changing the aspect ratio:
+
+| Dense storage | $n/p = 16$          | $n = p$            | $p/n = 16$          |
+| ------------- | ------------------- | ------------------ | ------------------- |
+| 2 MiB         | $2048 \times 128$   | $512 \times 512$   | $128 \times 2048$   |
+| 32 MiB        | $8192 \times 512$   | $2048 \times 2048$ | $512 \times 8192$   |
+| 128 MiB       | $16384 \times 1024$ | $4096 \times 4096$ | $1024 \times 16384$ |
+
+Target nonzero fractions are $0.001$, $0.003$, $0.01$, $0.03$, $0.1$, $0.3$, and $1$.
+Each cell is selected independently. Stored values are positive, with varying
+column scales, so nonempty columns have nonzero means. Very sparse fixtures
+can have empty columns, especially when there are few rows; their counts and
+realized densities appear in the table and CSV. Construction replaces their
+zero SDs with one.
+
+Fixture generation and backend conversion happen outside measurement. Inputs
+use canonical CSC storage with `usize` indices. Dense destinations use each
+backend's default layout. Products reuse output buffers and include any scratch
+allocation performed by the public `*_into` methods. Forward inputs and
+transpose inputs are deterministic, nonconstant vectors with nonzero sums.
+The harness checks both product directions against the eagerly normalized
+matrix before collecting timings.
+
+The collector builds both executables first, then runs allocation profiling and
+timing serially in separate executables. Timings use Criterion's mean estimate
+and 95% bootstrap confidence intervals. The checked-in tall cases use 30 samples,
+0.3 seconds of warmup, at least one second of measurement, and 10,000 bootstrap
+resamples. Square and wide cases use a shorter run with ten samples, 0.05 seconds
+of warmup, at least 0.1 seconds of measurement, and 1,000 bootstrap resamples.
+Larger operations can extend the measurement period. The run metadata records
+both collections. The default collector uses the longer settings for all cases.
+The plots show intervals at sampled densities and
+connect those samples. Confidence intervals describe timing variation on this
+machine, not variability across hardware or sparse matrix patterns. Thread
+settings, hardware, compiler, and collection date are available in the
+[run metadata](/benchmarks/metadata.json).
 
 ```sh
-# Construction and repeated forward/transpose products with Criterion.
-cargo bench --locked --bench eager_normalization --features ndarray,sprs
+# Collect the complete grid, including both backends and normalization modes.
+bash scripts/bench-normalization-tradeoffs.sh
 
-# Consumer fitting times and Rust allocation profiles.
-bash scripts/bench-normalization-allocations.sh > target/normalization-allocations.csv
+# Use shorter timing settings for a quick comparison.
+LAZYMATRIX_BENCH_QUICK=1 bash scripts/bench-normalization-tradeoffs.sh
+
+# Publish a checked run and regenerate the website plots.
+mkdir -p benches/normalization_tradeoffs
+cp target/normalization-tradeoffs/{results.csv,metadata.json} benches/normalization_tradeoffs/
+task website:check
+
+# Run the numerical checks quickly without collecting timing samples.
+LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked --bench eager_normalization \
+  --features ndarray,sprs,faer -- --test
 ```
 
-The [measurement notes](https://github.com/jolars/lazymatrix/blob/main/benches/eager_normalization.md)
-describe the initial runs. The
-[Criterion harness](https://github.com/jolars/lazymatrix/blob/main/benches/eager_normalization.rs)
-separates parameter fitting, dense materialization, and batches of forward and
-transpose products. Use its longer default measurement settings on an idle
-machine for runtime comparisons.
+The website generates downloadable SVGs from checked-in measurements during its
+build. It never runs benchmarks. For performance decisions, collect a full run
+on an otherwise idle machine with representative data and operations.
+
+The earlier [Gaussian ridge fitting measurements](/benchmarks/eager-results.csv)
+remain available as a consumer example. Those single instrumented runs used
+smaller fixtures and a different machine; they are separate from this product
+sweep. See the [measurement notes](https://github.com/jolars/lazymatrix/blob/main/benches/eager_normalization.md)
+for details.

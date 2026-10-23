@@ -6,12 +6,14 @@ on:
     paths:
       - "website/**"
       - "benches/normalization_allocations/eager_results.csv"
+      - "benches/normalization_tradeoffs/**"
       - ".github/workflows/website.yml"
   pull_request:
     branches: [main]
     paths:
       - "website/**"
       - "benches/normalization_allocations/eager_results.csv"
+      - "benches/normalization_tradeoffs/**"
       - ".github/workflows/website.yml"
   workflow_dispatch:
 

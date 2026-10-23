@@ -66,8 +66,10 @@ Criterion benchmarks belong in `benches/`. See `TODO.md` for planned API work.
 
 `website/` contains the VitePress landing page, guide, and benchmark comparisons
 at `https://lazymatrix.org`. API documentation lives on docs.rs. Keep benchmark
-data and methodology synchronized; the site build reads the checked-in CSV in
-`benches/normalization_allocations/` and does not run benchmarks. GitHub Actions
+data and methodology synchronized; the site build reads the checked-in CSV and
+metadata in `benches/normalization_tradeoffs/` and generates SVG plots without
+running benchmarks. Historical consumer profiles remain in
+`benches/normalization_allocations/`. GitHub Actions
 checks pull requests and deploys pushes to `main` to Cloudflare Workers.
 
 ## Development Status

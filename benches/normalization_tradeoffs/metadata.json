@@ -1,0 +1,46 @@
+{
+  "collected_at_utc": "2026-10-23T19:14:24.396599+00:00",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.44",
+  "rustc": "rustc 1.89.0 (29483883e 2025-08-04)",
+  "seed": 205,
+  "confidence_level": 0.95,
+  "lifecycle_pairs": 10,
+  "threads": 1,
+  "features": [
+    "ndarray",
+    "sprs",
+    "faer"
+  ],
+  "timing_estimator": "Criterion mean",
+  "source_retained": true,
+  "timing_runs": [
+    {
+      "shapes": [
+        "16384x1024",
+        "2048x128",
+        "8192x512"
+      ],
+      "collected_at_utc": "2026-10-23T18:15:51.446077+00:00",
+      "sample_size": 30,
+      "warm_up_seconds": 0.3,
+      "measurement_seconds": 1,
+      "bootstrap_resamples": 10000
+    },
+    {
+      "shapes": [
+        "1024x16384",
+        "128x2048",
+        "2048x2048",
+        "4096x4096",
+        "512x512",
+        "512x8192"
+      ],
+      "collected_at_utc": "2026-10-23T19:14:24.396599+00:00",
+      "sample_size": 10,
+      "warm_up_seconds": 0.05,
+      "measurement_seconds": 0.1,
+      "bootstrap_resamples": 1000
+    }
+  ]
+}

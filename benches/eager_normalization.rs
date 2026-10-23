@@ -1,84 +1,96 @@
-//! Explicit materialization and repeated products, with preprocessing separated.
+//! Density sweeps with parameter fitting, materialization, and products timed separately.
 
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use lazymatrix::{Centering, LazyMatrix, MatTransposeVecInto, MatVecInto, Normalization, Scaling};
-use rand::{RngExt, SeedableRng};
-use rand_chacha::ChaCha8Rng;
+use lazymatrix::{
+    ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, MaterializeDense, MatrixOwned,
+};
 
 #[path = "../tests/common/backend_aliases.rs"]
 mod backend_aliases;
-use backend_aliases::{ndarray, sprs};
-use ndarray::{Array1, Array2};
+#[path = "common/normalization.rs"]
+mod normalization;
 
-fn benchmark(c: &mut Criterion) {
-    for (rows, cols) in [(512, 32), (2_048, 128)] {
-        let mut rng = ChaCha8Rng::seed_from_u64(412);
-        let dense = Array2::from_shape_fn((rows, cols), |_| {
-            if rng.random::<f64>() < 0.1 {
-                rng.random_range(-2.0..2.0)
-            } else {
-                0.0
-            }
-        });
-        let mut triplets = sprs::TriMat::new((rows, cols));
-        for ((i, j), &value) in dense.indexed_iter() {
-            if value != 0.0 {
-                triplets.add_triplet(i, j, value);
+use backend_aliases::ndarray;
+use normalization::{BenchVector, Fixture, NORMALIZATIONS};
+
+fn bench_backend<M, D, V>(c: &mut Criterion, fixture: &Fixture, backend: &str, source: &M)
+where
+    M: ColumnStats<f64> + MaterializeDense<f64> + MatVecInto<V> + MatTransposeVecInto<V>,
+    D: MatrixOwned<f64> + MatVecInto<V> + MatTransposeVecInto<V>,
+    V: BenchVector,
+{
+    for (normalization, spec) in NORMALIZATIONS {
+        let lazy = LazyMatrix::new(source, spec).unwrap();
+        let eager = lazy.to_eager::<D>().unwrap();
+        let (x, u, mut y, mut t) = fixture.vectors::<V>();
+        let (_, _, mut eager_y, mut eager_t) = fixture.vectors::<V>();
+        lazy.matvec_into(&x, &mut y).unwrap();
+        lazy.mat_transpose_vec_into(&u, &mut t).unwrap();
+        eager.matvec_into(&x, &mut eager_y).unwrap();
+        eager.mat_transpose_vec_into(&u, &mut eager_t).unwrap();
+        for (actual, expected) in [(&y, &eager_y), (&t, &eager_t)] {
+            for i in 0..actual.len() {
+                approx::assert_relative_eq!(
+                    actual.get(i),
+                    expected.get(i),
+                    epsilon = 1e-8,
+                    max_relative = 1e-9
+                );
             }
         }
-        let sparse = triplets.to_csc::<usize>();
-        let csr = sparse.to_csr();
-        let spec = Normalization::new(Centering::Mean, Scaling::Sd);
-        let lazy_dense = LazyMatrix::new(&dense, spec).unwrap();
-        let lazy_sparse = LazyMatrix::new(&sparse, spec).unwrap();
-        let lazy_csr = LazyMatrix::new(&csr, spec).unwrap();
-        let eager = lazy_sparse.to_eager::<Array2<f64>>().unwrap();
-        let mut group = c.benchmark_group(format!("eager/{rows}x{cols}"));
+        let mut group = c.benchmark_group(fixture.name(backend, normalization));
         group.bench_function("fit_parameters", |b| {
-            b.iter(|| {
-                black_box(LazyMatrix::new(black_box(&dense), spec).unwrap());
-            })
+            b.iter(|| black_box(LazyMatrix::new(black_box(source), spec).unwrap()));
         });
-        group.bench_function("dense_materialize", |b| {
-            b.iter(|| {
-                black_box(lazy_dense.to_eager::<Array2<f64>>().unwrap());
-            })
+        group.bench_function("materialize", |b| {
+            b.iter(|| black_box(lazy.to_eager::<D>().unwrap()));
         });
-        group.bench_function("csc_materialize", |b| {
-            b.iter(|| {
-                black_box(lazy_sparse.to_eager::<Array2<f64>>().unwrap());
-            })
-        });
-        group.bench_function("csr_materialize", |b| {
-            b.iter(|| {
-                black_box(lazy_csr.to_eager::<Array2<f64>>().unwrap());
-            })
-        });
-        let x = Array1::from_elem(cols, 1.0);
-        let u = Array1::from_elem(rows, 1.0);
-        let mut y = Array1::zeros(rows);
-        let mut t = Array1::zeros(cols);
         macro_rules! products {
-            ($name:literal, $operator:expr) => {
-                group.bench_function($name, |b| {
+            ($prefix:literal, $matrix:expr) => {
+                group.bench_function(concat!($prefix, "_forward"), |b| {
                     b.iter(|| {
-                        for _ in 0..10 {
-                            $operator.matvec_into(black_box(&x), &mut y).unwrap();
-                            $operator
-                                .mat_transpose_vec_into(black_box(&u), &mut t)
-                                .unwrap();
-                        }
-                        black_box((&y, &t));
-                    })
+                        $matrix.matvec_into(black_box(&x), &mut y).unwrap();
+                        black_box(&y);
+                    });
+                });
+                group.bench_function(concat!($prefix, "_transpose"), |b| {
+                    b.iter(|| {
+                        $matrix
+                            .mat_transpose_vec_into(black_box(&u), &mut t)
+                            .unwrap();
+                        black_box(&t);
+                    });
                 });
             };
         }
-        products!("lazy_dense_products", lazy_dense);
-        products!("lazy_sparse_products", lazy_sparse);
-        products!("eager_dense_products", eager);
+        products!("raw", source);
+        products!("lazy", lazy);
+        products!("eager", eager);
         group.finish();
+    }
+}
+
+fn benchmark(c: &mut Criterion) {
+    for fixture in normalization::fixtures() {
+        bench_backend::<_, ndarray::Array2<f64>, ndarray::Array1<f64>>(
+            c,
+            &fixture,
+            "sprs_to_ndarray",
+            &fixture.sparse,
+        );
+        #[cfg(feature = "faer_all")]
+        {
+            use backend_aliases::faer;
+            let source = fixture.faer();
+            bench_backend::<_, faer::Mat<f64>, faer::Col<f64>>(
+                c,
+                &fixture,
+                "faer_csc_to_dense",
+                &source,
+            );
+        }
     }
 }
 

@@ -12,11 +12,22 @@ task website:dev
 task website:check
 ```
 
-The build generates the benchmark data and CSV download from
-`benches/normalization_allocations/eager_results.csv`. Update that source and
-the methodology in `benchmarks.md` together when publishing new measurements.
-Generated files are ignored by Git. Local development also prepares the data;
-restart the development server after replacing the source CSV.
+The build validates `benches/normalization_tradeoffs/results.csv` and its run
+metadata, then uses Observable Plot to generate standalone SVGs for runtime,
+memory, and projected total time. Each plot compares tall, square, and wide
+matrices with matching element counts and aspect ratios 16:1, 1:1, and 1:16.
+The controls select a matrix size (2, 32, or 128 MiB of dense storage), backend,
+normalization, product direction, memory measure, or repetition-plot density.
+The default charts and detailed table render into
+static HTML. Plotting dependencies run only during the build. SVG filenames
+include a content hash so chart updates invalidate browser caches.
+
+Collect new measurements with `bash scripts/bench-normalization-tradeoffs.sh`,
+then copy `results.csv` and `metadata.json` from its output directory into
+`benches/normalization_tradeoffs/`. Update those sources and the methodology in
+`benchmarks.md` together. The build also retains the earlier consumer-fit CSV
+download. Generated website files are ignored by Git. Local development prepares
+the plots; restart the development server after replacing measurements.
 
 The workspace overrides select patched Vite and XML-parser dependencies for
 VitePress 1.x. Revisit those overrides when upgrading VitePress.
@@ -48,7 +59,7 @@ Benchmark collection stays separate from the website build.
 ## Markdown for agents
 
 The build converts each rendered page's content into Markdown, including code,
-TeX equations, and the benchmark table. It strips navigation, scripts, styles,
+TeX equations, plot descriptions and download links, and the benchmark table. It strips navigation, scripts, styles,
 and interactive controls. `worker.mjs` negotiates the representation using the
 `Accept` header. HTML remains the default; explicit `text/markdown` requests
 receive `Content-Type: text/markdown; charset=utf-8`. Both representations use

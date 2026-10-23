@@ -44,9 +44,17 @@ test("serves clean Markdown for every page with equations, code, and tables", as
       assert.match(response.headers.get("Link"), /llms\.txt/);
     }
     if (path === "/benchmarks") {
-      assert.match(body, /\| Measured phase \| Time \(ms\)/);
-      assert.match(body, /sprs CSC → ndarray/);
-      assert.match(body, /2048×128/);
+      assert.match(
+        body,
+        /\| Rows × columns \| Target \/ actual nonzeros \(%\)/,
+      );
+      assert.match(body, /sprs CSC → ndarray dense/);
+      assert.match(body, /8,192 × 512/);
+      assert.match(body, /2,048 × 2,048/);
+      assert.match(body, /512 × 8,192/);
+      assert.match(body, /Runtime versus density/);
+      assert.match(body, /!\[Forward product time/);
+      assert.match(body, /All measurements \(CSV\)/);
       assert.doesNotMatch(body, /ndarrayfaer/);
     }
   }
