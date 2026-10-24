@@ -1,15 +1,18 @@
 # LazyMatrix
 
-> LazyMatrix is a Rust library for centering and scaling matrices without materializing them.
+> LazyMatrix provides Rust and Python interfaces for centering and scaling matrices without materializing them.
 
-The website contains the user guide and benchmark comparisons. The Rust API
-reference is hosted on docs.rs. LazyMatrix is in early development, and breaking
+The website contains the user guide, benchmark comparisons, and Python and Rust
+API references. The Rust API is also hosted on docs.rs. LazyMatrix is in early development, and breaking
 changes are expected.
 
 ## Documentation
 
 - [Getting started](https://lazymatrix.org/guide/getting-started): Installation, backend selection, and eager conversion.
 - [How it works](https://lazymatrix.org/guide/how-it-works): Normalization identities and sparse storage behavior.
-- [Rust API reference](https://docs.rs/lazymatrix): Public types, traits, and methods.
+- [Python guide](https://lazymatrix.org/guide/python): NumPy and SciPy usage, ownership, and supported operations.
+- [Python API reference](https://lazymatrix.org/reference/python/): Public classes and methods.
+- [Rust API reference](https://lazymatrix.org/reference/rust/): Public types, traits, and methods.
+- [docs.rs](https://docs.rs/lazymatrix): The Rust API reference hosted by docs.rs.
 - [Benchmarks](https://lazymatrix.org/benchmarks): Construction, repeated operations, and memory costs.
 - [Source code](https://github.com/jolars/lazymatrix): Implementation, examples, and releases.

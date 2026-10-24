@@ -9,6 +9,22 @@ applies centering and scaling through matrix operations, preserving sparse
 storage without creating a normalized copy. It supports dense and sparse
 matrices, borrowed views, and chunked Zarr arrays.
 
+The companion Python package supports NumPy arrays and SciPy CSR/CSC input:
+
+```python
+import numpy as np
+from lazymatrix import standardize
+
+x = np.array([[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]])
+z = standardize(x)
+prediction = z @ np.array([1.0, -1.0])
+gradient = z.T @ prediction
+```
+
+Install it with `pip install lazymatrix`. See the
+[Python guide](https://lazymatrix.org/guide/python) for installation, ownership,
+and supported operations.
+
 See the [documentation](https://lazymatrix.org) for guides, benchmarks, and
 links to the API reference.
 
@@ -96,6 +112,8 @@ reference](https://docs.rs/lazymatrix) for capabilities and supported types.
 - [Getting started](https://lazymatrix.org/guide/getting-started)
 - [How it works](https://lazymatrix.org/guide/how-it-works)
 - [API reference](https://docs.rs/lazymatrix)
+- [Python API reference](https://lazymatrix.org/reference/python/)
+- [Rust API reference on the website](https://lazymatrix.org/reference/rust/)
 - [Benchmarks](https://lazymatrix.org/benchmarks)
 
 ## License

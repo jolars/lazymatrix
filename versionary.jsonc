@@ -2,7 +2,19 @@
   "$schema": "https://raw.githubusercontent.com/jolars/versionary/main/schemas/config.json",
   "version": 1,
   "release-type": "rust",
+  "monorepo-mode": "independent",
+  "separate-release-prs": false,
   "allow-stable-major": false,
   "include-commit-authors": true,
-  "release-reference-comments": "best-effort"
+  "release-reference-comments": "best-effort",
+  "packages": {
+    ".": {
+      "exclude-paths": ["python"],
+    },
+    "python": {
+      "release-type": "python",
+      "package-name": "python",
+      "follows": ["."],
+    },
+  },
 }

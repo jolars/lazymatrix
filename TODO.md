@@ -26,11 +26,11 @@ companion packages; the Rust core remains independent of Python and solvers.
     native framework forward pass does not require Rust autograd or GPU kernels.
     TensorFlow support can follow the first working consumer.
 
-- [ ] Design a companion Python binding for sparse statistics and fitted
-  `NormalizationParams`; no binding or Python packaging currently exists.
-  - Define SciPy CSR/CSC ownership, index conversion, copying, duplicate-entry
-    handling, and dtype support explicitly. Do not promise zero-copy transfer
-    until lifetimes and mutation rules have been established.
+- [x] Add an owned float64 Python binding for dense and CSR/CSC input, products,
+  transpose, column access, a SciPy operator adapter, and explicit dense conversion.
+  Python and Rust use independent versions in one release PR, with both API
+  references generated inside VitePress through Diplodocus.
+- [ ] Expose reusable fitted `NormalizationParams` through the Python binding.
   - Export and reconstruct centers and scales with column-count validation,
     preserving constant-column and nonfinite-value semantics. Specify a portable
     representation for reuse in framework buffers and checkpoints.
@@ -38,8 +38,8 @@ companion packages; the Rust core remains independent of Python and solvers.
     prediction. Online updates of statistics are a separate algorithm.
   - Keep research scaling exponents in the consumer initially, using explicit
     scales; determine whether a reusable core extension is actually needed.
-  - Verify cross-language parameter and operator parity, recoverable boundary
-    errors, installation, and wheel distribution before offering a public API.
+  - Verify reconstructed parameters and products against a dense reference,
+    including reuse across languages and recoverable parameter errors.
 
 - [ ] If a consumer needs Rust-backed neural products, use the existing
   multiple-right-hand-side operator task to add sparse matrix--dense matrix

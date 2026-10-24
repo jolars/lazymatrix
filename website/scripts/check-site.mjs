@@ -21,13 +21,38 @@ async function exists(path) {
   }
 }
 const errors = [];
-for (const file of await htmlFiles(root)) {
-  const html = await readFile(file, "utf8");
+const pages = new Map(
+  await Promise.all(
+    (await htmlFiles(root)).map(async (file) => [
+      file,
+      await readFile(file, "utf8"),
+    ]),
+  ),
+);
+const anchors = new Map(
+  [...pages].map(([file, html]) => [
+    file,
+    new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1])),
+  ]),
+);
+for (const [file, html] of pages) {
   for (const match of html.matchAll(/(?:href|src)="([^"\s]+)"/g)) {
     const url = match[1].replaceAll("&amp;", "&");
-    if (/^(?:[a-z]+:|\/\/|#)/i.test(url)) continue;
+    if (/^(?:[a-z]+:|\/\/)/i.test(url)) continue;
+    const fragment = url.includes("#")
+      ? decodeURIComponent(url.slice(url.indexOf("#") + 1))
+      : "";
     const path = decodeURIComponent(url.split(/[?#]/)[0]);
-    if (!path) continue;
+    if (!path) {
+      if (
+        file.startsWith(join(root, "reference")) &&
+        fragment &&
+        !anchors.get(file).has(fragment)
+      ) {
+        errors.push(`${file}: missing anchor ${url}`);
+      }
+      continue;
+    }
     const target = path.startsWith("/")
       ? resolve(root, `.${path}`)
       : resolve(dirname(file), path);
@@ -37,6 +62,17 @@ for (const file of await htmlFiles(root)) {
       !(await exists(join(target, "index.html")))
     ) {
       errors.push(`${file}: missing ${url}`);
+    }
+    if (fragment) {
+      const page = [target, `${target}.html`, join(target, "index.html")].find(
+        (candidate) => pages.has(candidate),
+      );
+      if (
+        page?.startsWith(join(root, "reference")) &&
+        !anchors.get(page).has(fragment)
+      ) {
+        errors.push(`${file}: missing anchor ${url}`);
+      }
     }
   }
 }
@@ -110,5 +146,5 @@ if (!notFoundPage.includes("This page may have moved")) {
 }
 if (errors.length) throw new Error(errors.join("\n"));
 console.log(
-  "Checked local links, assets, rendered math, and benchmark output.",
+  "Checked local links, API anchors, assets, rendered math, and benchmark output.",
 );

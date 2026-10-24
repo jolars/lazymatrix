@@ -65,7 +65,10 @@ between implementations. Runnable demonstrations belong in `examples/`, and
 Criterion benchmarks belong in `benches/`. See `TODO.md` for planned API work.
 
 `website/` contains the VitePress landing page, guide, and benchmark comparisons
-at `https://lazymatrix.org`. API documentation lives on docs.rs. Keep benchmark
+at `https://lazymatrix.org`. Diplodocus embeds Python and Rust API references in
+the site; docs.rs remains available. `python/` contains the independently
+versioned Python package, with a private PyO3 extension under `python/rust/`.
+Keep Python dependencies and FFI out of the core crate. Keep benchmark
 data and methodology synchronized; the site build reads the checked-in CSV and
 metadata in `benches/normalization_tradeoffs/` and generates SVG plots without
 running benchmarks. Historical consumer profiles remain in
@@ -194,6 +197,9 @@ add residual policies, cached sums, update rules, or an entire solver to the cra
 - `task ci` runs formatting, Clippy, documentation, and all tests—the local
   equivalent of GitHub CI.
 - `task website:dev` serves the website locally.
+- `task python:check` builds, lints, and tests the Python bindings.
+- `task python:package` checks wheels and isolated source-distribution builds.
+- `task website:reference` refreshes both API references through Diplodocus.
 - `task website:check` installs locked dependencies, checks formatting, builds
   the website, checks local links and math, and validates Worker packaging.
 - `cargo bench --locked --bench column_sds` runs the column-statistics
@@ -208,6 +214,14 @@ requires Rust 1.89. The lockfile uses
 sprs 0.11.4 for Rust 1.85 compatibility; sprs 0.11.5 requires Rust 1.88. Run
 `bash scripts/test-backends.sh msrv` with Rust 1.87 to check the compatible
 feature selections, including tests, examples, and benchmarks.
+
+The Python package requires Rust 1.89 for source builds and Python 3.11 or newer.
+Its uv environment lives in `.devenv/python`; tasks set `UV_PROJECT_ENVIRONMENT`.
+Use `scripts/python-tool.py` to prefer native maturin and Ruff executables on
+NixOS. Diplodocus 0.7.0 uses a separate `nightly-2026-09-28` documentation
+toolchain. The website adapter exports Git-visible Rust sources to exclude local
+environments and generated symlinks from extraction. Python and Rust have
+independent versions, one combined release PR, and Python follows Rust releases.
 
 ## Coding Style & Naming Conventions
 

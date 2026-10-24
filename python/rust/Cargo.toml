@@ -1,0 +1,20 @@
+[package]
+name = "lazymatrix-python"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Private native extension for the LazyMatrix Python package"
+repository = "https://github.com/jolars/lazymatrix"
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+lazymatrix = { path = "../..", features = ["ndarray_v0_17", "sprs_v0_11"] }
+ndarray = { version = "0.17.2", default-features = false, features = ["std"] }
+numpy = "0.29"
+pyo3 = { version = "0.29", features = ["abi3-py311"] }
+sprs = { version = "=0.11.4", default-features = false }

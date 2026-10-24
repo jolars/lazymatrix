@@ -7,11 +7,14 @@ const repository = "https://github.com/jolars/lazymatrix";
 const ogImage = `${origin}/og.png`;
 const ogImageAlt =
   "LazyMatrix: Your matrix deserves a break. A matrix relaxing in a beach chair under a palm tree.";
+const referenceSidebar = JSON.parse(
+  readFileSync(new URL("../reference/sidebar.json", import.meta.url), "utf8"),
+);
 
 export default defineConfig({
   title: "LazyMatrix",
   description:
-    "Center and scale matrices in Rust without materializing them. Preserve sparse storage and work across matrix backends.",
+    "Center and scale matrices in Rust and Python without materializing them. Preserve sparse storage and work across matrix backends.",
   lang: "en-US",
   cleanUrls: true,
   srcExclude: ["README.md"],
@@ -94,7 +97,14 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
       { text: "Benchmarks", link: "/benchmarks" },
-      { text: "API", link: "https://docs.rs/lazymatrix" },
+      {
+        text: "API",
+        items: [
+          { text: "Python", link: "/reference/python/" },
+          { text: "Rust", link: "/reference/rust/" },
+          { text: "docs.rs", link: "https://docs.rs/lazymatrix" },
+        ],
+      },
     ],
     sidebar: {
       "/guide/": [
@@ -102,10 +112,12 @@ export default defineConfig({
           text: "Guide",
           items: [
             { text: "Getting started", link: "/guide/getting-started" },
+            { text: "Python", link: "/guide/python" },
             { text: "How it works", link: "/guide/how-it-works" },
           ],
         },
       ],
+      "/reference/": referenceSidebar,
     },
     socialLinks: [{ icon: "github", link: repository }],
     editLink: {

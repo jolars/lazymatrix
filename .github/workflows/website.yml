@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - "website/**"
+      - "src/**"
+      - "python/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "diplodocus.yaml"
+      - "README.md"
+      - "scripts/python-tool.py"
       - "benches/normalization_allocations/eager_results.csv"
       - "benches/normalization_tradeoffs/**"
       - ".github/workflows/website.yml"
@@ -12,6 +19,13 @@ on:
     branches: [main]
     paths:
       - "website/**"
+      - "src/**"
+      - "python/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "diplodocus.yaml"
+      - "README.md"
+      - "scripts/python-tool.py"
       - "benches/normalization_allocations/eager_results.csv"
       - "benches/normalization_tradeoffs/**"
       - ".github/workflows/website.yml"
@@ -33,6 +47,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            python/rust
+      - name: Prepare Python checkout
+        working-directory: .
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.devenv/python
+        run: |
+          uv sync --project python --locked --no-install-project
+          cd python
+          python ../scripts/python-tool.py maturin develop --release --locked
+      - name: Prepare Rust documentation toolchain
+        working-directory: .
+        run: |
+          rustup toolchain install nightly-2026-09-28 --profile minimal --no-self-update
+          echo "DIPLODOCUS_RUST_TOOLCHAIN=$(rustup run nightly-2026-09-28 rustc --print sysroot)" >> "$GITHUB_ENV"
+      - uses: jolars/setup-diplodocus@v1
+        with:
+          version: "0.7.0"
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: website/package.json

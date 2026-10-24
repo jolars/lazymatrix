@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.devenv/python
 
 jobs:
   fmt:
@@ -132,9 +133,79 @@ jobs:
           key: msrv
       - run: bash scripts/test-backends.sh msrv
 
+  python:
+    name: Python (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: python/rust
+      - run: uv sync --project python --locked --no-install-project
+      - run: python ../scripts/python-tool.py maturin develop --release --locked
+        working-directory: python
+      - run: cargo fmt --manifest-path python/rust/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path python/rust/Cargo.toml --all-targets --locked -- -D warnings
+      - run: python scripts/python-tool.py ruff check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py
+      - run: python scripts/python-tool.py ruff format --check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py
+      - run: python scripts/python-tool.py python -m pytest python/tests
+      - name: Test minimum NumPy and SciPy versions
+        if: matrix.python == '3.11'
+        run: |
+          uv pip install --python .devenv/python/bin/python numpy==1.26.4 scipy==1.12.0
+          python scripts/python-tool.py python -m pytest python/tests
+
+  python-package:
+    name: Python distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: python/rust
+      - run: uv sync --project python --locked --no-install-project
+      - run: python ../scripts/python-tool.py maturin build --release --locked --sdist --out dist
+        working-directory: python
+      - run: python scripts/python-tool.py python scripts/check-python-dist.py
+
+  release-config:
+    name: Release configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - run: npx --yes versionary@1.6.1 verify
+      - run: npx --yes --package versionary@1.6.1 node scripts/check-releases.mjs
+
   versionary:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, core-msrv, core-wasm, msrv]
+    needs:
+      [
+        fmt,
+        clippy,
+        docs,
+        test,
+        core-msrv,
+        core-wasm,
+        msrv,
+        python,
+        python-package,
+        release-config,
+      ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -145,6 +216,10 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
       - uses: jolars/versionary@v1
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
+          versionary-version: "1.6.1"

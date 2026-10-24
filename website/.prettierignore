@@ -5,3 +5,5 @@ node_modules/
 public/benchmarks/
 .vitepress/theme/benchmark-results.json
 pnpm-lock.yaml
+reference/
+public/_diplodocus/

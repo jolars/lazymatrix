@@ -1,9 +1,24 @@
 {
+  config,
+  lib,
   pkgs,
   ...
 }:
+let
+  rustOverlay = config.lib.getInput {
+    name = "rust-overlay";
+    url = "github:oxalica/rust-overlay";
+    attribute = "DIPLODOCUS_RUST_TOOLCHAIN";
+    follows = [ "nixpkgs" ];
+  };
+  rustDocumentationToolchain =
+    (rustOverlay.lib.mkRustBin { } pkgs.buildPackages).nightly."2026-09-28".minimal;
+in
 {
   env.OPENBLAS_LP64_LIB = "${pkgs.openblasCompat}/lib";
+  env.DIPLODOCUS_RUST_TOOLCHAIN = rustDocumentationToolchain;
+  env.UV_PROJECT_ENVIRONMENT = "${config.devenv.root}/.devenv/python";
+  env.LD_LIBRARY_PATH = lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ];
 
   # npm's workerd binary needs an explicit loader on NixOS.
   env.MINIFLARE_WORKERD_PATH = pkgs.writeShellScript "lazymatrix-workerd" ''
@@ -31,6 +46,9 @@
     shfmt
     nodejs_24
     pnpm_10
+    maturin
+    ruff
+    uv
   ];
 
   languages = {
@@ -38,6 +56,7 @@
       enable = true;
       toolchainFile = ./rust-toolchain.toml;
     };
+    python.enable = true;
   };
 
   git-hooks = {

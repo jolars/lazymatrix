@@ -1,0 +1,33 @@
+project:
+  name: "LazyMatrix"
+repositories:
+  - id: "lazymatrix"
+    path: "."
+    url: "https://github.com/jolars/lazymatrix"
+packages:
+  - id: "python"
+    name: "LazyMatrix for Python"
+    slug: "python"
+    ecosystem: "python"
+    repository: "lazymatrix"
+    path: "python"
+    metadata-path: "pyproject.toml"
+    targets:
+      - id: "api"
+        extractor: "python"
+        path: "src/lazymatrix"
+        role: "public-api"
+  - id: "rust"
+    name: "LazyMatrix for Rust"
+    slug: "rust"
+    ecosystem: "rust"
+    repository: "lazymatrix"
+    path: "."
+    metadata-path: "Cargo.toml"
+    targets:
+      - id: "api"
+        extractor: "rust"
+        path: "src/lib.rs"
+        role: "public-api"
+        rust:
+          features: ["faer", "nalgebra", "ndarray", "sprs", "zarrs", "parallel"]

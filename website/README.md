@@ -1,8 +1,8 @@
 # LazyMatrix website
 
 The VitePress site at <https://lazymatrix.org> contains the introduction, user
-guide, and benchmark comparisons. API documentation lives at
-<https://docs.rs/lazymatrix>.
+guide, benchmark comparisons, and Python and Rust API references. The Rust API
+also remains available at <https://docs.rs/lazymatrix>.
 
 From the repository root:
 
@@ -10,6 +10,25 @@ From the repository root:
 task website:install
 task website:dev
 task website:check
+```
+
+The development and production builds first extract references with Diplodocus
+0.7.0. Prepare the editable Python extension with `task python:build` before
+running `pnpm dev` or `pnpm build` directly. The repository tasks do this
+automatically. The environment supplies the separate Rust documentation nightly
+through `DIPLODOCUS_RUST_TOOLCHAIN`. Set `DIPLODOCUS_BIN` to select a CLI binary;
+the adapter also accepts the compiled binary in `../diplodocus/target/debug/`.
+CI installs the pinned prebuilt CLI.
+
+Run `task website:reference` after editing API documentation. Generated reference
+pages, navigation, assets, and snapshots are ignored by Git. A source export
+keeps local environments and Nix-generated symlinks out of Rust extraction.
+VitePress handles the generated Markdown's routing, search, and outlines.
+Extraction failures fail production builds and preserve the previous reference.
+To render an existing snapshot without extracting again:
+
+```sh
+pnpm reference --snapshot ../.diplodocus/vitepress/documentation.sqlite
 ```
 
 The build validates `benches/normalization_tradeoffs/results.csv` and its run

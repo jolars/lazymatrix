@@ -1,0 +1,55 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "lazymatrix"
+version = "0.0.0"
+description = "Lazy column normalization for NumPy and SciPy matrices"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT OR Apache-2.0"
+license-files = ["COPYING-APACHE", "COPYING-MIT"]
+authors = [{ name = "Johan Larsson", email = "johan@jolars.co" }]
+dependencies = ["numpy>=1.26", "scipy>=1.12"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.urls]
+Homepage = "https://lazymatrix.org"
+Documentation = "https://lazymatrix.org/guide/python"
+Repository = "https://github.com/jolars/lazymatrix"
+Changelog = "https://github.com/jolars/lazymatrix/blob/main/python/CHANGELOG.md"
+
+[dependency-groups]
+dev = ["maturin>=1.15,<2", "pytest>=8", "ruff>=0.12", "twine>=6"]
+
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+python-source = "src"
+module-name = "lazymatrix._core"
+bindings = "pyo3"
+
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "rust/Cargo.toml" },
+    { file = "rust/Cargo.lock" },
+    { file = "rust/src/**/*.rs" },
+    { file = "../Cargo.toml" },
+    { file = "../src/**/*.rs" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
