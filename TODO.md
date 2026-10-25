@@ -595,3 +595,12 @@ represent the same four states.
 - Dense in-place normalization and a `modify_x` mode are not part of the lazy
   operator. Consumers that deliberately materialize normalized dense data can do
   so outside this crate.
+
+## Outreach targets
+
+- [ ] RustyStats: <https://github.com/PricingFrontier/rustystats>
+- [ ] anofox-regression: <https://github.com/sipemu/anofox-regression>
+- [ ] Greeners: <https://github.com/sheep-farm/Greeners>
+- [ ] Polars for Data Science
+  <https://github.com/abstractqqq/polars_ds_extension>
+- [ ] lmutils <https://github.com/GMELab/lmutils.r>
