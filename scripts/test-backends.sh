@@ -78,12 +78,17 @@ check_msrv() (
         echo "Run the MSRV checks with the Rust 1.87.0 toolchain." >&2
         exit 1
     fi
-    local lockfile
+    local lockfile fixture_lockfile
     lockfile=$(mktemp)
+    fixture_lockfile=$(mktemp)
     cp Cargo.lock "$lockfile"
-    trap 'cp "$lockfile" Cargo.lock; rm -f "$lockfile"' EXIT
+    cp tests/feature_unification/Cargo.lock "$fixture_lockfile"
+    trap 'cp "$lockfile" Cargo.lock; cp "$fixture_lockfile" tests/feature_unification/Cargo.lock; rm -f "$lockfile" "$fixture_lockfile"' EXIT
     # Newer sprs patch releases require Rust 1.88, so test the compatible release.
     cargo update --package sprs --precise 0.11.4
+    # uuid 1.29 requires Rust 1.89, but zarrs 0.22 retains Rust 1.87 support.
+    cargo update --package uuid --precise 1.26.1
+    cargo update --manifest-path "$fixture_manifest" --package uuid --precise 1.26.1
     cargo check --all-targets --locked --no-default-features
     cargo check --all-targets --locked --no-default-features --features parallel
     for feature in "${versions[@]}"; do
