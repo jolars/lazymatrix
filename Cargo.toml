@@ -50,7 +50,7 @@ faer_traits_0_23 = { package = "faer-traits", version = "0.23", optional = true,
 faer-traits = { version = "0.24", optional = true, default-features = false }
 rayon = { version = "1", optional = true }
 sprs = { version = "0.11.4", optional = true, default-features = false }
-zarrs = { version = "0.22.10", optional = true, default-features = false, features = ["filesystem", "gzip"] }
+zarrs = { version = "0.23.14", optional = true, default-features = false, features = ["filesystem", "gzip"] }
 
 [features]
 default = []
