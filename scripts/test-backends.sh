@@ -73,11 +73,17 @@ test_coexistence() {
     test_fixtures --all-features
 }
 
-check_msrv() {
+check_msrv() (
     if [[ $(rustc --version) != "rustc 1.87.0 "* ]]; then
         echo "Run the MSRV checks with the Rust 1.87.0 toolchain." >&2
         exit 1
     fi
+    local lockfile
+    lockfile=$(mktemp)
+    cp Cargo.lock "$lockfile"
+    trap 'cp "$lockfile" Cargo.lock; rm -f "$lockfile"' EXIT
+    # Newer sprs patch releases require Rust 1.88, so test the compatible release.
+    cargo update --package sprs --precise 0.11.4
     cargo check --all-targets --locked --no-default-features
     cargo check --all-targets --locked --no-default-features --features parallel
     for feature in "${versions[@]}"; do
@@ -106,7 +112,7 @@ check_msrv() {
     for feature in "${ndarray_versions[@]}"; do
         cargo check --all-targets --locked --no-default-features --features "$feature,sprs_v0_11"
     done
-}
+)
 
 check_zarrs_msrv() {
     if [[ $(rustc --version) != "rustc 1.91.0 "* ]]; then

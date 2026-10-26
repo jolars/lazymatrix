@@ -109,6 +109,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install ${{ matrix.rust }} --profile minimal --no-self-update
+      - name: Select sprs compatible with Rust 1.85
+        if: matrix.features == 'sprs_v0_11'
+        run: cargo +${{ matrix.rust }} update --package sprs --precise 0.11.4
       - uses: Swatinem/rust-cache@v2
         with:
           key: core-msrv-${{ matrix.rust }}

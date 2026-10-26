@@ -211,12 +211,12 @@ add residual policies, cached sums, update rules, or an entire solver to the cra
 The repository's devenv supplies Rust 1.98.1, `go-task`, and the configured
 pre-commit hooks. The core MSRV is Rust 1.84, and sprs 0.11.4 requires Rust 1.85.
 Other backend checks retain Rust 1.87, except for nalgebra 0.35 (including the
-`nalgebra` alias), which
-requires Rust 1.89. The zarrs 0.23 backend (including the `zarrs` alias) requires
-Rust 1.91. The lockfile uses
-sprs 0.11.4 for Rust 1.85 compatibility; sprs 0.11.5 requires Rust 1.88. Run
+`nalgebra` alias), which requires Rust 1.89. The zarrs 0.23 backend (including the
+`zarrs` alias) requires Rust 1.91. The sprs MSRV checks select sprs 0.11.4;
+sprs 0.11.5 and newer require Rust 1.88. Run
 `bash scripts/test-backends.sh msrv` with Rust 1.87 to check the compatible
-feature selections, including tests, examples, and benchmarks. Run
+feature selections, including tests, examples, and benchmarks. The script restores
+the original lockfile after the checks, including on failure. Run
 `bash scripts/test-backends.sh zarrs-msrv` with Rust 1.91 for zarrs 0.23.
 
 The Python package requires Rust 1.89 for source builds and Python 3.11 or newer.
