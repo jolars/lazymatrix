@@ -208,8 +208,9 @@ add residual policies, cached sums, update rules, or an entire solver to the cra
   example.
 
 The repository's devenv supplies Rust 1.89, `go-task`, and the configured
-pre-commit hooks. The core and sprs 0.11.4 MSRV is Rust 1.85. Other backend checks
-retain Rust 1.87, except for nalgebra 0.35 (including the `nalgebra` alias), which
+pre-commit hooks. The core MSRV is Rust 1.84, and sprs 0.11.4 requires Rust 1.85.
+Other backend checks retain Rust 1.87, except for nalgebra 0.35 (including the
+`nalgebra` alias), which
 requires Rust 1.89. The lockfile uses
 sprs 0.11.4 for Rust 1.85 compatibility; sprs 0.11.5 requires Rust 1.88. Run
 `bash scripts/test-backends.sh msrv` with Rust 1.87 to check the compatible

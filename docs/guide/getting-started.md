@@ -26,8 +26,8 @@ Match your direct backend dependency to the selected release. Versioned features
 such as `nalgebra_v0_34` select an older supported release line. See the
 [README](https://github.com/jolars/lazymatrix#matrix-backends) for supported releases.
 
-The core supports Rust 1.85. Backend dependencies can require a newer compiler;
-for example, the `nalgebra` feature requires Rust 1.89.
+The core supports Rust 1.84. Backend dependencies can require a newer compiler;
+sprs 0.11.4 requires Rust 1.85, and the `nalgebra` feature requires Rust 1.89.
 
 ## Fit normalization and apply a product
 

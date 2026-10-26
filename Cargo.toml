@@ -1,7 +1,7 @@
 [package]
 name = "lazymatrix"
 version = "0.7.0"
-edition = "2024"
+edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Lazy normalized design matrices: apply column centering/scaling without materializing (X - 1cᵀ)S⁻¹, preserving sparsity."
 repository = "https://github.com/jolars/lazymatrix"
@@ -11,7 +11,7 @@ authors = [
     "Johan Larsson <johan@jolars.co>",
     "Viktor Segersall <viktor.segersall@proton.me>",
 ]
-rust-version = "1.85.0"
+rust-version = "1.84.0"
 readme = "README.md"
 keywords = ["matrix", "sparse", "linear-algebra", "centering", "scaling"]
 categories = ["mathematics", "science", "algorithms"]

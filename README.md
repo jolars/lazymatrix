@@ -38,8 +38,9 @@ cargo add lazymatrix --features ndarray
 cargo add ndarray@0.17
 ```
 
-The core library requires Rust 1.85 or newer. Optional backends can require a
-newer compiler; the `nalgebra` feature requires Rust 1.89.
+The core library requires Rust 1.84 or newer. Optional backends can require a
+newer compiler; sprs 0.11.4 requires Rust 1.85, and the `nalgebra` feature requires
+Rust 1.89.
 
 ## Usage
 
