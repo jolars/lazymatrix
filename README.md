@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lazymatrix.svg)](https://crates.io/crates/lazymatrix)
-[![docs.rs](https://img.shields.io/docsrs/lazymatrix)](https://docs.rs/lazymatrix)
+[![PyPI](https://badge.fury.io/py/lazymatrix.svg)](https://badge.fury.io/py/lazymatrix)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23666452.svg)](https://doi.org/10.5281/zenodo.23666452)
 
 LazyMatrix is a Rust library for column normalization of design matrices. It
@@ -134,7 +134,7 @@ If you use LazyMatrix in your research, please cite the [Zenodo
 archive](https://doi.org/10.5281/zenodo.23666452):
 
 > Larsson, Johan. (2026). jolars/lazymatrix: python-v0.1.0 (python-v0.1.0)
-> [Software]. Zenodo. https://doi.org/10.5281/zenodo.23666452
+> \[Software\]. Zenodo. https://doi.org/10.5281/zenodo.23666452
 
 This DOI identifies the archived `python-v0.1.0` release. Python and Rust
 releases are versioned independently.
