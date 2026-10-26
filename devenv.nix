@@ -71,11 +71,11 @@ in
 
       prettier = {
         enable = true;
-        files = "^website/";
+        files = "^docs/";
 
         settings = {
-          binPath = "./website/node_modules/.bin/prettier";
-          ignore-path = [ "website/.prettierignore" ];
+          binPath = "./docs/node_modules/.bin/prettier";
+          ignore-path = [ "docs/.prettierignore" ];
         };
       };
 

@@ -100,4 +100,4 @@ applies the header when serving the homepage. Use `pnpm preview:worker` to check
 response headers; the VitePress preview does not apply `_headers` rules.
 
 On NixOS, the repository's devenv provides a loader wrapper for the installed
-workerd binary. Run the Worker preview from `website/` inside that environment.
+workerd binary. Run the Worker preview from `docs/` inside that environment.

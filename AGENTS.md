@@ -64,7 +64,7 @@ Integration tests are in `tests/`. The backend suites reuse
 between implementations. Runnable demonstrations belong in `examples/`, and
 Criterion benchmarks belong in `benches/`. See `TODO.md` for planned API work.
 
-`website/` contains the VitePress landing page, guide, and benchmark comparisons
+`docs/` contains the VitePress landing page, guide, and benchmark comparisons
 at `https://lazymatrix.org`. Diplodocus embeds Python and Rust API references in
 the site; docs.rs remains available. `python/` contains the independently
 versioned Python package, with a private PyO3 extension under `python/rust/`.

@@ -102,7 +102,7 @@ async function extractionConfig(staging, storage) {
     )
   )
     .split("\0")
-    .filter((name) => name && !/^(website|python)\//.test(name));
+    .filter((name) => name && !/^(docs|python)\//.test(name));
   // Diplodocus fingerprints the Rust repository. Export source files so local
   // environments and Nix-generated symlinks cannot enter that input boundary.
   for (const name of names) {

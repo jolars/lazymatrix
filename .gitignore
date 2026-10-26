@@ -1,12 +1,12 @@
 # Devenv
-website/node_modules/
-website/.vitepress/cache/
-website/.vitepress/dist/
-website/.vitepress/theme/benchmark-results.json
-website/public/benchmarks/
-website/.wrangler/
-website/.env*
-website/.dev.vars*
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/.vitepress/theme/benchmark-results.json
+docs/public/benchmarks/
+docs/.wrangler/
+docs/.env*
+docs/.dev.vars*
 
 .devenv*
 devenv.local.nix
@@ -44,8 +44,8 @@ __pycache__/
 *.pyd
 python/dist/
 .diplodocus/
-website/reference/
-website/public/_diplodocus/
+docs/reference/
+docs/public/_diplodocus/
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

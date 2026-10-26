@@ -88,7 +88,7 @@ tasks:
       - task: website:install
       - task: python:build
       - cargo fetch --locked
-      - pnpm --dir website reference
+      - pnpm --dir docs reference
 
   release:check:
     desc: Validate Versionary configuration and coordinated release plans.
@@ -98,21 +98,21 @@ tasks:
 
   website:install:
     desc: Install locked website dependencies.
-    dir: website
+    dir: docs
     cmds:
       - pnpm install --frozen-lockfile
 
   website:dev:
     desc: Serve the website locally with live reload.
     deps: [website:install, python:build]
-    dir: website
+    dir: docs
     cmds:
       - pnpm dev
 
   website:check:
     desc: Check formatting, build the website, and validate Worker packaging.
     deps: [website:install, python:build]
-    dir: website
+    dir: docs
     cmds:
       - pnpm format:check
       - pnpm build
@@ -122,7 +122,7 @@ tasks:
   website:deploy:
     desc: Deploy the website to Cloudflare Workers.
     deps: [python:build]
-    dir: website
+    dir: docs
     cmds:
       - pnpm build
       - pnpm run deploy
