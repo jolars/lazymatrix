@@ -443,7 +443,7 @@ fn benchmark(c: &mut Criterion) {
                     let array = zarrs::array::ArrayBuilder::new(
                         vec![rows as u64, columns as u64],
                         chunk.to_vec(),
-                        zarrs::array::DataType::Float64,
+                        backend_aliases::zarrs_compat::float64(),
                         0.0_f64,
                     )
                     .build(
@@ -452,9 +452,7 @@ fn benchmark(c: &mut Criterion) {
                     )
                     .unwrap();
                     let values: Vec<_> = tm.dense.iter().flatten().copied().collect();
-                    array
-                        .store_array_subset_elements(&array.subset_all(), &values)
-                        .unwrap();
+                    backend_aliases::zarrs_compat::store_subset(&array, &values).unwrap();
                     let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
                     bench_matrix(c, &format!("zarrs_{chunk:?}/{label}"), &matrix, |v| {
                         v.to_vec()

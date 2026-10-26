@@ -5,7 +5,7 @@ faer_versions=(faer_v0_22 faer_v0_23 faer_v0_24)
 nalgebra_versions=(nalgebra_v0_32 nalgebra_v0_33 nalgebra_v0_34 nalgebra_v0_35)
 ndarray_versions=(ndarray_v0_15 ndarray_v0_16 ndarray_v0_17)
 sprs_versions=(sprs_v0_11)
-zarrs_versions=(zarrs_v0_22)
+zarrs_versions=(zarrs_v0_22 zarrs_v0_23)
 versions=("${faer_versions[@]}" "${nalgebra_versions[@]}" "${ndarray_versions[@]}" "${sprs_versions[@]}" "${zarrs_versions[@]}")
 
 test_features() {
@@ -59,15 +59,16 @@ test_coexistence() {
     test_pairs "${faer_versions[@]}"
     test_pairs "${nalgebra_versions[@]}"
     test_pairs "${ndarray_versions[@]}"
+    test_pairs "${zarrs_versions[@]}"
     local feature family
-    for feature in "${faer_versions[@]:0:2}" "${nalgebra_versions[@]:0:3}" "${ndarray_versions[@]:0:2}"; do
+    for feature in "${faer_versions[@]:0:2}" "${nalgebra_versions[@]:0:3}" "${ndarray_versions[@]:0:2}" "${zarrs_versions[@]:0:1}"; do
         family=${feature%%_v*}
         test_version "$feature,$family"
         test_fixtures --features "$feature,$family"
         test_fixtures --features "$feature,$family,parallel"
     done
     local combined
-    combined=$(IFS=,; echo "${faer_versions[*]},${nalgebra_versions[*]},${ndarray_versions[*]}")
+    combined=$(IFS=,; echo "${faer_versions[*]},${nalgebra_versions[*]},${ndarray_versions[*]},${zarrs_versions[*]}")
     test_fixtures --features "$combined"
     test_fixtures --all-features
 }
@@ -80,16 +81,16 @@ check_msrv() {
     cargo check --all-targets --locked --no-default-features
     cargo check --all-targets --locked --no-default-features --features parallel
     for feature in "${versions[@]}"; do
-        if [[ $feature != nalgebra_v0_35 ]]; then
+        if [[ $feature != nalgebra_v0_35 && $feature != zarrs_v0_23 ]]; then
             cargo check --all-targets --locked --no-default-features --features "$feature"
             cargo check --all-targets --locked --no-default-features --features "$feature,parallel"
         fi
     done
     local compatible=() fixture_compatible=()
     for feature in "${versions[@]}"; do
-        if [[ $feature != nalgebra_v0_35 ]]; then
+        if [[ $feature != nalgebra_v0_35 && $feature != zarrs_v0_23 ]]; then
             compatible+=("$feature")
-            if [[ $feature != sprs_* && $feature != zarrs_* ]]; then
+            if [[ $feature != sprs_* ]]; then
                 fixture_compatible+=("$feature")
             fi
         fi
@@ -107,6 +108,18 @@ check_msrv() {
     done
 }
 
+check_zarrs_msrv() {
+    if [[ $(rustc --version) != "rustc 1.91.0 "* ]]; then
+        echo "Run the zarrs 0.23 MSRV checks with Rust 1.91.0." >&2
+        exit 1
+    fi
+    local features
+    for features in zarrs_v0_23 zarrs_v0_23,parallel zarrs_v0_22,zarrs_v0_23 zarrs_v0_22,zarrs_v0_23,parallel; do
+        cargo check --all-targets --locked --no-default-features --features "$features"
+        cargo check --manifest-path "$fixture_manifest" --all-targets --locked --no-default-features --features "$features"
+    done
+}
+
 case "${1:-all}" in
 all)
     test_core
@@ -119,8 +132,9 @@ core) test_core ;;
 version) test_version "${2:?Specify a version feature.}" ;;
 coexistence | selection) test_coexistence ;;
 msrv) check_msrv ;;
+zarrs-msrv) check_zarrs_msrv ;;
 *)
-    echo "Usage: $0 [all|core|version FEATURE|coexistence|msrv]" >&2
+    echo "Usage: $0 [all|core|version FEATURE|coexistence|msrv|zarrs-msrv]" >&2
     exit 1
     ;;
 esac

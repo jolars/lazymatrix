@@ -86,7 +86,22 @@ pub(crate) use faer;
 pub(crate) use faer_traits;
 
 #[cfg(feature = "zarrs_v0_22")]
-pub(crate) use zarrs;
+#[path = "zarrs_compat_v0_22.rs"]
+pub(crate) mod zarrs_compat_v0_22;
+#[cfg(feature = "zarrs_v0_23")]
+#[path = "zarrs_compat_v0_23.rs"]
+pub(crate) mod zarrs_compat_v0_23;
+#[cfg(feature = "zarrs_all")]
+pub(crate) use zarrs_compat::zarrs;
+#[cfg(all(feature = "zarrs_v0_22", not(feature = "zarrs_v0_23")))]
+pub(crate) use zarrs_compat_v0_22 as zarrs_compat;
+#[cfg(feature = "zarrs_v0_23")]
+pub(crate) use zarrs_compat_v0_23 as zarrs_compat;
+
+#[cfg(feature = "zarrs_v0_23")]
+pub(crate) use ::zarrs as zarrs_0_23;
+#[cfg(feature = "zarrs_v0_22")]
+pub(crate) use ::zarrs_0_22;
 
 // Correctness tests name each release explicitly so feature unification cannot hide it.
 #[cfg(feature = "faer_v0_24")]

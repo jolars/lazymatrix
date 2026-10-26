@@ -82,6 +82,8 @@ jobs:
             args: version sprs_v0_11
           - group: zarrs-0.22
             args: version zarrs_v0_22
+          - group: zarrs-0.23
+            args: version zarrs_v0_23
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
@@ -138,6 +140,19 @@ jobs:
         with:
           key: msrv
       - run: bash scripts/test-backends.sh msrv
+
+  zarrs-msrv:
+    name: zarrs 0.23 MSRV (Rust 1.91)
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: 1.91.0
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install 1.91.0 --profile minimal --no-self-update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: zarrs-msrv
+      - run: bash scripts/test-backends.sh zarrs-msrv
 
   python:
     name: Python (${{ matrix.python }})
@@ -210,6 +225,7 @@ jobs:
         core-msrv,
         core-wasm,
         msrv,
+        zarrs-msrv,
         python,
         python-package,
         release-config,

@@ -15,5 +15,6 @@ cargo test --manifest-path tests/feature_unification/Cargo.toml --locked \
 
 `scripts/test-backends.sh coexistence` covers every version pair, both with and
 without parallelism, and all supported releases together. MSRV checks exclude
-nalgebra 0.35. The separate lockfile starts from the root lockfile's dependency
-versions; update both deliberately when changing supported releases.
+nalgebra 0.35 and zarrs 0.23; the latter has a separate Rust 1.91 check. The
+separate lockfile starts from the root lockfile's dependency versions; update both
+deliberately when changing supported releases.

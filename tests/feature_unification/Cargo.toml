@@ -18,6 +18,8 @@ members = [
     "consumers/ndarray_v0_15",
     "consumers/ndarray_v0_16",
     "consumers/ndarray_v0_17",
+    "consumers/zarrs_v0_22",
+    "consumers/zarrs_v0_23",
 ]
 
 [features]
@@ -32,10 +34,15 @@ nalgebra_v0_35 = ["dep:consumer_nalgebra_v0_35"]
 ndarray_v0_15 = ["dep:consumer_ndarray_v0_15"]
 ndarray_v0_16 = ["dep:consumer_ndarray_v0_16"]
 ndarray_v0_17 = ["dep:consumer_ndarray_v0_17"]
+zarrs_v0_22 = ["dep:consumer_zarrs_v0_22"]
+zarrs_v0_23 = ["dep:consumer_zarrs_v0_23"]
+zarrs = ["zarrs_v0_23"]
 faer = ["faer_v0_24"]
 nalgebra = ["nalgebra_v0_35"]
 ndarray = ["ndarray_v0_17"]
 parallel = [
+    "consumer_zarrs_v0_22?/parallel",
+    "consumer_zarrs_v0_23?/parallel",
     "consumer_faer_v0_22?/parallel",
     "consumer_faer_v0_23?/parallel",
     "consumer_faer_v0_24?/parallel",
@@ -59,3 +66,5 @@ consumer_nalgebra_v0_35 = { path = "consumers/nalgebra_v0_35", optional = true }
 consumer_ndarray_v0_15 = { path = "consumers/ndarray_v0_15", optional = true }
 consumer_ndarray_v0_16 = { path = "consumers/ndarray_v0_16", optional = true }
 consumer_ndarray_v0_17 = { path = "consumers/ndarray_v0_17", optional = true }
+consumer_zarrs_v0_22 = { path = "consumers/zarrs_v0_22", optional = true }
+consumer_zarrs_v0_23 = { path = "consumers/zarrs_v0_23", optional = true }

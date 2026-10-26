@@ -14,7 +14,7 @@ use std::time::Instant;
 use lazymatrix::{
     Centering, LazyMatrix, MatTransposeVecInto, MatVecInto, Normalization, Scaling, ZarrMatrix,
 };
-use zarrs::array::{Array, ArrayBuilder, DataType};
+use zarrs::array::{Array, ArrayBuilder};
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::ListableStorageTraits;
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let array = ArrayBuilder::new(
         vec![nrows as u64, ncols as u64],
         chunks.to_vec(),
-        DataType::Float64,
+        backend_aliases::zarrs_compat::float64(),
         0.0f64,
     )
     .build(store.clone(), "/matrix")?;
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         ((global_row % 101 + 17 * (global_col % 101)) % 101) as f64 / 50.0;
                 }
             }
-            array.store_chunk_elements(&[i, j], &values)?;
+            backend_aliases::zarrs_compat::store_chunk(&array, &[i, j], &values)?;
         }
     }
     println!(

@@ -87,7 +87,7 @@
 //! | nalgebra | `nalgebra_v0_32`, `nalgebra_v0_33`, `nalgebra_v0_34`, `nalgebra_v0_35` | 0.35 |
 //! | ndarray | `ndarray_v0_15`, `ndarray_v0_16`, `ndarray_v0_17` | 0.17 |
 //! | sprs | `sprs_v0_11` | 0.11 |
-//! | zarrs | `zarrs_v0_22` | 0.22 |
+//! | zarrs | `zarrs_v0_22`, `zarrs_v0_23` | 0.23 |
 //!
 //! If Cargo enables several releases of one backend, every enabled release
 //! receives its own trait implementations. Another dependency enabling a newer
@@ -98,6 +98,8 @@
 //! The core requires Rust 1.85. Other backends retain their dependency MSRVs. The `nalgebra` and
 //! `nalgebra_v0_35` features require Rust 1.89. The `nalgebra` feature previously
 //! selected 0.34; use `nalgebra_v0_34` to retain that release and Rust 1.87 support.
+//! The `zarrs` and `zarrs_v0_23` features require Rust 1.91; `zarrs_v0_22`
+//! retains Rust 1.87 support.
 //! The sprs backend supports Rust 1.85 with sprs 0.11.4, as locked in this
 //! repository. sprs 0.11.5 requires Rust 1.88.
 //!
@@ -268,9 +270,15 @@
 //! # {
 //! use std::sync::Arc;
 //! use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling, ZarrMatrix};
-//! use zarrs::{array::{ArrayBuilder, DataType}, storage::store::MemoryStore};
+//! # #[cfg(all(feature = "zarrs_v0_22", not(feature = "zarrs_v0_23")))]
+//! # use zarrs_0_22 as zarrs;
+//! use zarrs::{array::ArrayBuilder, storage::store::MemoryStore};
+//! # #[cfg(feature = "zarrs_v0_23")]
+//! use zarrs::array::data_type::float64;
+//! # #[cfg(all(feature = "zarrs_v0_22", not(feature = "zarrs_v0_23")))]
+//! # let float64 = || zarrs::array::DataType::Float64;
 //!
-//! let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], DataType::Float64, 1.0f64)
+//! let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], float64(), 1.0f64)
 //!     .build(Arc::new(MemoryStore::new()), "/matrix")?;
 //! let matrix = ZarrMatrix::<_, f64>::try_new(array)?;
 //! let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd))?;
@@ -340,7 +348,10 @@ extern crate ndarray as ndarray_0_17;
 extern crate sprs;
 
 #[cfg(feature = "zarrs_v0_22")]
-extern crate zarrs;
+extern crate zarrs_0_22;
+
+#[cfg(feature = "zarrs_v0_23")]
+extern crate zarrs as zarrs_0_23;
 
 #[cfg(all(
     feature = "faer_all",
@@ -372,7 +383,10 @@ compile_error!("`ndarray_all` is internal; enable `ndarray` or a `ndarray_v*` fe
 #[cfg(all(feature = "sprs_all", not(feature = "sprs_v0_11")))]
 compile_error!("`sprs_all` is internal; enable `sprs` or a `sprs_v*` feature");
 
-#[cfg(all(feature = "zarrs_all", not(feature = "zarrs_v0_22")))]
+#[cfg(all(
+    feature = "zarrs_all",
+    not(any(feature = "zarrs_v0_22", feature = "zarrs_v0_23"))
+))]
 compile_error!("`zarrs_all` is internal; enable `zarrs` or a `zarrs_v*` feature");
 
 mod backends;
@@ -398,7 +412,7 @@ mod weighted_sums;
 #[cfg(feature = "sprs_all")]
 pub use backends::sprs::{SprsCsc, SprsCsr};
 #[cfg(feature = "zarrs_all")]
-pub use backends::zarrs::{ZarrMatrix, ZarrMatrixError};
+pub use backends::zarrs::{ZarrArray, ZarrMatrix, ZarrMatrixError};
 pub use column::{LazyColumn, LazySparseColumn, SparseColumnRef};
 pub use eager::EagerMatrix;
 pub use intercept::WithIntercept;

@@ -20,14 +20,15 @@ cargo add ndarray@0.17
 | `nalgebra` | Dense, CSC, and CSR sparse matrices     | nalgebra 0.35            |
 | `ndarray`  | Dense arrays and views                  | ndarray 0.17             |
 | `sprs`     | CSC and CSR sparse matrices             | sprs 0.11                |
-| `zarrs`    | Synchronous two-dimensional Zarr arrays | zarrs 0.22               |
+| `zarrs`    | Synchronous two-dimensional Zarr arrays | zarrs 0.23               |
 
 Match your direct backend dependency to the selected release. Versioned features
 such as `nalgebra_v0_34` select an older supported release line. See the
 [README](https://github.com/jolars/lazymatrix#matrix-backends) for supported releases.
 
 The core supports Rust 1.84. Backend dependencies can require a newer compiler;
-sprs 0.11.4 requires Rust 1.85, and the `nalgebra` feature requires Rust 1.89.
+sprs 0.11.4 requires Rust 1.85, and the `nalgebra` feature requires Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust 1.87
+support.
 
 ## Fit normalization and apply a product
 

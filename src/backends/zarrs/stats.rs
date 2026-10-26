@@ -1,7 +1,4 @@
-use zarrs::array::ElementOwned;
-use zarrs::storage::ReadableStorageTraits;
-
-use super::{ZarrMatrix, ZarrMatrixError};
+use super::{ZarrArray, ZarrMatrix, ZarrMatrixError};
 use crate::{Centering, ColumnStats, MatrixShape, Normalization, Scalar, Scaling};
 
 #[derive(Clone, Copy)]
@@ -54,7 +51,7 @@ fn finish_norm<F: Scalar>(sum: F, scale: Scaling, rows: usize) -> F {
     }
 }
 
-impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> ZarrMatrix<S, F> {
+impl<A: ZarrArray<F>, F: Scalar> ZarrMatrix<A, F> {
     fn reductions(
         &self,
         mean: bool,
@@ -99,9 +96,7 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> Zarr
     }
 }
 
-impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> ColumnStats<F>
-    for ZarrMatrix<S, F>
-{
+impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
     fn normalization_stats(
         &self,
         spec: Normalization,

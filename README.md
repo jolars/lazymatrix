@@ -40,7 +40,8 @@ cargo add ndarray@0.17
 
 The core library requires Rust 1.84 or newer. Optional backends can require a
 newer compiler; sprs 0.11.4 requires Rust 1.85, and the `nalgebra` feature requires
-Rust 1.89.
+Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust 1.87
+support.
 
 ## Usage
 
@@ -102,7 +103,7 @@ matrix library:
   | `nalgebra` | 0.32, 0.33, 0.34, 0.35 | Dense, CSC, and CSR matrices            |
   | `ndarray`  | 0.15, 0.16, 0.17       | Dense arrays and views                  |
   | `sprs`     | 0.11                   | CSC and CSR matrices                    |
-  | `zarrs`    | 0.22                   | Synchronous two-dimensional Zarr arrays |
+  | `zarrs`    | 0.22, 0.23             | Synchronous two-dimensional Zarr arrays |
 
 The short feature names select the newest supported release. Use a versioned
 feature such as `nalgebra_v0_34` for an older release, and match your direct

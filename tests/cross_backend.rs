@@ -2,7 +2,8 @@
     feature = "faer_all",
     feature = "nalgebra_all",
     feature = "ndarray_all",
-    feature = "sprs_all"
+    feature = "sprs_all",
+    feature = "zarrs_all"
 ))]
 //! Agreement between every enabled backend release, including versions of the same backend.
 
@@ -308,6 +309,69 @@ mod sprs {
     }
 }
 
+#[cfg(feature = "zarrs_all")]
+macro_rules! zarrs_adapter {
+    ($name:ident, $compat:ident) => {
+        mod $name {
+            use super::*;
+            use crate::backend_aliases::$compat as compat;
+            use compat::zarrs::{array::ArrayBuilder, storage::store::MemoryStore};
+            use std::sync::Arc;
+
+            fn build(
+                tm: &TestMatrix,
+            ) -> lazymatrix::ZarrMatrix<compat::zarrs::array::Array<MemoryStore>> {
+                let array = ArrayBuilder::new(
+                    vec![tm.nrows as u64, tm.ncols as u64],
+                    vec![3, 2],
+                    compat::float64(),
+                    0.0_f64,
+                )
+                .build(Arc::new(MemoryStore::new()), "/matrix")
+                .unwrap();
+                let values: Vec<_> = tm.dense.iter().flatten().copied().collect();
+                compat::store_subset(&array, &values).unwrap();
+                lazymatrix::ZarrMatrix::try_new(array).unwrap()
+            }
+
+            pub(super) fn products(
+                tm: &TestMatrix,
+                spec: Normalization,
+                v: &[f64],
+                u: &[f64],
+            ) -> Products {
+                let lazy = LazyMatrix::new(build(tm), spec).unwrap();
+                (
+                    lazy.matvec(&v.to_vec()).unwrap(),
+                    lazy.mat_transpose_vec(&u.to_vec()).unwrap(),
+                )
+            }
+
+            #[cfg(any(
+                feature = "faer_all",
+                feature = "nalgebra_all",
+                feature = "ndarray_all"
+            ))]
+            pub(super) fn materialized<O: lazymatrix::MatrixWrite<f64>>(out: &mut O) {
+                let matrix = build(&TestMatrix {
+                    nrows: 3,
+                    ncols: 2,
+                    dense: vec![vec![1.0, 0.0], vec![2.0, 3.0], vec![0.0, 6.0]],
+                    triplets: vec![],
+                });
+                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
+                    .to_eager_into(out)
+                    .unwrap();
+            }
+        }
+    };
+}
+
+#[cfg(feature = "zarrs_v0_22")]
+zarrs_adapter!(zarrs_0_22, zarrs_compat_v0_22);
+#[cfg(feature = "zarrs_v0_23")]
+zarrs_adapter!(zarrs_0_23, zarrs_compat_v0_23);
+
 fn check_agreement(
     left: impl Fn(&TestMatrix, Normalization, &[f64], &[f64]) -> Products,
     right: impl Fn(&TestMatrix, Normalization, &[f64], &[f64]) -> Products,
@@ -374,6 +438,10 @@ fn all_enabled_releases_agree() {
         ("ndarray_0_17", ndarray_0_17::products),
         #[cfg(feature = "sprs_v0_11")]
         ("sprs", sprs::products),
+        #[cfg(feature = "zarrs_v0_22")]
+        ("zarrs_0_22", zarrs_0_22::products),
+        #[cfg(feature = "zarrs_v0_23")]
+        ("zarrs_0_23", zarrs_0_23::products),
     ];
     for (i, &(left_name, left)) in backends.iter().enumerate() {
         for &(right_name, right) in &backends[i + 1..] {
@@ -519,6 +587,16 @@ fn check_materialization_destination<
     #[cfg(feature = "sprs_all")]
     {
         sprs::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "zarrs_v0_22")]
+    {
+        zarrs_0_22::materialized(out);
+        check(out);
+    }
+    #[cfg(feature = "zarrs_v0_23")]
+    {
+        zarrs_0_23::materialized(out);
         check(out);
     }
 }

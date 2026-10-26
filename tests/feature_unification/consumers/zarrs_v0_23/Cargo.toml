@@ -1,0 +1,16 @@
+[package]
+name = "consumer_zarrs_v0_23"
+version = "0.0.0"
+edition = "2024"
+publish = false
+rust-version = "1.91"
+
+[lib]
+path = "lib.rs"
+
+[features]
+parallel = ["lazymatrix/parallel"]
+
+[dependencies]
+lazymatrix = { path = "../../../..", default-features = false, features = ["zarrs_v0_23"] }
+zarrs = { version = "0.23", default-features = false }

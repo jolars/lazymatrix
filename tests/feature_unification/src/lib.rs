@@ -59,3 +59,15 @@ fn ndarray_v0_16_consumer() {
 fn ndarray_v0_17_consumer() {
     consumer_ndarray_v0_17::check();
 }
+
+#[cfg(all(test, feature = "zarrs_v0_22"))]
+#[test]
+fn zarrs_v0_22_consumer() {
+    consumer_zarrs_v0_22::check();
+}
+
+#[cfg(all(test, feature = "zarrs_v0_23"))]
+#[test]
+fn zarrs_v0_23_consumer() {
+    consumer_zarrs_v0_23::check();
+}

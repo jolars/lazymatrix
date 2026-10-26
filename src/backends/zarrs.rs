@@ -1,15 +1,17 @@
 //! Synchronous matrix operations on chunked Zarr arrays.
 
+// Each release implements array access from the same compatibility source.
+#![allow(clippy::duplicate_mod)]
+
 mod stats;
+
+#[cfg(feature = "zarrs_v0_22")]
+mod v0_22;
+#[cfg(feature = "zarrs_v0_23")]
+mod v0_23;
 
 use std::fmt;
 use std::marker::PhantomData;
-
-use zarrs::array::ElementOwned;
-use zarrs::array::codec::CodecOptions;
-use zarrs::array::{Array, ArrayError};
-use zarrs::array_subset::ArraySubset;
-use zarrs::storage::ReadableStorageTraits;
 
 use crate::{
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
@@ -25,7 +27,7 @@ pub enum ZarrMatrixError {
     /// A dimension or decoded chunk cannot be represented in addressable memory.
     SizeOverflow,
     /// The element type is incompatible, or Zarr data could not be read or decoded.
-    Array(Box<ArrayError>),
+    Array(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl fmt::Display for ZarrMatrixError {
@@ -51,13 +53,41 @@ impl std::error::Error for ZarrMatrixError {
     }
 }
 
-impl From<ArrayError> for ZarrMatrixError {
-    fn from(error: ArrayError) -> Self {
-        Self::Array(Box::new(error))
+mod private {
+    use super::ZarrMatrixError;
+    use std::ops::Range;
+
+    pub trait ArrayRead<F> {
+        type ReadOptions;
+        fn serial_options() -> Self::ReadOptions;
+        fn shape(&self) -> &[u64];
+        fn validate_scalar(&self) -> Result<(), ZarrMatrixError>;
+        fn chunk_grid_shape(&self) -> &[u64];
+        fn chunk_shape(&self, indices: &[u64]) -> Result<[u64; 2], ZarrMatrixError>;
+        fn chunk_origin(&self, indices: &[u64]) -> Result<[u64; 2], ZarrMatrixError>;
+        fn chunk_ranges(
+            &self,
+            rows: &Range<usize>,
+            columns: &Range<usize>,
+        ) -> Result<[Range<u64>; 2], ZarrMatrixError>;
+        fn read_chunk(
+            &self,
+            indices: &[u64],
+            options: &Self::ReadOptions,
+        ) -> Result<Vec<F>, ZarrMatrixError>;
     }
 }
 
+/// A synchronous readable Zarr array supported by [`ZarrMatrix`].
+///
+/// Implemented for each enabled zarrs release's `Array<S>` with `f32` and `f64`
+/// elements. This trait is sealed; downstream crates cannot implement it.
+pub trait ZarrArray<F: Scalar>: private::ArrayRead<F> {}
+
 /// A read-only, two-dimensional Zarr array presented as a matrix.
+///
+/// The array parameter `A` is the complete zarrs `Array<S>` type, rather than
+/// its storage type. Both supported releases can coexist in the same build.
 ///
 /// Supports `f32` and `f64` elements from synchronous readable stores. Products
 /// and statistics read one chunk at a time in grid order, including fill values
@@ -78,13 +108,13 @@ impl From<ArrayError> for ZarrMatrixError {
 /// reusable buffer. Reads decode intersecting chunks serially; chunk and codec
 /// workspace is additional to the caller's buffer, including outer shards.
 #[derive(Debug)]
-pub struct ZarrMatrix<S: ?Sized, F = f64> {
-    array: Array<S>,
+pub struct ZarrMatrix<A, F = f64> {
+    array: A,
     shape: [usize; 2],
     scalar: PhantomData<F>,
 }
 
-impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> ZarrMatrix<S, F> {
+impl<A: ZarrArray<F>, F: Scalar> ZarrMatrix<A, F> {
     /// Wrap an opened array after checking its rank, shape, and scalar type.
     ///
     /// This reads no chunks. Missing chunks retain the array's configured fill
@@ -93,11 +123,11 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> Zarr
     /// # Errors
     /// Returns an error for a rank other than two, dimensions that do not fit
     /// `usize`, or an element type different from `F`. Data is not converted.
-    pub fn try_new(array: Array<S>) -> Result<Self, ZarrMatrixError> {
+    pub fn try_new(array: A) -> Result<Self, ZarrMatrixError> {
         if array.shape().len() != 2 {
             return Err(ZarrMatrixError::InvalidRank(array.shape().len()));
         }
-        F::validate_data_type(array.data_type())?;
+        array.validate_scalar()?;
         let shape = [
             usize::try_from(array.shape()[0]).map_err(|_| ZarrMatrixError::SizeOverflow)?,
             usize::try_from(array.shape()[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?,
@@ -116,17 +146,16 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> Zarr
         if self.nrows() == 0 || self.ncols() == 0 {
             return Ok(());
         }
-        let mut options = CodecOptions::default();
-        options.set_concurrent_target(1);
+        let options = A::serial_options();
         let grid = self.array.chunk_grid_shape();
         for i in 0..grid[0] {
             for j in 0..grid[1] {
                 let indices = [i, j];
                 let chunk_shape = self.array.chunk_shape(&indices)?;
-                let rows = usize::try_from(chunk_shape[0].get())
-                    .map_err(|_| ZarrMatrixError::SizeOverflow)?;
-                let cols = usize::try_from(chunk_shape[1].get())
-                    .map_err(|_| ZarrMatrixError::SizeOverflow)?;
+                let rows =
+                    usize::try_from(chunk_shape[0]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+                let cols =
+                    usize::try_from(chunk_shape[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
                 rows.checked_mul(cols)
                     .and_then(|n| n.checked_mul(std::mem::size_of::<F>()))
                     .filter(|&bytes| bytes <= isize::MAX as usize)
@@ -138,9 +167,7 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> Zarr
                     usize::try_from(origin[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
                 let valid_rows = rows.min(self.nrows().saturating_sub(row_start));
                 let valid_cols = cols.min(self.ncols().saturating_sub(col_start));
-                let values = self
-                    .array
-                    .retrieve_chunk_elements_opt::<F>(&indices, &options)?;
+                let values = self.array.read_chunk(&indices, &options)?;
                 // Edge chunks contain padding outside the logical matrix.
                 for row in 0..valid_rows {
                     for col in 0..valid_cols {
@@ -153,19 +180,19 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> Zarr
     }
 }
 
-impl<S: ?Sized, F> ZarrMatrix<S, F> {
+impl<A, F> ZarrMatrix<A, F> {
     /// Borrow the original array without changing its metadata.
-    pub fn as_inner(&self) -> &Array<S> {
+    pub fn as_inner(&self) -> &A {
         &self.array
     }
 
     /// Recover the original array without copying its data.
-    pub fn into_inner(self) -> Array<S> {
+    pub fn into_inner(self) -> A {
         self.array
     }
 }
 
-impl<S: ?Sized, F> MatrixShape for ZarrMatrix<S, F> {
+impl<A, F> MatrixShape for ZarrMatrix<A, F> {
     fn nrows(&self) -> usize {
         self.shape[0]
     }
@@ -174,14 +201,14 @@ impl<S: ?Sized, F> MatrixShape for ZarrMatrix<S, F> {
     }
 }
 
-impl<S: ?Sized, F> MatrixErrorType for ZarrMatrix<S, F> {
+impl<A, F> MatrixErrorType for ZarrMatrix<A, F> {
     type Error = ZarrMatrixError;
 }
 
-impl<S, F> crate::ReadBlock<F> for ZarrMatrix<S, F>
+impl<A, F> crate::ReadBlock<F> for ZarrMatrix<A, F>
 where
-    S: ReadableStorageTraits + ?Sized + 'static,
-    F: Scalar + ElementOwned,
+    A: ZarrArray<F>,
+    F: Scalar,
 {
     fn read_block<'buf>(
         &self,
@@ -194,57 +221,48 @@ where
         if len == 0 {
             return Ok(crate::DenseBlock::new(output, rows.len(), columns.len()));
         }
-        let subset = ArraySubset::new_with_start_shape(
-            vec![rows.start as u64, columns.start as u64],
-            vec![rows.len() as u64, columns.len() as u64],
-        )
-        .map_err(ArrayError::from)?;
-        let chunks = self
-            .array
-            .chunks_in_array_subset(&subset)
-            .map_err(ArrayError::from)?
-            .ok_or_else(|| ArrayError::InvalidArraySubset(subset, self.array.shape().to_vec()))?;
-        let mut options = CodecOptions::default();
-        options.set_concurrent_target(1);
-        for indices in chunks.indices() {
-            let chunk_shape = self.array.chunk_shape(&indices)?;
-            let chunk_rows =
-                usize::try_from(chunk_shape[0].get()).map_err(|_| ZarrMatrixError::SizeOverflow)?;
-            let chunk_cols =
-                usize::try_from(chunk_shape[1].get()).map_err(|_| ZarrMatrixError::SizeOverflow)?;
-            chunk_rows
-                .checked_mul(chunk_cols)
-                .and_then(|n| n.checked_mul(std::mem::size_of::<F>()))
-                .filter(|&bytes| bytes <= isize::MAX as usize)
-                .ok_or(ZarrMatrixError::SizeOverflow)?;
-            let origin = self.array.chunk_origin(&indices)?;
-            let row_start =
-                usize::try_from(origin[0]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
-            let col_start =
-                usize::try_from(origin[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
-            let row_end = row_start.saturating_add(chunk_rows).min(rows.end);
-            let col_end = col_start.saturating_add(chunk_cols).min(columns.end);
-            let values = self
-                .array
-                .retrieve_chunk_elements_opt::<F>(&indices, &options)?;
-            for row in row_start.max(rows.start)..row_end {
-                let count = col_end - col_start.max(columns.start);
-                let source =
-                    (row - row_start) * chunk_cols + columns.start.saturating_sub(col_start);
-                let destination =
-                    (row - rows.start) * columns.len() + col_start.saturating_sub(columns.start);
-                output[destination..destination + count]
-                    .copy_from_slice(&values[source..source + count]);
+        let [row_chunks, col_chunks] = self.array.chunk_ranges(&rows, &columns)?;
+        let options = A::serial_options();
+        for i in row_chunks {
+            for j in col_chunks.clone() {
+                let indices = [i, j];
+                let chunk_shape = self.array.chunk_shape(&indices)?;
+                let chunk_rows =
+                    usize::try_from(chunk_shape[0]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+                let chunk_cols =
+                    usize::try_from(chunk_shape[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+                chunk_rows
+                    .checked_mul(chunk_cols)
+                    .and_then(|n| n.checked_mul(std::mem::size_of::<F>()))
+                    .filter(|&bytes| bytes <= isize::MAX as usize)
+                    .ok_or(ZarrMatrixError::SizeOverflow)?;
+                let origin = self.array.chunk_origin(&indices)?;
+                let row_start =
+                    usize::try_from(origin[0]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+                let col_start =
+                    usize::try_from(origin[1]).map_err(|_| ZarrMatrixError::SizeOverflow)?;
+                let row_end = row_start.saturating_add(chunk_rows).min(rows.end);
+                let col_end = col_start.saturating_add(chunk_cols).min(columns.end);
+                let values = self.array.read_chunk(&indices, &options)?;
+                for row in row_start.max(rows.start)..row_end {
+                    let count = col_end - col_start.max(columns.start);
+                    let source =
+                        (row - row_start) * chunk_cols + columns.start.saturating_sub(col_start);
+                    let destination = (row - rows.start) * columns.len()
+                        + col_start.saturating_sub(columns.start);
+                    output[destination..destination + count]
+                        .copy_from_slice(&values[source..source + count]);
+                }
             }
         }
         Ok(crate::DenseBlock::new(output, rows.len(), columns.len()))
     }
 }
 
-impl<S, F, X, Y> MatVecInto<X, Y> for ZarrMatrix<S, F>
+impl<A, F, X, Y> MatVecInto<X, Y> for ZarrMatrix<A, F>
 where
-    S: ReadableStorageTraits + ?Sized + 'static,
-    F: Scalar + ElementOwned,
+    A: ZarrArray<F>,
+    F: Scalar,
     X: VectorView<F>,
     Y: VectorViewMut<F>,
 {
@@ -253,10 +271,10 @@ where
     }
 }
 
-impl<S, F, X, Y> MatVecScaledInto<X, Y, F> for ZarrMatrix<S, F>
+impl<A, F, X, Y> MatVecScaledInto<X, Y, F> for ZarrMatrix<A, F>
 where
-    S: ReadableStorageTraits + ?Sized + 'static,
-    F: Scalar + ElementOwned,
+    A: ZarrArray<F>,
+    F: Scalar,
     X: VectorView<F>,
     Y: VectorViewMut<F>,
 {
@@ -281,10 +299,10 @@ where
     }
 }
 
-impl<S, F, X, Y> MatTransposeVecInto<X, Y> for ZarrMatrix<S, F>
+impl<A, F, X, Y> MatTransposeVecInto<X, Y> for ZarrMatrix<A, F>
 where
-    S: ReadableStorageTraits + ?Sized + 'static,
-    F: Scalar + ElementOwned,
+    A: ZarrArray<F>,
+    F: Scalar,
     X: VectorView<F>,
     Y: VectorViewMut<F>,
 {
@@ -293,10 +311,10 @@ where
     }
 }
 
-impl<S, F, X, Y> MatTransposeVecScaledInto<X, Y, F> for ZarrMatrix<S, F>
+impl<A, F, X, Y> MatTransposeVecScaledInto<X, Y, F> for ZarrMatrix<A, F>
 where
-    S: ReadableStorageTraits + ?Sized + 'static,
-    F: Scalar + ElementOwned,
+    A: ZarrArray<F>,
+    F: Scalar,
     X: VectorView<F>,
     Y: VectorViewMut<F>,
 {
@@ -327,9 +345,7 @@ where
     }
 }
 
-impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> MatVec<Vec<F>>
-    for ZarrMatrix<S, F>
-{
+impl<A: ZarrArray<F>, F: Scalar> MatVec<Vec<F>> for ZarrMatrix<A, F> {
     fn matvec(&self, x: &Vec<F>) -> Result<Vec<F>, Self::Error> {
         assert_eq!(x.len(), self.ncols(), "matvec: dimension mismatch");
         let mut out = vec![F::zero(); self.nrows()];
@@ -338,9 +354,7 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> MatV
     }
 }
 
-impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> MatTransposeVec<Vec<F>>
-    for ZarrMatrix<S, F>
-{
+impl<A: ZarrArray<F>, F: Scalar> MatTransposeVec<Vec<F>> for ZarrMatrix<A, F> {
     fn mat_transpose_vec(&self, x: &Vec<F>) -> Result<Vec<F>, Self::Error> {
         assert_eq!(
             x.len(),
@@ -353,10 +367,10 @@ impl<S: ReadableStorageTraits + ?Sized + 'static, F: Scalar + ElementOwned> MatT
     }
 }
 
-impl<S, F> crate::MaterializeDense<F> for ZarrMatrix<S, F>
+impl<A, F> crate::MaterializeDense<F> for ZarrMatrix<A, F>
 where
-    S: ReadableStorageTraits + ?Sized + 'static,
-    F: Scalar + ElementOwned,
+    A: ZarrArray<F>,
+    F: Scalar,
 {
     fn materialize_normalized_into<O: crate::MatrixWrite<F> + ?Sized>(
         &self,

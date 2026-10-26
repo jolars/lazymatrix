@@ -78,6 +78,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.92"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
 name = "atomic-wait"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -692,10 +703,69 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
+name = "futures"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a31d2a3fbaaeb2af2368bbdd904aa8e812d3c04a1ee10d3171f52d556e5d0a3"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+]
+
+[[package]]
+name = "futures-channel"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+
+[[package]]
+name = "futures-executor"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "031b47cf1a3c6cc8bc2fc76cd437f521619387907d469316e7c0bc278f1f5432"
+dependencies = [
+ "futures-core",
+ "futures-task",
+ "futures-util",
+]
+
+[[package]]
+name = "futures-io"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed"
+
+[[package]]
+name = "futures-macro"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
+name = "futures-sink"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
 
 [[package]]
 name = "futures-task"
@@ -709,8 +779,13 @@ version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
 dependencies = [
+ "futures-channel",
  "futures-core",
+ "futures-io",
+ "futures-macro",
+ "futures-sink",
  "futures-task",
+ "memchr",
  "pin-project-lite",
  "slab",
 ]
@@ -1257,7 +1332,8 @@ dependencies = [
  "rayon",
  "sprs",
  "tempfile",
- "zarrs",
+ "zarrs 0.22.10",
+ "zarrs 0.23.14",
 ]
 
 [[package]]
@@ -1271,6 +1347,18 @@ name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
+name = "libz-sys"
+version = "1.1.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f710a23e6dbf193214fd46ca56a9d6864e550abe86202184532ae7275e46de19"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
 
 [[package]]
 name = "linux-raw-sys"
@@ -1382,7 +1470,18 @@ version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3341a273f6c9d5bef1908f17b7267bbab0e95c9bf69a0d4dcf8e9e1b2c76ef67"
 dependencies = [
- "monostate-impl",
+ "monostate-impl 0.1.18",
+ "serde",
+ "serde_core",
+]
+
+[[package]]
+name = "monostate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdc4dfdf312bb1b22fce127237589f4ee31652bc479f3d208332f32132aaccc9"
+dependencies = [
+ "monostate-impl 1.0.3",
  "serde",
  "serde_core",
 ]
@@ -1396,6 +1495,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "monostate-impl"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a656449eeb444c77364a3033f013c51869eee320c0dff805eb53024c0dfd435b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -1946,6 +2056,12 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "pkg-config"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "plotters"
@@ -2636,6 +2752,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyvec"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
+
+[[package]]
 name = "tracing"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2736,6 +2858,12 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "version_check"
@@ -2986,12 +3114,107 @@ dependencies = [
  "thread_local",
  "unsafe_cell_slice",
  "uuid",
- "zarrs_data_type",
+ "zarrs_data_type 0.4.2",
  "zarrs_filesystem",
- "zarrs_metadata",
- "zarrs_metadata_ext",
- "zarrs_plugin",
+ "zarrs_metadata 0.6.2",
+ "zarrs_metadata_ext 0.2.2",
+ "zarrs_plugin 0.2.3",
  "zarrs_registry",
+ "zarrs_storage",
+]
+
+[[package]]
+name = "zarrs"
+version = "0.23.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbd6697e73e803a80f182036563038ccfaf7fca1b71fc510cce65daaa45478f8"
+dependencies = [
+ "async-lock",
+ "base64",
+ "bytemuck",
+ "bytes",
+ "derive_more",
+ "flate2",
+ "getrandom 0.3.4",
+ "half",
+ "inventory",
+ "itertools 0.14.0",
+ "itoa",
+ "libz-sys",
+ "log",
+ "lru",
+ "moka",
+ "num",
+ "num-complex",
+ "paste",
+ "quick_cache",
+ "rayon",
+ "rayon_iter_concurrent_limit",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "thread_local",
+ "unsafe_cell_slice",
+ "uuid",
+ "zarrs_chunk_grid",
+ "zarrs_chunk_key_encoding",
+ "zarrs_codec",
+ "zarrs_data_type 0.9.0",
+ "zarrs_filesystem",
+ "zarrs_metadata 0.7.5",
+ "zarrs_metadata_ext 0.4.4",
+ "zarrs_plugin 0.4.1",
+ "zarrs_storage",
+]
+
+[[package]]
+name = "zarrs_chunk_grid"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cf67386fd96a0336cd3e5ab5ca6cb14e0e05aee80f1acae8c4d3cf562a8bb65"
+dependencies = [
+ "derive_more",
+ "inventory",
+ "itertools 0.14.0",
+ "rayon",
+ "thiserror 2.0.21",
+ "tinyvec",
+ "zarrs_metadata 0.7.5",
+ "zarrs_plugin 0.4.1",
+]
+
+[[package]]
+name = "zarrs_chunk_key_encoding"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9040e7feaa92d1904d492acd0cd91b97214f1791c5b5738e6c05b2ca4145a382"
+dependencies = [
+ "derive_more",
+ "inventory",
+ "zarrs_metadata 0.7.5",
+ "zarrs_plugin 0.4.1",
+ "zarrs_storage",
+]
+
+[[package]]
+name = "zarrs_codec"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "383a129a6a0cbb2c80cdba23809e5cab85159756464b7d0f112468a495c128da"
+dependencies = [
+ "async-trait",
+ "bytemuck",
+ "derive_more",
+ "futures",
+ "inventory",
+ "itertools 0.14.0",
+ "rayon",
+ "thiserror 2.0.21",
+ "unsafe_cell_slice",
+ "zarrs_chunk_grid",
+ "zarrs_data_type 0.9.0",
+ "zarrs_metadata 0.7.5",
+ "zarrs_plugin 0.4.1",
  "zarrs_storage",
 ]
 
@@ -3006,8 +3229,26 @@ dependencies = [
  "inventory",
  "num",
  "thiserror 2.0.21",
- "zarrs_metadata",
- "zarrs_plugin",
+ "zarrs_metadata 0.6.2",
+ "zarrs_plugin 0.2.3",
+]
+
+[[package]]
+name = "zarrs_data_type"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bc7c594c9363278fcd9db4c205514f009944206eb093ea7ad40b85f50009f31"
+dependencies = [
+ "derive_more",
+ "half",
+ "inventory",
+ "num",
+ "paste",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "zarrs_metadata 0.7.5",
+ "zarrs_plugin 0.4.1",
 ]
 
 [[package]]
@@ -3037,7 +3278,21 @@ checksum = "579803c6537c827b366fcd6cb0d78469f6a2978e6ab9768ce67526fdb85d7205"
 dependencies = [
  "derive_more",
  "half",
- "monostate",
+ "monostate 0.1.18",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "zarrs_metadata"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d60c4c363a8a302d7babb3c29017850a7b4e0af6ca5f9ba2946263a185b62fea"
+dependencies = [
+ "derive_more",
+ "half",
+ "monostate 1.0.3",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -3052,14 +3307,30 @@ dependencies = [
  "derive_more",
  "half",
  "log",
- "monostate",
+ "monostate 0.1.18",
  "num",
  "serde",
  "serde_json",
  "serde_repr",
  "thiserror 2.0.21",
- "zarrs_metadata",
+ "zarrs_metadata 0.6.2",
  "zarrs_registry",
+]
+
+[[package]]
+name = "zarrs_metadata_ext"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2048e07848ca99c7450518e0584929300b1b6a3cf442f18b26ffd3520814bd5b"
+dependencies = [
+ "derive_more",
+ "monostate 1.0.3",
+ "num",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "thiserror 2.0.21",
+ "zarrs_metadata 0.7.5",
 ]
 
 [[package]]
@@ -3068,6 +3339,18 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da996f69dd0f1a22486cc9a25081dbd382034bed2659e04fb4bb7a57da5da227"
 dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "zarrs_plugin"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cbe0ed432aee86856f70ca33be36eaf4a0dae21ab730750d9280a7ca1e95046"
+dependencies = [
+ "paste",
+ "regex",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

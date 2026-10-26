@@ -132,9 +132,10 @@ columns and nonfinite arithmetic may use two working columns, but never a full
 dense design matrix. `MatrixWrite` keeps dense coefficient output independent of
 the input backend.
 
-The zarrs 0.22 backend supports synchronous two-dimensional floating-point
-arrays and Rust 1.87. Read chunks serially, preserve configured fill values, and
-exclude edge padding. Keep working vectors in RAM. Lazy products and statistics
+The zarrs 0.22 and 0.23 backends support synchronous two-dimensional floating-point
+arrays. Version 0.22 requires Rust 1.87, and version 0.23 requires Rust 1.91.
+Read chunks serially, preserve configured fill values, and exclude edge padding.
+Keep working vectors in RAM. Lazy products and statistics
 never materialize the full array. Explicit eager conversion streams chunks into
 caller-selected dense storage. Chunk buffers and codec workspaces depend on storage chunk size,
 including outer shards. Borrowing capabilities must not hide decoding or I/O.
@@ -207,14 +208,16 @@ add residual policies, cached sums, update rules, or an entire solver to the cra
 - `cargo run --locked --example coordinate_descent --features faer` runs an
   example.
 
-The repository's devenv supplies Rust 1.89, `go-task`, and the configured
+The repository's devenv supplies Rust 1.98.1, `go-task`, and the configured
 pre-commit hooks. The core MSRV is Rust 1.84, and sprs 0.11.4 requires Rust 1.85.
 Other backend checks retain Rust 1.87, except for nalgebra 0.35 (including the
 `nalgebra` alias), which
-requires Rust 1.89. The lockfile uses
+requires Rust 1.89. The zarrs 0.23 backend (including the `zarrs` alias) requires
+Rust 1.91. The lockfile uses
 sprs 0.11.4 for Rust 1.85 compatibility; sprs 0.11.5 requires Rust 1.88. Run
 `bash scripts/test-backends.sh msrv` with Rust 1.87 to check the compatible
-feature selections, including tests, examples, and benchmarks.
+feature selections, including tests, examples, and benchmarks. Run
+`bash scripts/test-backends.sh zarrs-msrv` with Rust 1.91 for zarrs 0.23.
 
 The Python package requires Rust 1.89 for source builds and Python 3.11 or newer.
 Its uv environment lives in `.devenv/python`; tasks set `UV_PROJECT_ENVIRONMENT`.
