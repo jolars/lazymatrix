@@ -142,6 +142,8 @@ jobs:
         python: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v7
+      - name: Install Rust tools
+        run: rustup component add rustfmt clippy
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python }}
