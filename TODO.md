@@ -384,8 +384,8 @@ system still requires O(p^2) storage.
   - Test against a dense oracle, including large offsets with small variation.
     Use numerically stable centering; subtracting large raw moments can erase
     the centered cross-product.
-  - Implemented for dense ndarray and faer, nalgebra, and checked sprs CSC
-    inputs, with backend-independent reusable output. See
+  - Implemented for dense ndarray and faer, plus faer, nalgebra, and checked
+    sprs CSC inputs, with backend-independent reusable output. See
     `examples/weighted_gram.rs` and `benches/weighted_gram.md`.
 
 - [x] Reduce centered CSC Gram overhead at very low densities.

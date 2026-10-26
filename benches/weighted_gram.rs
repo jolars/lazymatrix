@@ -2,14 +2,16 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lazymatrix::{
-    ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc, WeightedGramInto,
-    WithIntercept,
+    ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc, WeightedColumnSumsInto,
+    WeightedGramInto, WithIntercept,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 #[path = "../tests/common/backend_aliases.rs"]
 mod backend_aliases;
+#[cfg(feature = "faer_all")]
+use backend_aliases::faer;
 use backend_aliases::{ndarray, sprs};
 use ndarray::{Array1, Array2, linalg::general_mat_mul};
 
@@ -33,6 +35,10 @@ fn benchmark_gram(c: &mut Criterion) {
             }
             let csc = triplets.to_csc::<usize>();
             let weights = Array1::from_shape_fn(n, |i| 0.5 + (i % 11) as f64 / 11.0);
+            #[cfg(feature = "faer_all")]
+            let faer_matrix = faer::Mat::from_fn(n, p, |i, j| matrix[(i, j)]);
+            #[cfg(feature = "faer_all")]
+            let faer_weights = faer::Col::from_fn(n, |i| weights[i]);
             for centered in [false, true] {
                 let centers = centered.then(|| matrix.col_means().unwrap());
                 let dense = LazyMatrix::from_parts(matrix.view(), centers.clone(), None);
@@ -57,6 +63,46 @@ fn benchmark_gram(c: &mut Criterion) {
                             .unwrap()
                     });
                 });
+                let mut sums = Array1::zeros(p);
+                group.bench_function(BenchmarkId::new("dense_column_sums", &case), |b| {
+                    b.iter(|| {
+                        dense
+                            .weighted_column_sums_into(black_box(&weights), black_box(&mut sums))
+                            .unwrap()
+                    });
+                });
+                #[cfg(feature = "faer_all")]
+                {
+                    let dense = LazyMatrix::from_parts(faer_matrix.as_ref(), centers.clone(), None);
+                    let mut out = faer::Mat::zeros(p, p);
+                    group.bench_function(BenchmarkId::new("faer_dense", &case), |b| {
+                        b.iter(|| {
+                            dense
+                                .weighted_gram_into(black_box(&faer_weights), black_box(&mut out))
+                                .unwrap()
+                        });
+                    });
+                    let mut sums = faer::Col::zeros(p);
+                    group.bench_function(BenchmarkId::new("faer_column_sums", &case), |b| {
+                        b.iter(|| {
+                            dense
+                                .weighted_column_sums_into(
+                                    black_box(&faer_weights),
+                                    black_box(&mut sums),
+                                )
+                                .unwrap()
+                        });
+                    });
+                    let augmented = WithIntercept::new(&dense);
+                    let mut out = faer::Mat::zeros(p + 1, p + 1);
+                    group.bench_function(BenchmarkId::new("faer_dense_intercept", &case), |b| {
+                        b.iter(|| {
+                            augmented
+                                .weighted_gram_into(black_box(&faer_weights), black_box(&mut out))
+                                .unwrap()
+                        });
+                    });
+                }
 
                 let dense_intercept = WithIntercept::new(&dense);
                 let sparse_intercept = WithIntercept::new(&sparse);

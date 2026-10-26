@@ -27,6 +27,31 @@ pub(crate) fn validate<F, W, O>(
     crate::gram::validate_normalization(ncols, centers, scales);
 }
 
+#[cfg(any(feature = "faer_all", feature = "ndarray_all"))]
+pub(crate) fn dense_sums<F, W, O>(
+    shape: (usize, usize),
+    at: impl Fn(usize, usize) -> F,
+    weights: &W,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+    out: &mut O,
+) where
+    F: Scalar,
+    W: VectorView<F> + ?Sized,
+    O: VectorViewMut<F> + ?Sized,
+{
+    let (nrows, ncols) = shape;
+    validate(nrows, ncols, weights, centers, scales, out);
+    for j in 0..ncols {
+        out.set(
+            j,
+            (0..nrows)
+                .map(|i| crate::gram::normalize(at(i, j), j, centers, scales) * weights.get(i))
+                .sum(),
+        );
+    }
+}
+
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) fn sparse_sums<F, M, W, O>(
     matrix: &M,

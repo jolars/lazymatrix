@@ -1,5 +1,5 @@
 #![cfg(feature = "faer_all")]
-//! Verification of the faer sparse backend against the dense oracle.
+//! Verification of the faer dense and sparse backends against the dense oracle.
 
 #[path = "common/backend_aliases.rs"]
 mod backend_aliases;
@@ -254,11 +254,143 @@ macro_rules! backend_suite {
                 common::run_fused_suite(build_dense, to_col);
                 common::run_dense_centered_product_suite(build_dense, to_col);
                 common::run_gram_suite(build);
+                common::run_gram_suite(build_dense);
                 common::run_backend_suite(build, to_col, from_col);
                 common::run_sparse_columns_suite(build);
                 common::run_logical_columns_suite(build);
                 common::run_backend_suite(build_dense, to_col, from_col);
                 common::run_logical_columns_suite(build_dense);
+            }
+
+            #[test]
+            fn dense_gram_views_preserve_strides_and_panel_edges() {
+                use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto, WithIntercept};
+                let mut storage = Mat::from_fn(39, 302, |i, j| 1e12 + ((i * 3 + j) % 13) as f64);
+                let design = storage
+                    .as_ref()
+                    .submatrix(1, 1, 37, 300)
+                    .transpose()
+                    .reverse_rows()
+                    .reverse_cols();
+                let dense: Vec<Vec<_>> = (0..300)
+                    .map(|i| (0..37).map(|j| design[(i, j)]).collect())
+                    .collect();
+                let weight_storage =
+                    Mat::from_fn(
+                        2,
+                        300,
+                        |i, j| {
+                            if i == 0 { 99.0 } else { (j % 7) as f64 - 3.0 }
+                        },
+                    );
+                let weights = weight_storage.row(1).transpose().reverse_rows();
+                let lazy =
+                    LazyMatrix::from_parts(design, Some(vec![1e12; 37]), Some(vec![-2.0; 37]));
+                let mut output = Mat::full(39, 39, -99.0);
+                {
+                    let mut view = output
+                        .as_mut()
+                        .submatrix_mut(1, 1, 37, 37)
+                        .transpose_mut()
+                        .reverse_rows_mut()
+                        .reverse_cols_mut();
+                    lazy.weighted_gram_into(&weights, &mut view).unwrap();
+                    let actual = common::GramOutput(
+                        (0..37)
+                            .map(|i| (0..37).map(|j| view[(i, j)]).collect())
+                            .collect(),
+                    );
+                    common::assert_gram(
+                        &actual,
+                        &common::materialize(&dense, lazy.centers(), lazy.scales()),
+                        &(0..300).map(|i| weights[i]).collect::<Vec<_>>(),
+                    );
+                }
+                for i in 0..39 {
+                    for j in 0..39 {
+                        if i == 0 || j == 0 || i == 38 || j == 38 {
+                            assert_eq!(output[(i, j)], -99.0);
+                        }
+                    }
+                }
+                let mut sums = Mat::full(2, 37, 99.0);
+                lazy.weighted_column_sums_into(
+                    &weights,
+                    &mut sums.row_mut(1).transpose_mut().reverse_rows_mut(),
+                )
+                .unwrap();
+                let normalized = common::materialize(&dense, lazy.centers(), lazy.scales());
+                for j in 0..37 {
+                    let expected: f64 = (0..300).map(|i| normalized[i][j] * weights[i]).sum();
+                    assert_eq!(sums[(1, 36 - j)], expected);
+                    assert_eq!(sums[(0, j)], 99.0);
+                }
+                let mut expected = common::GramOutput(vec![vec![f64::NAN; 38]; 38]);
+                WithIntercept::new(&lazy)
+                    .weighted_gram_into(&weights, &mut expected)
+                    .unwrap();
+                let design = storage
+                    .as_mut()
+                    .submatrix_mut(1, 1, 37, 300)
+                    .transpose_mut()
+                    .reverse_rows_mut()
+                    .reverse_cols_mut();
+                let lazy =
+                    LazyMatrix::from_parts(design, Some(vec![1e12; 37]), Some(vec![-2.0; 37]));
+                let mut actual = common::GramOutput(vec![vec![f64::NAN; 38]; 38]);
+                WithIntercept::new(&lazy)
+                    .weighted_gram_into(&weights, &mut actual)
+                    .unwrap();
+                assert_eq!(actual.0, expected.0);
+                let mut actual_sums = [f64::NAN; 37];
+                lazy.weighted_column_sums_into(&weights, &mut actual_sums)
+                    .unwrap();
+                for j in 0..37 {
+                    assert_eq!(actual_sums[j], sums[(1, 36 - j)]);
+                }
+                for i in 0..39 {
+                    for j in 0..302 {
+                        assert_eq!(storage[(i, j)], 1e12 + ((i * 3 + j) % 13) as f64);
+                    }
+                }
+            }
+
+            #[test]
+            fn dense_weighted_products_support_f32_and_eager_views() {
+                use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto, WithIntercept};
+                let dense = Mat::from_fn(2, 2, |i, j| [[1.0_f32, 0.0], [2.0, 3.0]][i][j]);
+                let mut raw = Mat::full(2, 2, f32::NAN);
+                dense
+                    .weighted_gram_into(&[2.0_f32, -1.0], &mut raw)
+                    .unwrap();
+                assert_eq!(
+                    raw,
+                    Mat::from_fn(2, 2, |i, j| [[-2.0_f32, -6.0], [-6.0, -9.0]][i][j])
+                );
+                let lazy =
+                    LazyMatrix::from_parts(dense, Some(vec![0.5, 1.0]), Some(vec![-2.0, 4.0]));
+                let eager = lazy.to_eager::<Mat<f32>>().unwrap();
+                let mut expected = Mat::full(3, 3, f32::NAN);
+                WithIntercept::new(&lazy)
+                    .weighted_gram_into(&[2.0_f32, -1.0], &mut expected)
+                    .unwrap();
+                let mut actual = Mat::full(3, 3, f32::NAN);
+                WithIntercept::new(&eager)
+                    .weighted_gram_into(&[2.0_f32, -1.0], &mut actual)
+                    .unwrap();
+                assert_eq!(actual, expected);
+                let mut storage = Mat::full(4, 4, 99.0_f32);
+                let mut view = storage.as_mut().submatrix_mut(1, 1, 2, 2);
+                let eager = lazy.to_eager_into(&mut view).unwrap();
+                WithIntercept::new(&eager)
+                    .weighted_gram_into(&[2.0_f32, -1.0], &mut actual)
+                    .unwrap();
+                assert_eq!(actual, expected);
+                let mut sums = [f32::NAN; 2];
+                eager
+                    .weighted_column_sums_into(&[2.0_f32, -1.0], &mut sums)
+                    .unwrap();
+                assert_eq!(sums, [expected[(0, 1)], expected[(0, 2)]]);
             }
 
             #[test]

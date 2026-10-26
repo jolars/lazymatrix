@@ -6,7 +6,7 @@ pub fn check() {
     use faer::sparse::{SparseColMat, SparseRowMat, Triplet};
     use faer::{Col, Mat};
     let values = [[1.0, 0.0], [2.0, 3.0], [0.0, 6.0]];
-    let dense = Mat::from_fn(3, 2, |i, j| values[i][j]);
+    let mut dense = Mat::from_fn(3, 2, |i, j| values[i][j]);
     let sparse = SparseColMat::try_new_from_triplets(
         3,
         2,
@@ -20,6 +20,39 @@ pub fn check() {
     .unwrap();
     let input = Col::from_fn(2, |i| [2.0, -1.0][i]);
     let rows = Col::from_fn(3, |i| [1.0, 2.0, -1.0][i]);
+    {
+        use lazymatrix::{LazyMatrix, WeightedColumnSumsInto, WeightedGramInto, WithIntercept};
+        let lazy =
+            LazyMatrix::from_parts(dense.as_ref(), Some(vec![1.0, 3.0]), Some(vec![2.0, 3.0]));
+        let mut expected = Mat::full(3, 3, f64::NAN);
+        WithIntercept::new(&lazy)
+            .weighted_gram_into(&rows, &mut expected)
+            .unwrap();
+        assert_eq!(
+            expected,
+            Mat::from_fn(3, 3, |i, j| {
+                [[2.0, 1.5, -2.0], [1.5, 0.25, 0.5], [-2.0, 0.5, 0.0]][i][j]
+            })
+        );
+        let eager = lazy.to_eager::<Mat<f64>>().unwrap();
+        let mut actual = Mat::zeros(3, 3);
+        WithIntercept::new(&eager)
+            .weighted_gram_into(&rows, &mut actual)
+            .unwrap();
+        assert_eq!(actual, expected);
+        let mut sums = Col::full(2, f64::NAN);
+        eager
+            .weighted_column_sums_into(&rows.as_ref(), &mut sums.as_mut())
+            .unwrap();
+        assert_eq!(sums[0], expected[(0, 1)]);
+        assert_eq!(sums[1], expected[(0, 2)]);
+        let lazy =
+            LazyMatrix::from_parts(dense.as_mut(), Some(vec![1.0, 3.0]), Some(vec![2.0, 3.0]));
+        WithIntercept::new(&lazy)
+            .weighted_gram_into(&rows, &mut actual.as_mut())
+            .unwrap();
+        assert_eq!(actual, expected);
+    }
     {
         use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
         let lazy =

@@ -230,8 +230,9 @@
 //!
 //! # Operational errors and out-of-core storage
 //!
-//! [`WeightedGramInto`] computes `Aᵀ diag(weights) A` for dense ndarray and
-//! `usize`-index CSC inputs from faer, nalgebra, and `SprsCsc` (when enabled),
+//! [`WeightedGramInto`] computes `Aᵀ diag(weights) A` for dense ndarray and faer,
+//! including borrowed and mutable views, and `usize`-index CSC inputs from
+//! faer, nalgebra, and `SprsCsc` (when enabled),
 //! as well as CSR inputs through `SprsCsr`. CSR kernels use bounded row panels
 //! with O(nrows × ncols²) arithmetic and no storage conversion.
 //! [`MatrixWrite`] destinations include owned and mutable-view dense matrices
@@ -240,6 +241,9 @@
 //! zero, or nonfinite. Kernels center values before accumulation, avoiding
 //! cancellation from subtracting large raw moments. Bounded dense panels or
 //! sparse working vectors avoid materializing the full logical design matrix.
+//! Dense faer Gram kernels use native multiplication and require
+//! `Scalar + faer_traits::ComplexField`. Dense faer weighted-column sums require
+//! only [`Scalar`] and center entries directly before accumulation.
 //! See `examples/weighted_gram.rs` for a borrowed-input demonstration.
 //!
 //! Products, [`ColumnStats`] methods, and [`LazyMatrix::new`] return `Result`.

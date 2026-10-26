@@ -6,6 +6,12 @@ Run the native ndarray and checked sprs CSC comparison with:
 cargo bench --locked --bench weighted_gram --features ndarray,sprs
 ```
 
+Include dense faer Gram, intercept, and weighted-column-sum cases with:
+
+```sh
+cargo bench --locked --bench weighted_gram --features ndarray,sprs,faer
+```
+
 Run the same cases with ndarray's BLAS kernels and one OpenBLAS thread with:
 
 ```sh
@@ -24,10 +30,11 @@ without mean centering, without scaling. Matrix construction and center
 computation take place outside the timed loops. Set both thread variables:
 OpenBLAS builds that use OpenMP follow `OMP_NUM_THREADS`.
 
-Each case measures nine operations:
+Each case measures ten operations:
 
 - `dense`: the bounded-panel ndarray Gram kernel, including scratch allocation.
 - `csc`: the sparse Gram kernel, including scratch allocation.
+- `dense_column_sums`: directly centered ndarray column sums, with reusable output.
 - `dense_operators` and `csc_operators`: assembly through repeated lazy forward
   and transpose products, with reusable vectors and output.
 - `gemm_prepared`: dense matrix multiplication after materializing normalized
@@ -39,14 +46,24 @@ Each case measures nine operations:
 - `gemm_intercept`: a prepared dense `[1, X_tilde]` baseline, with preparation
   outside the timed loop.
 
-All nine reuse the coefficient-space output. The prepared GEMM baselines expose
-the multiplication cost separately from the cost of storing and preparing two
-full design matrices. These matrices are benchmark baselines, not workspace
-used by the Gram kernels.
+Enabling a faer version adds `faer_dense`, `faer_dense_intercept`, and
+`faer_column_sums`. These use the same values, weights, and centers in faer's
+column-major storage, with reusable faer output. The Gram kernels call native
+faer multiplication with `Par::Seq`, including when `parallel` is enabled.
+Construction and conversion stay outside the timed loops. Version features
+select the benchmark helper's newest enabled release.
 
-For `f64`, the dense kernel's explicit panels and coefficient block occupy at
-most 136 KiB, plus the multiplication library's workspace. Centered CSC uses
-24 KiB of panels for sufficiently populated, canonical inputs with at least
+All operations reuse their coefficient-space matrix or vector output. The
+prepared GEMM baselines expose the multiplication cost separately from the cost
+of storing and preparing two full design matrices. These matrices are benchmark
+baselines, not workspace used by the Gram kernels.
+
+For `f64`, each dense kernel's explicit panels and coefficient block occupy at
+most 136 KiB, plus the multiplication library's workspace. Both use panels of
+at most 256 rows and 32 columns. Nonfinite normalized or weighted entries use
+direct accumulation to preserve IEEE arithmetic. Dense weighted-column sums
+use constant scratch space and center each entry before weighting. Centered CSC
+uses 24 KiB of panels for sufficiently populated, canonical inputs with at least
 16 predictors. Below 2% density, centered canonical columns can use a
 subtraction-free disjoint range-sum table. It answers implicit-zero weight
 ranges in O(1) time after O(n log n) preparation, with table storage capped at
@@ -128,3 +145,23 @@ milliseconds:
 The Gram kernel now wins at 0.1% in both fixtures. At 1%, repeated operators
 remain faster, although their centering correction has the numerical limitation
 described above.
+
+## Dense faer comparison
+
+Measured on October 26, 2026, with Rust 1.98.1 on the same Ryzen 9 7900,
+pinned to CPU 10. These cases use faer 0.24.4 and ndarray 0.17.2 without BLAS
+or the `parallel` feature. Criterion used 10 samples, a 0.2-second warmup, and
+a requested 0.5-second measurement window. The fixture has 10,000 rows, 128
+predictors, 100% density, positive weights, and no scaling.
+
+Times are Criterion point estimates in milliseconds. Gram timings include
+scratch allocation and panel preparation. Column sums reuse their output
+vectors. ndarray uses row-major input, and faer uses column-major input.
+
+| Centering | ndarray Gram | faer Gram | ndarray intercept | faer intercept | ndarray column sums | faer column sums |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| None | 10.01 | 5.45 | 13.24 | 7.13 | 2.30 | 1.63 |
+| Mean | 10.69 | 7.10 | 13.52 | 9.14 | 2.57 | 2.02 |
+
+Both dense kernels use directly centered panels with bounded workspace.
+The intercept cases include the separate stable weighted-column-sum pass.

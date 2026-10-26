@@ -8,7 +8,7 @@ use super::{MatrixErrorType, MatrixShape, Scalar, VectorView, VectorViewMut};
 /// Signed and nonfinite weights are preserved, including IEEE operations on
 /// implicit zeros. Empty sums are zero. Every output entry is overwritten.
 ///
-/// Dense ndarray takes O(nrows * ncols) work and constant scratch space.
+/// Dense ndarray and faer take O(nrows * ncols) work and constant scratch space.
 /// Canonical finite CSC inputs take O(nrows + ncols + nnz) work without
 /// centering, or O(nrows + ncols + nnz * log(nrows + 1)) with centering.
 /// Centered CSC uses O(nrows) scratch. Noncanonical columns or nonfinite

@@ -44,10 +44,12 @@ impl lazymatrix::MatrixWrite<f64> for GramOutput {
 pub fn assert_gram(actual: &GramOutput, normalized: &[Vec<f64>], weights: &[f64]) {
     for j in 0..actual.ncols() {
         for k in 0..actual.ncols() {
+            // Kernels mirror the upper triangle, including when finite values overflow.
+            let (left, right) = (j.min(k), j.max(k));
             let expected: f64 = normalized
                 .iter()
                 .zip(weights)
-                .map(|(row, w)| (row[j] * w) * row[k])
+                .map(|(row, w)| (row[left] * w) * row[right])
                 .sum();
             let value = actual.0[j][k];
             if expected.is_nan() {
@@ -55,6 +57,10 @@ pub fn assert_gram(actual: &GramOutput, normalized: &[Vec<f64>], weights: &[f64]
             } else if expected.is_infinite() {
                 assert_eq!(value, expected);
             } else {
+                assert!(
+                    value.is_finite(),
+                    "({j}, {k}): {value} should be {expected}"
+                );
                 approx::assert_relative_eq!(value, expected, epsilon = 1e-10, max_relative = 1e-10);
             }
             if !value.is_nan() {
@@ -88,6 +94,14 @@ where
         let mut out = GramOutput(vec![vec![f64::NAN; p]; p]);
         matrix.weighted_gram_into(&weights, &mut out).unwrap();
         assert_gram(&out, &tm.dense, &weights);
+        let mut sums = vec![f64::NAN; p];
+        matrix
+            .weighted_column_sums_into(&weights, &mut sums)
+            .unwrap();
+        for (j, &sum) in sums.iter().enumerate() {
+            let expected: f64 = (0..n).map(|i| tm.dense[i][j] * weights[i]).sum();
+            approx::assert_abs_diff_eq!(sum, expected, epsilon = 1e-10);
+        }
         for center in [Centering::None, Centering::Mean, Centering::Min] {
             for scale in [
                 Scaling::None,
@@ -123,12 +137,14 @@ where
             );
         }
         let bad_weights = vec![1.0; n + 1];
+        out.0.iter_mut().for_each(|row| row.fill(42.0));
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 lazy.weighted_gram_into(&bad_weights, &mut out).unwrap();
             }))
             .is_err()
         );
+        assert!(out.0.iter().flatten().all(|&v| v == 42.0));
         let mut wrong_out = GramOutput(vec![vec![42.0; p + 1]; p + 1]);
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -158,6 +174,7 @@ where
                 }))
                 .is_err()
             );
+            assert!(out.0.iter().flatten().all(|&v| v == 42.0));
         }
     }
 
@@ -236,6 +253,11 @@ where
             vec![vec![0.0, 2.0], vec![3.0, 0.0]],
             vec![f64::NAN, f64::INFINITY],
             vec![1.0; 2],
+        ),
+        (
+            vec![vec![f64::MAX, 0.0], vec![0.0, 1.0]],
+            vec![0.0; 2],
+            vec![2.0, 1.0],
         ),
     ];
     for (dense, centers, weights) in cases {

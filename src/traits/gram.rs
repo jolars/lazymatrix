@@ -16,7 +16,7 @@ pub trait MatrixWrite<F: Scalar>: MatrixShape {
 /// Temporary workspace is internal; reusing output does not imply that the
 /// implementation allocates no scratch storage.
 ///
-/// Dense ndarray kernels use bounded panels and O(nrows * ncols²) work.
+/// Dense ndarray and faer kernels use bounded panels and O(nrows * ncols²) work.
 /// CSC kernels use O(ncols) workspace without centering, or O(nrows + ncols)
 /// with centering. For sorted, unique columns and finite arithmetic, their
 /// work is O(nrows + ncols * nnz + ncols²) without centering and at most

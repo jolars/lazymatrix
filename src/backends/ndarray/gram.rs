@@ -1,6 +1,6 @@
 use super::ndarray;
 
-use crate::gram::{normalize, validate};
+use crate::gram::{dense_gram_direct, dense_is_finite, normalize, validate};
 use crate::{MatrixWrite, Scalar, VectorView, WeightedGramInto, WeightedGramKernel};
 use ndarray::linalg::general_mat_mul;
 use ndarray::{Array2, ArrayBase, Data, DataMut, Ix2, s};
@@ -58,30 +58,8 @@ where
             }
             return Ok(());
         }
-        let finite = (0..n).all(|i| weights.get(i).is_finite())
-            && centers.is_none_or(|c| c.iter().all(|v| v.is_finite()))
-            && scales.is_none_or(|s| s.iter().all(|v| v.is_finite()))
-            && (0..p).all(|j| {
-                (0..n).all(|i| {
-                    let x = normalize(self[(i, j)], j, centers, scales);
-                    x.is_finite() && (x * weights.get(i)).is_finite()
-                })
-            });
-        if !finite {
-            for j in 0..p {
-                for k in j..p {
-                    let sum = (0..n)
-                        .map(|i| {
-                            (normalize(self[(i, j)], j, centers, scales) * weights.get(i))
-                                * normalize(self[(i, k)], k, centers, scales)
-                        })
-                        .sum();
-                    out.set(j, k, sum);
-                    if j != k {
-                        out.set(k, j, sum);
-                    }
-                }
-            }
+        if !dense_is_finite((n, p), |i, j| self[(i, j)], weights, centers, scales) {
+            dense_gram_direct((n, p), |i, j| self[(i, j)], weights, centers, scales, out);
             return Ok(());
         }
         // Bounded panels allow GEMM without retaining a normalized design.
@@ -165,15 +143,14 @@ where
         W: VectorView<F> + ?Sized,
         O: crate::VectorViewMut<F> + ?Sized,
     {
-        crate::weighted_sums::validate(self.nrows(), self.ncols(), weights, centers, scales, out);
-        for j in 0..self.ncols() {
-            out.set(
-                j,
-                (0..self.nrows())
-                    .map(|i| normalize(self[(i, j)], j, centers, scales) * weights.get(i))
-                    .sum(),
-            );
-        }
+        crate::weighted_sums::dense_sums(
+            (self.nrows(), self.ncols()),
+            |i, j| self[(i, j)],
+            weights,
+            centers,
+            scales,
+            out,
+        );
         Ok(())
     }
 }

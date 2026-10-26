@@ -1,6 +1,61 @@
-//! Backend-independent validation and sparse Gram accumulation.
+//! Backend-independent validation and Gram accumulation.
 
 use crate::{MatrixWrite, Scalar, VectorView};
+
+#[cfg(any(feature = "faer_all", feature = "ndarray_all"))]
+pub(crate) fn dense_is_finite<F, W>(
+    shape: (usize, usize),
+    at: impl Fn(usize, usize) -> F,
+    weights: &W,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+) -> bool
+where
+    F: Scalar,
+    W: VectorView<F> + ?Sized,
+{
+    let (nrows, ncols) = shape;
+    (0..nrows).all(|i| weights.get(i).is_finite())
+        && centers.is_none_or(|c| c.iter().all(|v| v.is_finite()))
+        && scales.is_none_or(|s| s.iter().all(|v| v.is_finite()))
+        && (0..ncols).all(|j| {
+            (0..nrows).all(|i| {
+                let x = normalize(at(i, j), j, centers, scales);
+                x.is_finite() && (x * weights.get(i)).is_finite()
+            })
+        })
+}
+
+#[cfg(any(feature = "faer_all", feature = "ndarray_all"))]
+pub(crate) fn dense_gram_direct<F, W, O>(
+    shape: (usize, usize),
+    at: impl Fn(usize, usize) -> F,
+    weights: &W,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+    out: &mut O,
+) where
+    F: Scalar,
+    W: VectorView<F> + ?Sized,
+    O: MatrixWrite<F> + ?Sized,
+{
+    let (nrows, ncols) = shape;
+    // GEMM can reorder nonfinite terms, so preserve scalar evaluation here.
+    for j in 0..ncols {
+        for k in j..ncols {
+            let sum = (0..nrows)
+                .map(|i| {
+                    (normalize(at(i, j), j, centers, scales) * weights.get(i))
+                        * normalize(at(i, k), k, centers, scales)
+                })
+                .sum();
+            out.set(j, k, sum);
+            if j != k {
+                out.set(k, j, sum);
+            }
+        }
+    }
+}
 
 /// Normalize borrowed CSR rows in bounded panels, including implicit zeros.
 #[cfg(feature = "sprs_all")]
