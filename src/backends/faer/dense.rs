@@ -169,12 +169,43 @@ macro_rules! impl_dense_ops {
                 self.matvec_into(x, &mut out)?;
                 Ok(out)
             }
+
+            fn matvec_normalized<N: Scalar>(
+                &self,
+                x: &Col<F>,
+                centers: Option<&[N]>,
+                scales: Option<&[N]>,
+            ) -> Result<Col<F>, Self::Error>
+            where
+                Col<F>: Clone
+                    + crate::ElemDivAssign<N>
+                    + crate::DotSlice<N>
+                    + crate::SubScalarAssign<N>,
+            {
+                let mut out = Col::from_fn(self.nrows(), |_| F::zero());
+                self.matvec_normalized_into(x, centers, scales, &mut out)?;
+                Ok(out)
+            }
         }
 
         impl<F: Scalar> MatTransposeVec<Col<F>> for $matrix {
             fn mat_transpose_vec(&self, x: &Col<F>) -> Result<Col<F>, Self::Error> {
                 let mut out = Col::from_fn(self.ncols(), |_| F::zero());
                 self.mat_transpose_vec_into(x, &mut out)?;
+                Ok(out)
+            }
+
+            fn mat_transpose_vec_normalized<N: Scalar>(
+                &self,
+                x: &Col<F>,
+                centers: Option<&[N]>,
+                scales: Option<&[N]>,
+            ) -> Result<Col<F>, Self::Error>
+            where
+                Col<F>: crate::SumEntries<N> + crate::ScaledSubSlice<N> + crate::ElemDivAssign<N>,
+            {
+                let mut out = Col::from_fn(self.ncols(), |_| F::zero());
+                self.mat_transpose_vec_normalized_into(x, centers, scales, &mut out)?;
                 Ok(out)
             }
         }
@@ -198,6 +229,29 @@ macro_rules! impl_dense_ops {
                 );
                 Ok(())
             }
+
+            fn try_matvec_scaled_normalized_into(
+                &self,
+                alpha: F,
+                x: &Col<F>,
+                beta: F,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut Col<F>,
+            ) -> Option<Result<(), Self::Error>> {
+                let centers = centers?;
+                crate::dense_products::matvec(
+                    (self.nrows(), self.ncols()),
+                    |i, j| self[(i, j)],
+                    centers,
+                    scales,
+                    alpha,
+                    x,
+                    beta,
+                    out,
+                );
+                Some(Ok(()))
+            }
         }
         impl<F: Scalar> MatTransposeVecScaledInto<Col<F>, Col<F>, F> for $matrix {
             fn mat_transpose_vec_scaled_into(
@@ -218,11 +272,62 @@ macro_rules! impl_dense_ops {
                 );
                 Ok(())
             }
+
+            fn try_mat_transpose_vec_scaled_normalized_into(
+                &self,
+                alpha: F,
+                x: &Col<F>,
+                beta: F,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut Col<F>,
+            ) -> Option<Result<(), Self::Error>> {
+                let centers = centers?;
+                crate::dense_products::transpose(
+                    (self.nrows(), self.ncols()),
+                    |i, j| self[(i, j)],
+                    centers,
+                    scales,
+                    alpha,
+                    x,
+                    beta,
+                    out,
+                );
+                Some(Ok(()))
+            }
         }
 
         impl<F: Scalar> MatVecInto<Col<F>> for $matrix {
             fn matvec_into(&self, x: &Col<F>, out: &mut Col<F>) -> Result<(), Self::Error> {
                 self.matvec_scaled_into(F::one(), x, F::zero(), out)
+            }
+
+            fn matvec_normalized_into<N: Scalar>(
+                &self,
+                x: &Col<F>,
+                centers: Option<&[N]>,
+                scales: Option<&[N]>,
+                out: &mut Col<F>,
+            ) -> Result<(), Self::Error>
+            where
+                Col<F>: Clone + crate::ElemDivAssign<N> + crate::DotSlice<N>,
+                Col<F>: crate::SubScalarAssign<N>,
+            {
+                if let Some(centers) = centers {
+                    crate::dense_products::matvec(
+                        (self.nrows(), self.ncols()),
+                        |i, j| self[(i, j)],
+                        centers,
+                        scales,
+                        F::one(),
+                        x,
+                        F::zero(),
+                        out,
+                    );
+                    Ok(())
+                } else {
+                    crate::traits::matvec_normalized_into(self, x, centers, scales, out)
+                }
             }
         }
 
@@ -233,6 +338,34 @@ macro_rules! impl_dense_ops {
                 out: &mut Col<F>,
             ) -> Result<(), Self::Error> {
                 self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+            }
+
+            fn mat_transpose_vec_normalized_into<N: Scalar>(
+                &self,
+                x: &Col<F>,
+                centers: Option<&[N]>,
+                scales: Option<&[N]>,
+                out: &mut Col<F>,
+            ) -> Result<(), Self::Error>
+            where
+                Col<F>: crate::SumEntries<N>,
+                Col<F>: crate::ScaledSubSlice<N> + crate::ElemDivAssign<N>,
+            {
+                if let Some(centers) = centers {
+                    crate::dense_products::transpose(
+                        (self.nrows(), self.ncols()),
+                        |i, j| self[(i, j)],
+                        centers,
+                        scales,
+                        F::one(),
+                        x,
+                        F::zero(),
+                        out,
+                    );
+                    Ok(())
+                } else {
+                    crate::traits::mat_transpose_vec_normalized_into(self, x, centers, scales, out)
+                }
             }
         }
     };

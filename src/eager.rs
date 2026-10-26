@@ -96,6 +96,18 @@ where
     fn matvec(&self, x: &V) -> Result<V, Self::Error> {
         self.data.matvec(x)
     }
+
+    fn matvec_normalized<F: crate::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: Clone + crate::ElemDivAssign<F> + crate::DotSlice<F> + crate::SubScalarAssign<F>,
+    {
+        self.data.matvec_normalized(x, centers, scales)
+    }
 }
 
 impl<M, X, Y, T> MatVecInto<X, Y> for EagerMatrix<M, T>
@@ -127,6 +139,24 @@ where
     fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
         self.data.matvec_scaled_into(alpha, x, beta, out)
     }
+
+    fn try_matvec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: crate::Scalar,
+        X: crate::VectorView<F>,
+        Y: crate::VectorViewMut<F>,
+    {
+        self.data
+            .try_matvec_scaled_normalized_into(alpha, x, beta, centers, scales, out)
+    }
 }
 
 impl<M, V, T> MatTransposeVec<V> for EagerMatrix<M, T>
@@ -135,6 +165,18 @@ where
 {
     fn mat_transpose_vec(&self, x: &V) -> Result<V, Self::Error> {
         self.data.mat_transpose_vec(x)
+    }
+
+    fn mat_transpose_vec_normalized<F: crate::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: crate::SumEntries<F> + crate::ScaledSubSlice<F> + crate::ElemDivAssign<F>,
+    {
+        self.data.mat_transpose_vec_normalized(x, centers, scales)
     }
 }
 
@@ -173,6 +215,24 @@ where
         out: &mut Y,
     ) -> Result<(), Self::Error> {
         self.data.mat_transpose_vec_scaled_into(alpha, x, beta, out)
+    }
+
+    fn try_mat_transpose_vec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: crate::Scalar,
+        X: crate::VectorView<F>,
+        Y: crate::VectorViewMut<F>,
+    {
+        self.data
+            .try_mat_transpose_vec_scaled_normalized_into(alpha, x, beta, centers, scales, out)
     }
 }
 

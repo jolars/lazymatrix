@@ -353,6 +353,255 @@ pub fn assert_close(a: &[f64], b: &[f64], eps: f64) {
 
 const EPS: f64 = 1e-10;
 
+/// Compare every dense product interface with entries normalized before summation.
+pub fn run_dense_centered_product_suite<M, V>(
+    build: impl Fn(&TestMatrix) -> M,
+    to_v: impl Fn(&[f64]) -> V,
+) where
+    M: MatVec<V>
+        + MatTransposeVec<V>
+        + MatVecInto<V>
+        + MatTransposeVecInto<V>
+        + lazymatrix::MatVecScaledInto<V, V, f64>
+        + lazymatrix::MatTransposeVecScaledInto<V, V, f64>,
+    V: Clone
+        + ElemDivAssign<f64>
+        + DotSlice<f64>
+        + SubScalarAssign<f64>
+        + SumEntries<f64>
+        + ScaledSubSlice<f64>
+        + lazymatrix::VectorOwned<f64, Owned = V>
+        + lazymatrix::VectorViewMut<f64>,
+{
+    for (rows, columns) in [(7, 3), (513, 37), (0, 3), (5, 0)] {
+        let centers: Vec<_> = (0..columns).map(|j| 1e12 + j as f64 / 8.0).collect();
+        let dense: Vec<Vec<_>> = (0..rows)
+            .map(|i| {
+                (0..columns)
+                    .map(|j| centers[j] + ((i * 7 + j * 3) % 13) as f64 / 4.0 - 1.5)
+                    .collect()
+            })
+            .collect();
+        let tm = TestMatrix {
+            nrows: rows,
+            ncols: columns,
+            triplets: dense
+                .iter()
+                .enumerate()
+                .flat_map(|(i, row)| row.iter().enumerate().map(move |(j, &v)| (i, j, v)))
+                .collect(),
+            dense,
+        };
+        let matrix = build(&tm);
+        for scales in [
+            None,
+            Some((0..columns).map(|j| [1.3, -2.7, 0.75][j % 3]).collect()),
+        ] {
+            check_dense_centered_products(
+                &matrix,
+                &tm.dense,
+                centers.clone(),
+                scales,
+                &(0..columns)
+                    .map(|j| (j % 7) as f64 / 7.0 - 0.3)
+                    .collect::<Vec<_>>(),
+                &(0..rows)
+                    .map(|i| (i % 11) as f64 / 7.0 - 0.4)
+                    .collect::<Vec<_>>(),
+                &to_v,
+            );
+        }
+    }
+    for (raw, center, scale, coefficient) in [
+        (1e300, 0.0, 1e-300, 1e-300),
+        (1e300, 0.0, 1e-300, 0.0),
+        (f64::INFINITY, f64::INFINITY, 1.0, 1.0),
+        (1.0, f64::NAN, 1.0, 1.0),
+        (1.0, 0.0, f64::INFINITY, f64::INFINITY),
+        (1.0, 0.0, f64::NAN, 1.0),
+    ] {
+        let tm = TestMatrix {
+            nrows: 1,
+            ncols: 1,
+            dense: vec![vec![raw]],
+            triplets: vec![(0, 0, raw)],
+        };
+        check_dense_centered_products(
+            &build(&tm),
+            &tm.dense,
+            vec![center],
+            Some(vec![scale]),
+            &[coefficient],
+            &[coefficient],
+            &to_v,
+        );
+    }
+}
+
+pub fn run_dense_centered_f32_suite<M, V>(
+    build: impl Fn(&[Vec<f32>]) -> M,
+    to_v: impl Fn(&[f32]) -> V,
+) where
+    M: MatVec<V>
+        + MatTransposeVec<V>
+        + MatVecInto<V>
+        + MatTransposeVecInto<V>
+        + lazymatrix::MatVecScaledInto<V, V, f32>
+        + lazymatrix::MatTransposeVecScaledInto<V, V, f32>,
+    V: Clone
+        + ElemDivAssign<f32>
+        + DotSlice<f32>
+        + SubScalarAssign<f32>
+        + SumEntries<f32>
+        + ScaledSubSlice<f32>
+        + lazymatrix::VectorOwned<f32, Owned = V>
+        + lazymatrix::VectorViewMut<f32>,
+{
+    let dense = vec![
+        vec![1e6 + 1.0, -1e6 - 1.0],
+        vec![1e6 + 3.0, -1e6 + 3.0],
+        vec![1e6 - 1.0, -1e6 + 1.0],
+    ];
+    check_dense_centered_products(
+        &build(&dense),
+        &dense,
+        vec![1e6, -1e6],
+        Some(vec![1.3, -2.7]),
+        &[0.25, -0.75],
+        &[0.3, -0.1, 0.7],
+        to_v,
+    );
+}
+
+pub fn check_dense_centered_products<M, V, F>(
+    matrix: &M,
+    dense: &[Vec<F>],
+    centers: Vec<F>,
+    scales: Option<Vec<F>>,
+    coefficients: &[F],
+    observations: &[F],
+    to_v: impl Fn(&[F]) -> V,
+) where
+    F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
+    M: MatVec<V>
+        + MatTransposeVec<V>
+        + MatVecInto<V>
+        + MatTransposeVecInto<V>
+        + lazymatrix::MatVecScaledInto<V, V, F>
+        + lazymatrix::MatTransposeVecScaledInto<V, V, F>,
+    V: Clone
+        + ElemDivAssign<F>
+        + DotSlice<F>
+        + SubScalarAssign<F>
+        + SumEntries<F>
+        + ScaledSubSlice<F>
+        + lazymatrix::VectorOwned<F, Owned = V>
+        + lazymatrix::VectorViewMut<F>,
+{
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    let tolerance = F::from_f64(1e-10)
+        .unwrap()
+        .max(F::epsilon() * F::from_u32(64).unwrap());
+    let assert_values = |actual: &V, expected: &[F]| {
+        assert_eq!(actual.len(), expected.len());
+        for (i, &value) in expected.iter().enumerate() {
+            let actual = actual.get(i);
+            if value.is_nan() {
+                assert!(actual.is_nan(), "entry {i}: {actual:?} should be NaN");
+            } else if value.is_infinite() {
+                assert_eq!(actual, value);
+            } else {
+                approx::assert_relative_eq!(
+                    actual,
+                    value,
+                    epsilon = tolerance,
+                    max_relative = tolerance
+                );
+            }
+        }
+    };
+    let normalized: Vec<Vec<_>> = dense
+        .iter()
+        .map(|row| {
+            row.iter()
+                .enumerate()
+                .map(|(j, &raw)| {
+                    let centered = raw - centers[j];
+                    scales
+                        .as_ref()
+                        .map_or(centered, |scales| centered / scales[j])
+                })
+                .collect()
+        })
+        .collect();
+    let forward: Vec<F> = normalized
+        .iter()
+        .map(|row| row.iter().zip(coefficients).map(|(&a, &b)| a * b).sum())
+        .collect();
+    let transpose: Vec<F> = (0..matrix.ncols())
+        .map(|j| {
+            normalized
+                .iter()
+                .zip(observations)
+                .map(|(row, &u)| row[j] * u)
+                .sum()
+        })
+        .collect();
+    let x = to_v(coefficients);
+    let u = to_v(observations);
+    let lazy = LazyMatrix::from_parts(matrix, Some(centers), scales);
+    assert_values(&lazy.matvec(&x).unwrap(), &forward);
+    assert_values(&lazy.mat_transpose_vec(&u).unwrap(), &transpose);
+    let mut out = to_v(&vec![F::nan(); matrix.nrows()]);
+    lazy.matvec_into(&x, &mut out).unwrap();
+    assert_values(&out, &forward);
+    let mut out = to_v(&vec![F::nan(); matrix.ncols()]);
+    lazy.mat_transpose_vec_into(&u, &mut out).unwrap();
+    assert_values(&out, &transpose);
+    for alpha in [F::zero(), F::one(), F::from_f64(-1.25).unwrap()] {
+        for beta in [F::zero(), F::one(), F::from_f64(-0.5).unwrap()] {
+            let expected = |product: &[F]| {
+                product
+                    .iter()
+                    .map(|&value| {
+                        let product = if alpha == F::zero() {
+                            F::zero()
+                        } else {
+                            alpha * value
+                        };
+                        if beta == F::zero() {
+                            product
+                        } else {
+                            product + beta * F::from_u32(3).unwrap()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let initial = if beta == F::zero() {
+                F::nan()
+            } else {
+                F::from_u32(3).unwrap()
+            };
+            let mut out = to_v(&vec![initial; matrix.nrows()]);
+            lazy.matvec_scaled_into(alpha, &x, beta, &mut out).unwrap();
+            assert_values(&out, &expected(&forward));
+            let mut scratch = to_v(&vec![F::nan(); matrix.ncols()]);
+            let mut out = to_v(&vec![initial; matrix.nrows()]);
+            lazy.matvec_scaled_with_workspace(alpha, &x, beta, &mut out, &mut scratch)
+                .unwrap();
+            assert_values(&out, &expected(&forward));
+            let mut out = to_v(&vec![initial; matrix.ncols()]);
+            lazy.mat_transpose_vec_scaled_into(alpha, &u, beta, &mut out)
+                .unwrap();
+            assert_values(&out, &expected(&transpose));
+            let mut out = to_v(&vec![initial; matrix.ncols()]);
+            lazy.mat_transpose_vec_scaled_with_workspace(alpha, &u, beta, &mut out, &mut scratch)
+                .unwrap();
+            assert_values(&out, &expected(&transpose));
+        }
+    }
+}
+
 /// Exercise fused products independently of each backend's storage representation.
 pub fn run_fused_suite<M, V>(build: impl Fn(&TestMatrix) -> M, to_v: impl Fn(&[f64]) -> V)
 where

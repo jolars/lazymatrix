@@ -210,6 +210,38 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&sparse, to_v);
+                common::run_dense_centered_f32_suite(
+                    |dense| Mat::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
+                    to_v,
+                );
+            }
+
+            #[test]
+            fn centered_products_preserve_variation_through_dense_views() {
+                let mut storage = Mat::from_fn(3, 7, |i, j| 1e12 + (i * 7 + j) as f64 / 4.0);
+                let dense: Vec<Vec<_>> = (0..7)
+                    .map(|i| (0..3).map(|j| storage[(j, i)]).collect())
+                    .collect();
+                for scales in [None, Some(vec![1.3, -2.7, 0.75])] {
+                    common::check_dense_centered_products(
+                        &storage.as_ref().transpose(),
+                        &dense,
+                        vec![1e12; 3],
+                        scales.clone(),
+                        &[0.3, -0.1, 0.7],
+                        &[0.25; 7],
+                        to_col,
+                    );
+                    common::check_dense_centered_products(
+                        &storage.as_mut().transpose_mut(),
+                        &dense,
+                        vec![1e12; 3],
+                        scales,
+                        &[0.3, -0.1, 0.7],
+                        &[0.25; 7],
+                        to_col,
+                    );
+                }
             }
 
             #[test]
@@ -220,6 +252,7 @@ macro_rules! backend_suite {
                 common::run_eager_product_suite::<_, Mat<f64>, _>(build_dense, to_col, from_col);
                 common::run_fused_suite(build, to_col);
                 common::run_fused_suite(build_dense, to_col);
+                common::run_dense_centered_product_suite(build_dense, to_col);
                 common::run_gram_suite(build);
                 common::run_backend_suite(build, to_col, from_col);
                 common::run_sparse_columns_suite(build);

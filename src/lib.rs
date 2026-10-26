@@ -17,8 +17,14 @@
 //! X̃ᵀ u = S⁻¹ (Xᵀ u − c · Σu)
 //! ```
 //!
-//! Both centering and scaling are independently optional, giving the four
-//! combinations handled by the `if let Some` branches in the operator impls.
+//! Centering and scaling are independently optional. Centered dense products
+//! subtract each column's center and apply its scale before accumulating, which
+//! avoids subtracting large, nearly equal raw products. This numerical policy
+//! applies to allocating, reusable-output, fused, and workspace products across
+//! faer, nalgebra, and ndarray. It requires no normalized matrix or temporary
+//! buffer. Uncentered products retain the backend's raw multiplication path.
+//! Sparse and chunked storage use the algebraic identities above to preserve
+//! their storage and access patterns.
 //!
 //! # Eager normalization
 //!
@@ -141,8 +147,8 @@
 //! [`MatVecScaledInto`] and [`MatTransposeVecScaledInto`] fuse a product with
 //! output scaling for all supported matrix backends, including normalized
 //! [`LazyMatrix`] and [`WithIntercept`] wrappers. Exact zero `alpha` skips the
-//! product; exact zero `beta` ignores previous output values. Scaling a normalized
-//! forward product needs O(ncols) coefficient scratch. The optional
+//! product; exact zero `beta` ignores previous output values. Algebraic
+//! normalization can require O(ncols) coefficient scratch. The optional
 //! [`LazyMatrix::matvec_scaled_with_workspace`] and
 //! [`LazyMatrix::mat_transpose_vec_scaled_with_workspace`] methods let callers
 //! reuse that storage across calls.
@@ -373,6 +379,12 @@ mod backends;
 mod column;
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
 mod csr_stats;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all"
+))]
+mod dense_products;
 mod eager;
 mod gram;
 mod intercept;

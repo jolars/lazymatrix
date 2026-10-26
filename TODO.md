@@ -179,6 +179,16 @@ companion packages; the Rust core remains independent of Python and solvers.
 
 ## Operator performance
 
+- [ ] Investigate the performance regression in stable centered dense products.
+  - Profile forward and transpose products across faer, nalgebra, and ndarray,
+    including contiguous and strided layouts, to separate division costs from
+    traversal and vectorization costs.
+  - Evaluate bounded panels and moving scaling outside inner loops while
+    preserving centered accumulation, overflow, underflow, nonfinite values, and
+    the fused zero-coefficient contracts.
+  - Rerun product and consumer benchmarks before choosing an optimization.
+    Preserve the stable default and avoid a full normalized design copy.
+
 - [x] Add explicit eager normalization and dense materialization.
   - `to_eager` selects an owned dense backend; `to_eager_into` fills existing
     dense storage; `into_eager` reuses writable dense storage in place.

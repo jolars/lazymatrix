@@ -65,6 +65,10 @@ The operator borrows the original matrix and keeps the fitted centers and
 scales. Centering and scaling are independently optional. Reuse fitted
 parameters on new observations with `LazyMatrix::from_normalization`.
 
+Centered dense products normalize entries before accumulation to preserve small
+variations around large column offsets. They use the same numerical policy for
+allocating and reusable products without creating a normalized design copy.
+
 The [examples](examples/) cover gradient descent, stochastic gradient descent,
 coordinate descent, weighted Gram matrices, and file-backed input. Run one from
 a checkout with:

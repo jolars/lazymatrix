@@ -21,6 +21,27 @@ pub trait MatrixShape {
 /// `nrows`. Returns the backend error if the product cannot be completed.
 pub trait MatVec<V>: MatrixShape + MatrixErrorType {
     fn matvec(&self, x: &V) -> Result<V, Self::Error>;
+
+    /// Apply optional normalization, allowing a backend to center before summation.
+    fn matvec_normalized<F: super::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: Clone + super::ElemDivAssign<F> + super::DotSlice<F> + super::SubScalarAssign<F>,
+    {
+        let mut coefficients = x.clone();
+        if let Some(scales) = scales {
+            coefficients.elem_div_assign(scales);
+        }
+        let mut out = self.matvec(&coefficients)?;
+        if let Some(centers) = centers {
+            out.sub_scalar_assign(coefficients.dot_slice(centers));
+        }
+        Ok(out)
+    }
 }
 
 /// Matrix–vector product `out = A x`, overwriting reusable output storage.
@@ -56,21 +77,37 @@ pub trait MatVecInto<X, Y = X>: MatrixShape + MatrixErrorType {
         X: Clone + super::ElemDivAssign<F> + super::DotSlice<F>,
         Y: super::SubScalarAssign<F>,
     {
-        if let Some(scales) = scales {
-            let mut scratch = x.clone();
-            scratch.elem_div_assign(scales);
-            self.matvec_into(&scratch, out)?;
-            if let Some(centers) = centers {
-                out.sub_scalar_assign(scratch.dot_slice(centers));
-            }
-        } else {
-            self.matvec_into(x, out)?;
-            if let Some(centers) = centers {
-                out.sub_scalar_assign(x.dot_slice(centers));
-            }
-        }
-        Ok(())
+        matvec_normalized_into(self, x, centers, scales, out)
     }
+}
+
+pub(crate) fn matvec_normalized_into<M, X, Y, F>(
+    matrix: &M,
+    x: &X,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+    out: &mut Y,
+) -> Result<(), M::Error>
+where
+    M: MatVecInto<X, Y> + ?Sized,
+    F: super::Scalar,
+    X: Clone + super::ElemDivAssign<F> + super::DotSlice<F>,
+    Y: super::SubScalarAssign<F>,
+{
+    if let Some(scales) = scales {
+        let mut scratch = x.clone();
+        scratch.elem_div_assign(scales);
+        matrix.matvec_into(&scratch, out)?;
+        if let Some(centers) = centers {
+            out.sub_scalar_assign(scratch.dot_slice(centers));
+        }
+    } else {
+        matrix.matvec_into(x, out)?;
+        if let Some(centers) = centers {
+            out.sub_scalar_assign(x.dot_slice(centers));
+        }
+    }
+    Ok(())
 }
 
 /// Fused product `out = alpha * A * x + beta * out`.
@@ -84,12 +121,54 @@ pub trait MatVecInto<X, Y = X>: MatrixShape + MatrixErrorType {
 /// Panics unless `x` has length `ncols` and `out` has length `nrows`.
 pub trait MatVecScaledInto<X, Y, F>: MatrixShape + MatrixErrorType {
     fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error>;
+
+    /// Try a specialized fused normalized product before algebraic correction.
+    ///
+    /// `None` leaves output untouched and requests the caller's generic path.
+    /// `Some` obeys the fused product's dimension, zero-coefficient, and error
+    /// contracts. Dense backends use this hook to center before accumulation.
+    fn try_matvec_scaled_normalized_into(
+        &self,
+        _alpha: F,
+        _x: &X,
+        _beta: F,
+        _centers: Option<&[F]>,
+        _scales: Option<&[F]>,
+        _out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: super::Scalar,
+        X: super::VectorView<F>,
+        Y: super::VectorViewMut<F>,
+    {
+        None
+    }
 }
 
 /// Transposed matrix–vector product `Aᵀ x`, returning a freshly allocated vector
 /// of length `ncols`. Returns the backend error if the product cannot be completed.
 pub trait MatTransposeVec<V>: MatrixShape + MatrixErrorType {
     fn mat_transpose_vec(&self, x: &V) -> Result<V, Self::Error>;
+
+    /// Apply a normalized transpose, allowing directly centered accumulation.
+    fn mat_transpose_vec_normalized<F: super::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: super::SumEntries<F> + super::ScaledSubSlice<F> + super::ElemDivAssign<F>,
+    {
+        let mut out = self.mat_transpose_vec(x)?;
+        if let Some(centers) = centers {
+            out.scaled_sub_slice(x.sum_entries(), centers);
+        }
+        if let Some(scales) = scales {
+            out.elem_div_assign(scales);
+        }
+        Ok(out)
+    }
 }
 
 /// Transposed matrix–vector product `out = Aᵀ x`, overwriting reusable output
@@ -124,15 +203,31 @@ pub trait MatTransposeVecInto<X, Y = X>: MatrixShape + MatrixErrorType {
         X: super::SumEntries<F>,
         Y: super::ScaledSubSlice<F> + super::ElemDivAssign<F>,
     {
-        self.mat_transpose_vec_into(x, out)?;
-        if let Some(centers) = centers {
-            out.scaled_sub_slice(x.sum_entries(), centers);
-        }
-        if let Some(scales) = scales {
-            out.elem_div_assign(scales);
-        }
-        Ok(())
+        mat_transpose_vec_normalized_into(self, x, centers, scales, out)
     }
+}
+
+pub(crate) fn mat_transpose_vec_normalized_into<M, X, Y, F>(
+    matrix: &M,
+    x: &X,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+    out: &mut Y,
+) -> Result<(), M::Error>
+where
+    M: MatTransposeVecInto<X, Y> + ?Sized,
+    F: super::Scalar,
+    X: super::SumEntries<F>,
+    Y: super::ScaledSubSlice<F> + super::ElemDivAssign<F>,
+{
+    matrix.mat_transpose_vec_into(x, out)?;
+    if let Some(centers) = centers {
+        out.scaled_sub_slice(x.sum_entries(), centers);
+    }
+    if let Some(scales) = scales {
+        out.elem_div_assign(scales);
+    }
+    Ok(())
 }
 
 /// Fused transpose product `out = alpha * Aᵀ * x + beta * out`.
@@ -152,6 +247,27 @@ pub trait MatTransposeVecScaledInto<X, Y, F>: MatrixShape + MatrixErrorType {
         beta: F,
         out: &mut Y,
     ) -> Result<(), Self::Error>;
+
+    /// Try a specialized fused normalized transpose product.
+    ///
+    /// `None` leaves output untouched. `Some` obeys the fused product's
+    /// dimension, zero-coefficient, and error contracts.
+    fn try_mat_transpose_vec_scaled_normalized_into(
+        &self,
+        _alpha: F,
+        _x: &X,
+        _beta: F,
+        _centers: Option<&[F]>,
+        _scales: Option<&[F]>,
+        _out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: super::Scalar,
+        X: super::VectorView<F>,
+        Y: super::VectorViewMut<F>,
+    {
+        None
+    }
 }
 
 /// Honor the fused zero-coefficient contract without reading overwritten values.
@@ -187,6 +303,18 @@ where
     fn matvec(&self, x: &V) -> Result<V, Self::Error> {
         (**self).matvec(x)
     }
+
+    fn matvec_normalized<F: crate::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: Clone + crate::ElemDivAssign<F> + crate::DotSlice<F> + crate::SubScalarAssign<F>,
+    {
+        (**self).matvec_normalized(x, centers, scales)
+    }
 }
 
 impl<M, X, Y> MatVecInto<X, Y> for &M
@@ -218,6 +346,23 @@ where
     fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
         (**self).matvec_scaled_into(alpha, x, beta, out)
     }
+
+    fn try_matvec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: crate::Scalar,
+        X: crate::VectorView<F>,
+        Y: crate::VectorViewMut<F>,
+    {
+        (**self).try_matvec_scaled_normalized_into(alpha, x, beta, centers, scales, out)
+    }
 }
 
 impl<M, V> MatTransposeVec<V> for &M
@@ -226,6 +371,18 @@ where
 {
     fn mat_transpose_vec(&self, x: &V) -> Result<V, Self::Error> {
         (**self).mat_transpose_vec(x)
+    }
+
+    fn mat_transpose_vec_normalized<F: crate::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: crate::SumEntries<F> + crate::ScaledSubSlice<F> + crate::ElemDivAssign<F>,
+    {
+        (**self).mat_transpose_vec_normalized(x, centers, scales)
     }
 }
 
@@ -264,6 +421,23 @@ where
     ) -> Result<(), Self::Error> {
         (**self).mat_transpose_vec_scaled_into(alpha, x, beta, out)
     }
+
+    fn try_mat_transpose_vec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: crate::Scalar,
+        X: crate::VectorView<F>,
+        Y: crate::VectorViewMut<F>,
+    {
+        (**self).try_mat_transpose_vec_scaled_normalized_into(alpha, x, beta, centers, scales, out)
+    }
 }
 
 impl<M: MatrixErrorType + ?Sized> MatrixErrorType for &mut M {
@@ -286,6 +460,18 @@ where
 {
     fn matvec(&self, x: &V) -> Result<V, Self::Error> {
         (**self).matvec(x)
+    }
+
+    fn matvec_normalized<F: crate::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: Clone + crate::ElemDivAssign<F> + crate::DotSlice<F> + crate::SubScalarAssign<F>,
+    {
+        (**self).matvec_normalized(x, centers, scales)
     }
 }
 
@@ -318,6 +504,23 @@ where
     fn matvec_scaled_into(&self, alpha: F, x: &X, beta: F, out: &mut Y) -> Result<(), Self::Error> {
         (**self).matvec_scaled_into(alpha, x, beta, out)
     }
+
+    fn try_matvec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: crate::Scalar,
+        X: crate::VectorView<F>,
+        Y: crate::VectorViewMut<F>,
+    {
+        (**self).try_matvec_scaled_normalized_into(alpha, x, beta, centers, scales, out)
+    }
 }
 
 impl<M, V> MatTransposeVec<V> for &mut M
@@ -326,6 +529,18 @@ where
 {
     fn mat_transpose_vec(&self, x: &V) -> Result<V, Self::Error> {
         (**self).mat_transpose_vec(x)
+    }
+
+    fn mat_transpose_vec_normalized<F: crate::Scalar>(
+        &self,
+        x: &V,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+    ) -> Result<V, Self::Error>
+    where
+        V: crate::SumEntries<F> + crate::ScaledSubSlice<F> + crate::ElemDivAssign<F>,
+    {
+        (**self).mat_transpose_vec_normalized(x, centers, scales)
     }
 }
 
@@ -363,5 +578,22 @@ where
         out: &mut Y,
     ) -> Result<(), Self::Error> {
         (**self).mat_transpose_vec_scaled_into(alpha, x, beta, out)
+    }
+
+    fn try_mat_transpose_vec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &X,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Option<Result<(), Self::Error>>
+    where
+        F: crate::Scalar,
+        X: crate::VectorView<F>,
+        Y: crate::VectorViewMut<F>,
+    {
+        (**self).try_mat_transpose_vec_scaled_normalized_into(alpha, x, beta, centers, scales, out)
     }
 }

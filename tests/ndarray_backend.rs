@@ -151,6 +151,7 @@ macro_rules! backend_suite {
                 common::run_materialization_suite(build_fortran);
                 common::run_eager_product_suite::<_, Array2<f64>, _>(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
                 common::run_fused_suite(build, |v| Array1::from_vec(v.to_vec()));
+                common::run_dense_centered_product_suite(build, |v| Array1::from_vec(v.to_vec()));
                     common::run_backend_suite(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
                     common::run_logical_columns_suite(build);
                 }
@@ -361,6 +362,10 @@ macro_rules! backend_suite {
 
             #[test]
             fn ndarray_f32_normalization_and_products() {
+                common::run_dense_centered_f32_suite(
+                    |dense| Array2::from_shape_fn((dense.len(), dense[0].len()), |(i, j)| dense[i][j]),
+                    |v| Array1::from_vec(v.to_vec()),
+                );
                 let matrix = array![[1.0_f32, 3.0], [3.0, 3.0]];
                 let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
                 assert_eq!(lazy.centers(), Some([2.0, 3.0].as_slice()));
@@ -373,6 +378,23 @@ macro_rules! backend_suite {
                     lazy.mat_transpose_vec(&array![1.0, 2.0]).unwrap().to_vec(),
                     vec![1.0, 0.0]
                 );
+            }
+
+            #[test]
+            fn centered_products_preserve_variation_through_dense_views() {
+                let mut storage = Array2::from_shape_fn((14, 6), |(i, j)| 1e12 + (i * 6 + j) as f64 / 4.0);
+                let dense: Vec<Vec<_>> = storage.slice(s![..;-2, ..;2])
+                    .rows().into_iter().map(|row| row.to_vec()).collect();
+                for scales in [None, Some(vec![1.3, -2.7, 0.75])] {
+                    common::check_dense_centered_products(
+                        &storage.slice(s![..;-2, ..;2]), &dense, vec![1e12; 3], scales.clone(),
+                        &[0.3, -0.1, 0.7], &[0.25; 7], |v| Array1::from_vec(v.to_vec()),
+                    );
+                    common::check_dense_centered_products(
+                        &storage.slice_mut(s![..;-2, ..;2]), &dense, vec![1e12; 3], scales,
+                        &[0.3, -0.1, 0.7], &[0.25; 7], |v| Array1::from_vec(v.to_vec()),
+                    );
+                }
             }
 
             #[test]

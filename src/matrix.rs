@@ -295,18 +295,8 @@ where
 {
     /// `X̃ v = X (S⁻¹ v) − 1 · (cᵀ S⁻¹ v)`.
     fn matvec(&self, v: &V) -> Result<V, Self::Error> {
-        // The forward op clones `v` because it mutates it into `S⁻¹v`. The
-        // transpose op below does NOT clone `u`: it reads `Σu` first, then only
-        // reads `u` through the backend product.
-        let mut w = v.clone();
-        if let Some(s) = &self.normalization.scales {
-            w.elem_div_assign(s); // w = S⁻¹ v
-        }
-        let mut y = self.data.matvec(&w)?;
-        if let Some(c) = &self.normalization.centers {
-            y.sub_scalar_assign(w.dot_slice(c)); // y −= 1 · (cᵀ w)
-        }
-        Ok(y)
+        self.data
+            .matvec_normalized(v, self.centers(), self.scales())
     }
 }
 
@@ -332,19 +322,8 @@ where
 {
     /// `X̃ᵀ u = S⁻¹ (Xᵀ u − c · Σu)`.
     fn mat_transpose_vec(&self, u: &V) -> Result<V, Self::Error> {
-        let total = if self.normalization.centers.is_some() {
-            u.sum_entries()
-        } else {
-            F::zero()
-        };
-        let mut t = self.data.mat_transpose_vec(u)?;
-        if let Some(c) = &self.normalization.centers {
-            t.scaled_sub_slice(total, c); // t −= Σu · c
-        }
-        if let Some(s) = &self.normalization.scales {
-            t.elem_div_assign(s); // t = S⁻¹ t
-        }
-        Ok(t)
+        self.data
+            .mat_transpose_vec_normalized(u, self.centers(), self.scales())
     }
 }
 
@@ -368,8 +347,8 @@ where
 {
     /// Apply `out = alpha * X̃ * x + beta * out` using caller-owned coefficient scratch.
     ///
-    /// `scratch` must have length `ncols`. It is used when column scaling is
-    /// active, and its contents after the call are unspecified on error.
+    /// `scratch` must have length `ncols`. Backends may use it for column scaling
+    /// or leave it unused. Its contents after the call are unspecified.
     pub fn matvec_scaled_with_workspace<X, Y>(
         &self,
         alpha: F,
@@ -398,6 +377,16 @@ where
             self.ncols(),
             "matvec_scaled_into: scratch dimension mismatch"
         );
+        if let Some(result) = self.data.try_matvec_scaled_normalized_into(
+            alpha,
+            x,
+            beta,
+            self.centers(),
+            self.scales(),
+            out,
+        ) {
+            return result;
+        }
         if let Some(scales) = self
             .normalization
             .scales
@@ -433,9 +422,9 @@ where
 
     /// Apply `out = alpha * X̃ᵀ * x + beta * out` using caller-owned scratch.
     ///
-    /// `scratch` must have length `ncols`. Scaling with nonzero `alpha` uses
-    /// this buffer to keep the previous `out` values separate from the raw
-    /// transpose product.
+    /// `scratch` must have length `ncols`. Backends may use it to keep the raw
+    /// transpose product separate from previous output values, or leave it
+    /// unused. Its contents after the call are unspecified.
     pub fn mat_transpose_vec_scaled_with_workspace<X, Y>(
         &self,
         alpha: F,
@@ -464,6 +453,16 @@ where
             self.ncols(),
             "mat_transpose_vec_scaled_into: scratch dimension mismatch"
         );
+        if let Some(result) = self.data.try_mat_transpose_vec_scaled_normalized_into(
+            alpha,
+            x,
+            beta,
+            self.centers(),
+            self.scales(),
+            out,
+        ) {
+            return result;
+        }
         if let Some(scales) = self
             .normalization
             .scales
@@ -530,6 +529,16 @@ where
             self.nrows(),
             "matvec_scaled_into: output dimension mismatch"
         );
+        if let Some(result) = self.data.try_matvec_scaled_normalized_into(
+            alpha,
+            x,
+            beta,
+            self.centers(),
+            self.scales(),
+            out,
+        ) {
+            return result;
+        }
         if self.normalization.scales.is_some() && alpha != F::zero() {
             let mut scratch = X::owned_from_fn(self.ncols(), |_| F::zero());
             self.matvec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
@@ -575,6 +584,16 @@ where
             self.ncols(),
             "mat_transpose_vec_scaled_into: output dimension mismatch"
         );
+        if let Some(result) = self.data.try_mat_transpose_vec_scaled_normalized_into(
+            alpha,
+            x,
+            beta,
+            self.centers(),
+            self.scales(),
+            out,
+        ) {
+            return result;
+        }
         if self.normalization.scales.is_some() && alpha != F::zero() {
             let mut scratch = Y::owned_from_fn(self.ncols(), |_| F::zero());
             self.mat_transpose_vec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)

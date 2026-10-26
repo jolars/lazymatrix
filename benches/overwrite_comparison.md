@@ -1,5 +1,10 @@
 # Overwrite and fused workspace comparison
 
+The recorded measurements predate the stable centered dense kernels. Centered
+dense reusable-output and fused products now require no normalization scratch,
+so their earlier allocation counts and timings describe the former arithmetic.
+Rerun the dense cases before using these figures to assess current kernels.
+
 The `fused_consumer` benchmark includes an isolated comparison of the existing
 overwrite products with fused workspace products using `alpha = 1` and
 `beta = 0`. Run all of these cases with:

@@ -1,5 +1,10 @@
 # Fused consumer benchmarks
 
+The recorded measurements predate the stable centered dense kernels. Centered
+dense reusable-output and fused products now require no normalization scratch,
+so their earlier allocation counts and timings describe the former arithmetic.
+Rerun the dense cases before using these figures to assess current kernels.
+
 Run the consumer comparison with:
 
 ```sh
@@ -40,16 +45,17 @@ The four paths are:
 
 - `allocating`: allocate forward and transpose results on each step, then
   subtract the response and update coefficients. Allocating `LazyMatrix`
-  forward products also clone the coefficient input.
+  forward products can also clone the coefficient input for algebraic
+  normalization.
 - `overwrite`: reuse residual and gradient vectors with overwrite products,
   then perform the two vector updates separately.
 - `fused`: initialize the residual to the negative response and accumulate
   the forward product, then fuse the transpose product with the coefficient
-  update. Normalization and wrapper scratch are allocated internally.
+  update. Any required normalization and wrapper scratch is allocated internally.
 - `workspace`: perform the same fused updates with caller-owned scratch.
   `LazyMatrix` reuses its normalization buffer; `WithIntercept` reuses its
-  predictor buffer, while its inner `LazyMatrix` still allocates normalization
-  scratch.
+  predictor buffer. Its inner `LazyMatrix` may still allocate normalization
+  scratch, depending on the backend and active normalization.
 
 A benchmark-only allocator counts allocation and reallocation requests and
 requested bytes in a separate warmed batch. Counting is disabled during

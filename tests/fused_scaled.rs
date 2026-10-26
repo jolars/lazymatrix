@@ -130,11 +130,10 @@ macro_rules! ndarray_suite {
         assert!(nonfinite[0].is_nan());
 
         let lazy = LazyMatrix::from_parts(a, Some(vec![1.0, -1.0]), Some(vec![2.0, -2.0]));
-        let mut scratch = array![0.0, 0.0];
+        let mut scratch = array![f64::NAN, f64::NAN];
         let mut out = array![10.0, 20.0, 30.0];
         lazy.matvec_scaled_with_workspace(2.0, &array![2.0, -2.0], -1.0, &mut out, &mut scratch)
             .unwrap();
-        assert_eq!(scratch, array![1.0, 1.0]);
         assert_eq!(out, array![-4.0, -6.0, -8.0]);
         out.fill(10.0);
         let lazy_input = array![2.0, 99.0, -2.0];

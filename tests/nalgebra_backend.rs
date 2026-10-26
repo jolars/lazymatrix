@@ -129,6 +129,38 @@ macro_rules! backend_suite {
                     CscMatrix::try_from_csc_data(2, 1, vec![0, 2], vec![0, 1], vec![1.0_f32, 3.0])
                         .unwrap();
                 common::check_fused_f32(&sparse, DVector::from_column_slice);
+                common::run_dense_centered_f32_suite(
+                    |dense| DMatrix::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
+                    DVector::from_column_slice,
+                );
+            }
+
+            #[test]
+            fn centered_products_preserve_variation_through_dense_views() {
+                let mut storage = DMatrix::from_fn(14, 6, |i, j| 1e12 + (i * 6 + j) as f64 / 4.0);
+                let dense: Vec<Vec<_>> = (0..7)
+                    .map(|i| (0..3).map(|j| storage[(2 * i, 2 * j)]).collect())
+                    .collect();
+                for scales in [None, Some(vec![1.3, -2.7, 0.75])] {
+                    common::check_dense_centered_products(
+                        &storage.view_with_steps((0, 0), (7, 3), (1, 1)),
+                        &dense,
+                        vec![1e12; 3],
+                        scales.clone(),
+                        &[0.3, -0.1, 0.7],
+                        &[0.25; 7],
+                        to_dvec,
+                    );
+                    common::check_dense_centered_products(
+                        &storage.view_with_steps_mut((0, 0), (7, 3), (1, 1)),
+                        &dense,
+                        vec![1e12; 3],
+                        scales,
+                        &[0.3, -0.1, 0.7],
+                        &[0.25; 7],
+                        to_dvec,
+                    );
+                }
             }
 
             #[test]
@@ -143,6 +175,7 @@ macro_rules! backend_suite {
                 );
                 common::run_fused_suite(build, to_dvec);
                 common::run_fused_suite(build_dense, to_dvec);
+                common::run_dense_centered_product_suite(build_dense, to_dvec);
                 common::run_gram_suite(build);
                 common::run_backend_suite(build, to_dvec, from_dvec);
                 common::run_sparse_columns_suite(build);

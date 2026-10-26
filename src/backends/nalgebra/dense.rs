@@ -123,6 +123,21 @@ where
         self.matvec_into(x, &mut out)?;
         Ok(out)
     }
+
+    fn matvec_normalized<N: Scalar>(
+        &self,
+        x: &DVector<F>,
+        centers: Option<&[N]>,
+        scales: Option<&[N]>,
+    ) -> Result<DVector<F>, Self::Error>
+    where
+        DVector<F>:
+            Clone + crate::ElemDivAssign<N> + crate::DotSlice<N> + crate::SubScalarAssign<N>,
+    {
+        let mut out = DVector::zeros(self.nrows());
+        self.matvec_normalized_into(x, centers, scales, &mut out)?;
+        Ok(out)
+    }
 }
 
 impl<F, R, C, S> MatTransposeVec<DVector<F>> for Matrix<F, R, C, S>
@@ -137,6 +152,20 @@ where
         self.mat_transpose_vec_into(x, &mut out)?;
         Ok(out)
     }
+
+    fn mat_transpose_vec_normalized<N: Scalar>(
+        &self,
+        x: &DVector<F>,
+        centers: Option<&[N]>,
+        scales: Option<&[N]>,
+    ) -> Result<DVector<F>, Self::Error>
+    where
+        DVector<F>: crate::SumEntries<N> + crate::ScaledSubSlice<N> + crate::ElemDivAssign<N>,
+    {
+        let mut out = DVector::zeros(self.ncols());
+        self.mat_transpose_vec_normalized_into(x, centers, scales, &mut out)?;
+        Ok(out)
+    }
 }
 
 impl<F, R, C, S> MatVecInto<DVector<F>> for Matrix<F, R, C, S>
@@ -148,6 +177,34 @@ where
 {
     fn matvec_into(&self, x: &DVector<F>, out: &mut DVector<F>) -> Result<(), Self::Error> {
         self.matvec_scaled_into(F::one(), x, F::zero(), out)
+    }
+
+    fn matvec_normalized_into<N: Scalar>(
+        &self,
+        x: &DVector<F>,
+        centers: Option<&[N]>,
+        scales: Option<&[N]>,
+        out: &mut DVector<F>,
+    ) -> Result<(), Self::Error>
+    where
+        DVector<F>: Clone + crate::ElemDivAssign<N> + crate::DotSlice<N>,
+        DVector<F>: crate::SubScalarAssign<N>,
+    {
+        if let Some(centers) = centers {
+            crate::dense_products::matvec(
+                (self.nrows(), self.ncols()),
+                |i, j| self[(i, j)],
+                centers,
+                scales,
+                F::one(),
+                x,
+                F::zero(),
+                out,
+            );
+            Ok(())
+        } else {
+            crate::traits::matvec_normalized_into(self, x, centers, scales, out)
+        }
     }
 }
 
@@ -189,6 +246,29 @@ where
         }
         Ok(())
     }
+
+    fn try_matvec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &DVector<F>,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut DVector<F>,
+    ) -> Option<Result<(), Self::Error>> {
+        let centers = centers?;
+        crate::dense_products::matvec(
+            (self.nrows(), self.ncols()),
+            |i, j| self[(i, j)],
+            centers,
+            scales,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Some(Ok(()))
+    }
 }
 
 impl<F, R, C, S> MatTransposeVecInto<DVector<F>> for Matrix<F, R, C, S>
@@ -204,6 +284,34 @@ where
         out: &mut DVector<F>,
     ) -> Result<(), Self::Error> {
         self.mat_transpose_vec_scaled_into(F::one(), x, F::zero(), out)
+    }
+
+    fn mat_transpose_vec_normalized_into<N: Scalar>(
+        &self,
+        x: &DVector<F>,
+        centers: Option<&[N]>,
+        scales: Option<&[N]>,
+        out: &mut DVector<F>,
+    ) -> Result<(), Self::Error>
+    where
+        DVector<F>: crate::SumEntries<N>,
+        DVector<F>: crate::ScaledSubSlice<N> + crate::ElemDivAssign<N>,
+    {
+        if let Some(centers) = centers {
+            crate::dense_products::transpose(
+                (self.nrows(), self.ncols()),
+                |i, j| self[(i, j)],
+                centers,
+                scales,
+                F::one(),
+                x,
+                F::zero(),
+                out,
+            );
+            Ok(())
+        } else {
+            crate::traits::mat_transpose_vec_normalized_into(self, x, centers, scales, out)
+        }
     }
 }
 
@@ -244,6 +352,29 @@ where
             };
         }
         Ok(())
+    }
+
+    fn try_mat_transpose_vec_scaled_normalized_into(
+        &self,
+        alpha: F,
+        x: &DVector<F>,
+        beta: F,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut DVector<F>,
+    ) -> Option<Result<(), Self::Error>> {
+        let centers = centers?;
+        crate::dense_products::transpose(
+            (self.nrows(), self.ncols()),
+            |i, j| self[(i, j)],
+            centers,
+            scales,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Some(Ok(()))
     }
 }
 

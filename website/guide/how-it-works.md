@@ -28,8 +28,17 @@ $$
 $$
 
 Both identities let the backend use its original dense, sparse, or chunked
-storage. Logical column and sparse row views also expose normalized values
-without allocating an entire normalized matrix.
+storage. For centered dense matrices, LazyMatrix subtracts the center and
+applies the scale at each entry before accumulating products. This avoids
+cancellation when a column's offset is much larger than its variation.
+Allocating, reusable-output, fused, and workspace products share this policy
+across faer, nalgebra, and ndarray. These kernels need no temporary buffer or
+normalized design copy, but can cost more time than a native raw product.
+Uncentered products retain the native multiplication path. Sparse and chunked
+storage use the identities above to preserve their storage and access patterns.
+
+Logical column and sparse row views also expose normalized values without
+allocating an entire normalized matrix.
 
 ## Fit once, apply many times
 
@@ -49,7 +58,7 @@ to an eager representation.
 | Normalized storage            | Original matrix plus fitted parameters | Normalized dense matrix plus fitted parameters   |
 | Sparse input                  | Preserves sparse storage               | Materializes implicit entries into dense storage |
 | Construction                  | Fits statistics                        | Fits statistics and normalizes entries           |
-| Repeated operations           | Applies normalization corrections      | Operates on already normalized values            |
+| Repeated operations           | Applies normalization during products  | Operates on already normalized values            |
 | Existing writable dense input | Keeps normalization implicit           | Can normalize in place with `into_eager`         |
 
 For a dense copy of an $n \times p$ matrix of `f64` values, the values alone

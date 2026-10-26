@@ -63,6 +63,12 @@ mod weighted_sums;
 #[cfg(feature = "zarrs_all")]
 pub(crate) use blocks::validate_rectangle;
 pub(crate) use operator::scale_output;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all"
+))]
+pub(crate) use operator::{mat_transpose_vec_normalized_into, matvec_normalized_into};
 
 pub use crate::normalization::{
     Centering, Normalization, NormalizationParams, NormalizationStats, Scaling,
