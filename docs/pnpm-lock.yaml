@@ -7,6 +7,7 @@ settings:
 overrides:
   vite: ^6.4.3
   '@xmldom/xmldom': ^0.9.12
+  undici@7: ^7.30.1
 
 importers:
 
@@ -1740,8 +1741,8 @@ packages:
     resolution: {integrity: sha512-I8yFsfRzmzK0WV1pNNOA4A7y4RDfFxPRxb3t+e3ui14qSGOxGtiSP6GjeX+Y6CHb7HYaFj7ECUD7VE5kQMZWGQ==}
     engines: {node: '>=18', npm: '>=9'}
 
-  undici@7.29.1:
-    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
+  undici@7.30.1:
+    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
 
   undici@8.12.3:
@@ -2792,7 +2793,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 7.29.1
+      undici: 7.30.1
       whatwg-mimetype: 4.0.0
 
   comma-separated-tokens@2.0.3: {}
@@ -3330,7 +3331,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5
-      undici: 7.29.1
+      undici: 7.30.1
       workerd: 1.20261012.1
       ws: 8.21.0
       youch: 4.1.0-beta.10
@@ -3577,7 +3578,7 @@ snapshots:
     dependencies:
       '@mixmark-io/domino': 2.2.0
 
-  undici@7.29.1: {}
+  undici@7.30.1: {}
 
   undici@8.12.3: {}
 

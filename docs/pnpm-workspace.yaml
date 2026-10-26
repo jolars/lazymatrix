@@ -2,7 +2,8 @@ onlyBuiltDependencies:
   - esbuild
   - workerd
 
-# Use patched transitive dependencies with the stable VitePress release.
+# Use patched transitive dependencies until upstream packages update.
 overrides:
   vite: ^6.4.3
   "@xmldom/xmldom": ^0.9.12
+  "undici@7": ^7.30.1
