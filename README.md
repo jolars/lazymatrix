@@ -9,22 +9,6 @@ applies centering and scaling through matrix operations, preserving sparse
 storage without creating a normalized copy. It supports dense and sparse
 matrices, borrowed views, and chunked Zarr arrays.
 
-The companion Python package supports NumPy arrays and SciPy CSR/CSC input:
-
-```python
-import numpy as np
-from lazymatrix import standardize
-
-x = np.array([[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]])
-z = standardize(x)
-prediction = z @ np.array([1.0, -1.0])
-gradient = z.T @ prediction
-```
-
-Install it with `pip install lazymatrix`. See the
-[Python guide](https://lazymatrix.org/guide/python) for installation, ownership,
-and supported operations.
-
 See the [documentation](https://lazymatrix.org) for guides, benchmarks, and
 links to the API reference.
 
@@ -42,8 +26,8 @@ The core library requires Rust 1.84 or newer. Optional backends can require a
 newer compiler. sprs 0.11.4 requires Rust 1.85, while sprs 0.11.5 and newer
 require Rust 1.88. For Rust 1.85 through 1.87, select sprs 0.11.4 using
 `cargo update --package sprs --precise 0.11.4`. The `nalgebra` feature requires
-Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust 1.87
-support.
+Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust
+1.87 support.
 
 ## Usage
 
@@ -114,6 +98,25 @@ column statistics where supported.
 
 Custom backends can implement the crate's matrix and vector traits. See the [API
 reference](https://docs.rs/lazymatrix) for capabilities and supported types.
+
+## Python package
+
+The companion Python package supports NumPy arrays and SciPy CSR/CSC input.
+Install it with `pip install lazymatrix`:
+
+```python
+import numpy as np
+from lazymatrix import standardize
+
+x = np.array([[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]])
+z = standardize(x)
+prediction = z @ np.array([1.0, -1.0])
+gradient = z.T @ prediction
+```
+
+See the [Python guide](https://lazymatrix.org/guide/python) for installation,
+ownership, and supported operations, and the [Python API
+reference](https://lazymatrix.org/reference/python/) for details.
 
 ## Documentation
 
