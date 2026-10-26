@@ -13,8 +13,15 @@ cargo test --manifest-path tests/feature_unification/Cargo.toml --locked \
   --features ndarray_v0_16,ndarray_v0_17
 ```
 
-`scripts/test-backends.sh coexistence` covers every version pair, both with and
-without parallelism, and all supported releases together. MSRV checks exclude
-nalgebra 0.35 and zarrs 0.23; the latter has a separate Rust 1.91 check. The
+`scripts/test-backends.sh coexistence` runs this consumer harness for every
+version pair, both with and without parallelism, and all supported releases
+together. It also checks each family's unversioned alias alongside all of its
+version features in both parallel modes using `cargo check --lib`. Full
+correctness suites and solver examples run in the individual-version and core
+jobs rather than repeating for each pair. CI caches this workspace's build
+artifacts separately from the root workspace.
+
+MSRV checks exclude nalgebra 0.35 and zarrs 0.23; the latter has a separate
+Rust 1.91 check. The
 separate lockfile starts from the root lockfile's dependency versions; update both
 deliberately when changing supported releases.

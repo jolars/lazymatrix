@@ -48,11 +48,20 @@ test_pairs() {
     for ((i = 0; i < ${#versions[@]}; i++)); do
         for ((j = i + 1; j < ${#versions[@]}; j++)); do
             local pair="${versions[i]},${versions[j]}"
-            test_version "$pair"
             test_fixtures --features "$pair"
             test_fixtures --features "$pair,parallel"
         done
     done
+}
+
+check_aliases() {
+    local family=$1
+    shift
+    local combined
+    combined=$(IFS=,; echo "$*")
+    # Pairwise runtime coverage uses version features; aliases only select the latest release.
+    cargo check --lib --locked --no-default-features --features "$combined,$family"
+    cargo check --lib --locked --no-default-features --features "$combined,$family,parallel"
 }
 
 test_coexistence() {
@@ -60,13 +69,10 @@ test_coexistence() {
     test_pairs "${nalgebra_versions[@]}"
     test_pairs "${ndarray_versions[@]}"
     test_pairs "${zarrs_versions[@]}"
-    local feature family
-    for feature in "${faer_versions[@]:0:2}" "${nalgebra_versions[@]:0:3}" "${ndarray_versions[@]:0:2}" "${zarrs_versions[@]:0:1}"; do
-        family=${feature%%_v*}
-        test_version "$feature,$family"
-        test_fixtures --features "$feature,$family"
-        test_fixtures --features "$feature,$family,parallel"
-    done
+    check_aliases faer "${faer_versions[@]}"
+    check_aliases nalgebra "${nalgebra_versions[@]}"
+    check_aliases ndarray "${ndarray_versions[@]}"
+    check_aliases zarrs "${zarrs_versions[@]}"
     local combined
     combined=$(IFS=,; echo "${faer_versions[*]},${nalgebra_versions[*]},${ndarray_versions[*]},${zarrs_versions[*]}")
     test_fixtures --features "$combined"

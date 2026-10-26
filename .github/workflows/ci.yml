@@ -89,6 +89,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.group }}
+          workspaces: |
+            . -> target
+            tests/feature_unification -> target
       - run: bash scripts/test-backends.sh ${{ matrix.args }}
       - name: Run out-of-core examples
         if: matrix.group == 'core'
