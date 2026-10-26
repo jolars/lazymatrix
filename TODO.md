@@ -27,9 +27,10 @@ companion packages; the Rust core remains independent of Python and solvers.
     TensorFlow support can follow the first working consumer.
 
 - [x] Add an owned float64 Python binding for dense and CSR/CSC input, products,
-  transpose, column access, a SciPy operator adapter, and explicit dense conversion.
-  Python and Rust use independent versions in one release PR, with both API
-  references generated inside VitePress through Diplodocus.
+  transpose, column access, a SciPy operator adapter, and explicit dense
+  conversion. Python and Rust use independent versions in one release PR,
+  with both API references generated inside VitePress through Diplodocus.
+
 - [ ] Expose reusable fitted `NormalizationParams` through the Python binding.
   - Export and reconstruct centers and scales with column-count validation,
     preserving constant-column and nonfinite-value semantics. Specify a portable
@@ -460,89 +461,6 @@ system still requires O(p^2) storage.
   - Establish the benefit before expanding to additional storage backends or
     changing the solver for very large predictor counts.
 
-## SLOPE rewrite support
-
-These items come from comparing the normalization code in `../libslope` with the
-current operator and column-view API. The JIT-normalization enum and its
-four-way branches should not be ported: optional centers and scales already
-represent the same four states.
-
-- [x] Add weighted logical-column products.
-  - [x] Provide a weighted dot product for `x_tilde_j^T (weights * vector)`
-    without materializing the elementwise product.
-  - [x] Provide a weighted squared norm `sum_i weights_i * x_tilde_ij^2` for
-    coordinate-wise Hessian calculations.
-  - [x] Offer a weighted-dot variant accepting cached `sum(weights * vector)` so
-    repeated dots remain O(nnz_j). Weighted norms scan row weights directly
-    in O(n + nnz_j) to preserve small implicit-zero contributions. Their
-    cached-total variant uses the same calculation.
-  - [x] Accept borrowed inputs without forcing copies of dense matrix columns;
-    account explicitly for contiguous versus strided vector views.
-  - [x] Test each formula against a dense oracle for all four center/scale
-    combinations, including implicit and explicitly stored zeros.
-
-- [x] Make the sparse-plus-offset decomposition of `LazyColumn` easier to use.
-  - Provide `implicit_value()` (`-center / scale`), `raw_sum()`, and an iterator
-    over stored corrections (`raw_value / scale`).
-  - Keep these as representation-level column operations. Residual offsets,
-    cached residual sums, and coordinate-update policy remain in the consuming
-    solver.
-  - Use the coordinate-descent example to verify that a centered residual update
-    can stay O(nnz_j) without rederiving normalization formulas.
-
-- [x] Add the remaining normalization statistics used by `libslope`.
-  - Add minimum centering and L1 and range scaling.
-  - Extend `ColumnStats` with sparse-aware minima, ranges, L1 norms, and
-    centered L1 norms. Implicit zeros must participate in every statistic.
-  - Use the sparse closed form
-    `sum_stored |value - center| + (n - nnz) * |center|` for centered L1 norms.
-  - Preserve the current rule that non-translation-invariant scales such as L1,
-    L2, and max-absolute are computed after centering. `libslope` computes its
-    scales from raw `X`; exact legacy behavior for unusual combinations can be
-    reproduced with `from_parts`.
-
-- [x] Add a generic dense/sparse logical-column interface.
-  - Use `RawColumns` with an associated borrowed view for backend storage and
-    `Columns` with an associated `LogicalColumn` for generic consumers.
-  - Accept contiguous and strided inputs and destinations through `VectorView` /
-    `VectorViewMut` without forcing copies.
-  - Keep `SparseColumns` as the stronger contiguous-CSC capability and expose
-    sparse representation helpers separately from common logical operations.
-
-- [x] Add dense faer and nalgebra backends.
-  - Implement operators, statistics, and raw-column access for owned matrices
-    and immutable backend-native matrix views.
-  - Exercise the same logical-column oracle over dense and sparse storage.
-  - Demonstrate SLOPE-shaped weighted derivatives and active-column updates in
-    the `slope_primitives` example.
-
-- [ ] Benchmark active-set products before adding a restricted-operator API.
-  - Full gradients map directly to `MatTransposeVec`, and active-set gradients
-    can be computed through `LazyColumn` views.
-  - Add a restricted `matvec` or transpose product only if working-set and
-    screening benchmarks show that zero-filled full products are a bottleneck.
-  - Do not encode flattened feature-response indices or SLOPE working-set policy
-    in the matrix API.
-
-- [ ] Benchmark logical column-pair products before adding a Gram-entry API.
-  - Prototype `X_tilde_j^T X_tilde_k` and `X_tilde_j^T diag(weights) X_tilde_k`
-    in a consuming coordinate or block method.
-  - For CSC inputs, merge stored row indices and account for the centered
-    background analytically rather than materializing either logical column.
-  - Define the capability at matrix level if accepting two backend-specific
-    associated column-view types makes a reusable `LogicalColumn` method
-    awkward.
-  - Document backend-specific complexity; do not promise sparse intersection
-    costs for dense storage or for an incompatible sparse orientation.
-
-- [ ] Pressure-test signed combinations of normalized columns in the SLOPE
-  consumer.
-  - Build cluster directions from `LazyColumn` views into a consumer-owned
-    sparse-plus-offset workspace instead of materializing a normalized sparse
-    matrix for every cluster.
-  - Promote a general column-combination abstraction into this crate only if a
-    second non-SLOPE consumer establishes a reusable contract.
-
 ## Submatrices
 
 - [ ] Add submatrix support only after row and column views are established.
@@ -585,26 +503,6 @@ represent the same four states.
     proximal operations belong to backends or solver-facing crates.
   - Promote a vector primitive here only when it is required to implement a
     matrix capability across multiple backends.
-
-## Explicit non-goals
-
-- Coordinate descent, SGD, residual offsets, coefficient offsets, sampling,
-  optimization workspaces, and convergence logic remain in consuming crates.
-- Orientation capability traits must not conceal full scans or sparse-to-dense
-  materialization.
-- Column or row views expose matrix structure and normalization metadata, not
-  solver-specific state or update operations.
-- Arbitrary affine-expression machinery is deferred until more transformations
-  than column centering and scaling require it.
-- Determinants, inverses, factorizations, direct solves, mutable entrywise
-  matrix arithmetic, rank-one updates, and general matrix Hadamard products are
-  not linear-operator capabilities and remain out of scope.
-- Intercept fitting, coefficient rescaling, working and strong sets, screening,
-  KKT policy, SLOPE clusters, and cluster merging or splitting remain in the
-  consuming model crate.
-- Dense in-place normalization and a `modify_x` mode are not part of the lazy
-  operator. Consumers that deliberately materialize normalized dense data can do
-  so outside this crate.
 
 ## Outreach targets
 
