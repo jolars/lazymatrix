@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1](https://github.com/jolars/lazymatrix/compare/python-v0.1.0...python-v0.1.1) (2026-10-26)
+
+### Dependencies
+
+- updated lazymatrix to v0.8.1
+
 ## [0.1.0](https://github.com/jolars/lazymatrix/compare/python-v0.0.0...python-v0.1.0) (2026-10-26)
 
 ### Features

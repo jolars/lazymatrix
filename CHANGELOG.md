@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.1](https://github.com/jolars/lazymatrix/compare/v0.8.0...v0.8.1) (2026-10-26)
+
+### Bug Fixes
+
+- **ci:** remove unsupported sdist flag ([`6b348da`](https://github.com/jolars/lazymatrix/commit/6b348da5c35317385a7001797086dd2bf2d77ac1))
+
 ## [0.8.0](https://github.com/jolars/lazymatrix/compare/v0.7.0...v0.8.0) (2026-10-26)
 
 ### Breaking changes
