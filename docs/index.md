@@ -75,6 +75,11 @@ let y = lazy.matvec(&array![1.0, 1.0, 1.0]).unwrap();
 assert_eq!(y, array![1.0, -0.5, -0.5]);
 ```
 
+## Citation
+
+See [Citing LazyMatrix](/guide/citation) for a text citation and BibLaTeX and
+BibTeX entries.
+
 ## Where to go next
 
 Read the [guide](/guide/getting-started) for installation and eager conversion,

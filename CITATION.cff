@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use LazyMatrix in your research, please cite it using this metadata."
+type: software
+title: "jolars/lazymatrix: python-v0.1.0"
+authors:
+  - family-names: Larsson
+    given-names: Johan
+    affiliation: University of Copenhagen
+version: python-v0.1.0
+date-released: "2026-10-26"
+doi: 10.5281/zenodo.23666452
+url: https://zenodo.org/records/23666452
+repository-code: https://github.com/jolars/lazymatrix
+license:
+  - Apache-2.0
+  - MIT

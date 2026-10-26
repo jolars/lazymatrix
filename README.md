@@ -128,6 +128,50 @@ reference](https://lazymatrix.org/reference/python/) for details.
 - [Rust API reference on the website](https://lazymatrix.org/reference/rust/)
 - [Benchmarks](https://lazymatrix.org/benchmarks)
 
+## Citation
+
+If you use LazyMatrix in your research, please cite the [Zenodo
+archive](https://doi.org/10.5281/zenodo.23666452):
+
+> Larsson, Johan. (2026). jolars/lazymatrix: python-v0.1.0 (python-v0.1.0)
+> [Software]. Zenodo. https://doi.org/10.5281/zenodo.23666452
+
+This DOI identifies the archived `python-v0.1.0` release. Python and Rust
+releases are versioned independently.
+
+### BibLaTeX
+
+```bibtex
+@software{larsson2026lazymatrix,
+  author    = {Larsson, Johan},
+  title     = {jolars/lazymatrix: python-v0.1.0},
+  date      = {2026-10-26},
+  version   = {python-v0.1.0},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.23666452},
+  url       = {https://doi.org/10.5281/zenodo.23666452}
+}
+```
+
+### BibTeX
+
+For styles that do not support `@software`, use `@misc`:
+
+```bibtex
+@misc{larsson2026lazymatrix,
+  author       = {Larsson, Johan},
+  title        = {jolars/lazymatrix: python-v0.1.0},
+  year         = {2026},
+  month        = oct,
+  howpublished = {Zenodo},
+  note         = {Software, version python-v0.1.0},
+  doi          = {10.5281/zenodo.23666452},
+  url          = {https://doi.org/10.5281/zenodo.23666452}
+}
+```
+
+Machine-readable metadata is available in [CITATION.cff](CITATION.cff).
+
 ## License
 
 Licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or the

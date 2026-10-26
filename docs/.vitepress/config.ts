@@ -114,6 +114,7 @@ export default defineConfig({
             { text: "Getting started", link: "/guide/getting-started" },
             { text: "Python", link: "/guide/python" },
             { text: "How it works", link: "/guide/how-it-works" },
+            { text: "Citation", link: "/guide/citation" },
           ],
         },
       ],
