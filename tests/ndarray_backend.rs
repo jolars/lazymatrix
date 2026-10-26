@@ -20,6 +20,7 @@ macro_rules! mmap_tests {
             use ndarray_npy::{ViewNpyExt, WriteNpyExt};
             let tm = common::random_matrix(91, 7, 5, 0.6);
             for build in [build, build_fortran] {
+                common::run_submatrix_suite(build, |v| Array1::from_vec(v.to_vec()));
                 let array = build(&tm);
                 let mut file = tempfile::tempfile().unwrap();
                 array.write_npy(&mut file).unwrap();

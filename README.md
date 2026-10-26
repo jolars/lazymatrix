@@ -74,6 +74,7 @@ cargo run --locked --example coordinate_descent --features faer
   weighted Gram matrices.
 - Borrowed logical columns and sparse column and row views for supported
   storage.
+- Borrowed contiguous submatrices that retain fitted normalization parameters.
 - An implicit intercept column through `WithIntercept`.
 - Explicit dense conversion through `to_eager` and `to_eager_into`, or in-place
   normalization of writable dense storage through `into_eager`.

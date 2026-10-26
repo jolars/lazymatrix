@@ -151,3 +151,12 @@ required-features = ["ndarray_all", "sprs_all"]
 name = "normalization_memory"
 harness = false
 required-features = ["ndarray_all", "sprs_all"]
+
+[[example]]
+name = "submatrix"
+required-features = ["ndarray_all"]
+
+[[bench]]
+name = "submatrix"
+harness = false
+required-features = ["ndarray_all", "sprs_all"]

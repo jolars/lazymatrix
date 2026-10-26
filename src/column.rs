@@ -141,14 +141,25 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
 
     /// Squared Euclidean norm of the logical normalized column.
     ///
-    /// Structurally absent entries contribute `center² / scale²`. This takes
-    /// O(nnz) time and does not materialize the column.
+    /// Structurally absent entries contribute `center² / scale²`. Sorted,
+    /// unique entries take O(nnz) time and constant scratch space. Unsorted or
+    /// duplicate indices use O(n + nnz) time and one O(n) working column to
+    /// combine raw duplicates before squaring.
     pub fn norm_squared(&self) -> F {
         let mut stored_squared_deviations = F::zero();
-        self.raw.for_each_stored(|_, value| {
+        let mut previous = None;
+        let mut canonical = true;
+        self.raw.for_each_stored(|row, value| {
+            if previous.is_some_and(|last| row <= last) {
+                canonical = false;
+            }
+            previous = Some(row);
             let deviation = value - self.center;
             stored_squared_deviations = stored_squared_deviations + deviation * deviation;
         });
+        if !canonical {
+            return self.weighted_norm_squared(&UnitWeights(self.len()));
+        }
         let implicit_count = F::from_usize(self.len() - self.raw.stored_len()).unwrap();
         let centered_norm_squared =
             stored_squared_deviations + implicit_count * self.center * self.center;
@@ -392,5 +403,16 @@ impl<C: RawColumn<F>, F: Scalar> LogicalColumn<F> for LazyColumn<C, F> {
     }
     fn scaled_add_to<V: VectorViewMut<F> + ?Sized>(&self, alpha: F, destination: &mut V) {
         self.scaled_add_to(alpha, destination);
+    }
+}
+
+struct UnitWeights(usize);
+impl<F: Scalar> VectorView<F> for UnitWeights {
+    fn len(&self) -> usize {
+        self.0
+    }
+    fn get(&self, index: usize) -> F {
+        assert!(index < self.0, "weight index out of bounds");
+        F::one()
     }
 }

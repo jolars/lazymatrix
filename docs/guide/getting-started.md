@@ -57,6 +57,37 @@ For repeated operations, reusable-output traits and workspace methods can reduce
 allocation. See the [API documentation](https://docs.rs/lazymatrix) for the
 capabilities supported by each backend.
 
+## Select a submatrix
+
+Use contiguous ranges to restrict an already normalized matrix:
+
+```rust
+let block = lazy.submatrix(1..3, 0..2);
+let y = block.matvec(&array![1.0, -1.0]).unwrap();
+let smaller = block.submatrix(0..1, 1..2);
+```
+
+Submatrix construction borrows data and fitted parameters without allocating.
+Nested selections use local coordinates. Row selection preserves the original
+centers and scales; it does not fit new statistics. To normalize a raw subset
+independently, select it through your backend before calling `LazyMatrix::new`.
+Empty ranges are allowed, and invalid ranges panic.
+
+Submatrices support forward and transpose products, reusable and fused products,
+and `to_eager` and `to_eager_into` on all in-memory backends. Dense products visit
+only the selected rectangle. Sparse products scan stored entries in the selected
+outer rows or columns and filter the other axis, using O(selected rows +
+selected columns) workspace. Construction allocates nothing, but reusable sparse
+products still allocate working vectors.
+
+Column access requires the same natural column-borrowing capability as the
+parent. A filtered column traversal scans the parent column. Checked CSC column
+and CSR row views expose `stored_entries()` and `stored_corrections()` iterators
+with local indices, preserving stored zeros and duplicates. Each row traversal
+scans the parent row. These views do not expose rebased index slices. Zarr,
+arbitrary index lists, weighted Gram operations, and Python indexing remain
+outside this API.
+
 ## Materialize explicitly
 
 Choose an eager representation when dense storage and repeated operations suit

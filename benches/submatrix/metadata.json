@@ -1,0 +1,18 @@
+{
+  "recorded_at": "2026-10-26T15:02:15.970430+00:00",
+  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "command": "cargo bench --locked --bench submatrix --features ndarray,sprs -- --sample-size 10 --warm-up-time 0.1 --measurement-time 0.2",
+  "source_shape": [
+    4096,
+    256
+  ],
+  "source_formula": "((row * 13 + column * 7) % 97 == 0) ? ((row + column) % 11) : 0",
+  "row_start": 17,
+  "column_start": 11,
+  "normalization": {
+    "center": 1.0,
+    "scale": 2.0
+  },
+  "notes": "Short smoke measurements while other validation tasks were running; timings are illustrative, not a stable performance comparison. Allocation measurements are untimed and exclude source matrices and caller-owned inputs and outputs."
+}

@@ -26,6 +26,15 @@
 //! Sparse and chunked storage use the algebraic identities above to preserve
 //! their storage and access patterns.
 //!
+//! # Submatrices
+//!
+//! [`LazyMatrix::submatrix`] borrows contiguous row and column ranges of the
+//! already normalized matrix. It inherits the selected fitted parameters rather
+//! than recomputing them. [`Submatrix`] supports products, filtered column and
+//! sparse-row access, and explicit eager conversion for in-memory backends.
+//! Construction allocates nothing; sparse products use working vectors and
+//! never materialize the selected design matrix.
+//!
 //! # Eager normalization
 //!
 //! [`LazyMatrix::to_eager`] explicitly materializes normalized dense data from
@@ -410,6 +419,14 @@ mod materialize;
 mod matrix;
 mod normalization;
 mod row;
+mod submatrix;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all",
+    feature = "sprs_all"
+))]
+mod submatrix_kernels;
 pub mod traits;
 mod weighted_sums;
 
@@ -425,12 +442,13 @@ pub use normalization::{
     Centering, Normalization, NormalizationParams, NormalizationStats, Scaling,
 };
 pub use row::LazyRow;
+pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};
 pub use traits::{
     ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign, L2Norm,
     LogicalColumn, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
     MatVecInto, MatVecScaledInto, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixShape,
     MatrixWrite, RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign, ScaledAddAssign,
-    ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SumEntries, VectorOwned,
-    VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto,
-    WeightedGramKernel,
+    ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel, SumEntries,
+    VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel,
+    WeightedGramInto, WeightedGramKernel,
 };

@@ -296,3 +296,297 @@ impl_products!(SparseRowMatMut<'_, usize, F>);
 crate::csr_stats::impl_column_stats!(SparseRowMat<usize, F>);
 crate::csr_stats::impl_column_stats!(SparseRowMatRef<'_, usize, F>);
 crate::csr_stats::impl_column_stats!(SparseRowMatMut<'_, usize, F>);
+
+impl<F: Scalar> crate::SubmatrixKernel<F> for SparseRowMat<usize, F> {
+    fn submatrix_matvec_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            false,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn submatrix_transpose_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            true,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn materialize_submatrix_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_materialize(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            out,
+        );
+        Ok(())
+    }
+}
+
+impl<F: Scalar> crate::SubmatrixKernel<F> for SparseRowMatRef<'_, usize, F> {
+    fn submatrix_matvec_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            false,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn submatrix_transpose_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            true,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn materialize_submatrix_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_materialize(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            out,
+        );
+        Ok(())
+    }
+}
+
+impl<F: Scalar> crate::SubmatrixKernel<F> for SparseRowMatMut<'_, usize, F> {
+    fn submatrix_matvec_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            false,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn submatrix_transpose_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            true,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn materialize_submatrix_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_materialize(
+            self,
+            rows,
+            columns,
+            false,
+            |outer, f| {
+                let (indices, values) = crate::SparseRows::sparse_row(self, outer);
+                for (&i, &v) in indices.iter().zip(values) {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            out,
+        );
+        Ok(())
+    }
+}

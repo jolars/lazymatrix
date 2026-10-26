@@ -37,6 +37,8 @@
 //! * [`MaterializeDense`] — explicit normalized dense materialization from any
 //!   supported input. [`MatrixOwned`] allocates the selected dense backend, and
 //!   [`DenseNormalize`] permits infallible in-place dense normalization.
+//! * [`SubmatrixKernel`] — rectangular products and materialization over raw
+//!   storage, used by borrowed [`crate::Submatrix`] views.
 //! * [`ReadBlock`] — experimental fallible rectangular reads into caller-owned
 //!   storage, returning [`DenseBlock`] views without hiding I/O in borrowing.
 
@@ -57,6 +59,7 @@ mod materialize;
 mod operator;
 mod rows;
 mod stats;
+mod submatrix;
 mod vectors;
 mod weighted_sums;
 
@@ -83,6 +86,7 @@ pub use operator::{
 };
 pub use rows::SparseRows;
 pub use stats::ColumnStats;
+pub use submatrix::SubmatrixKernel;
 pub use vectors::{
     DotProduct, DotSlice, ElemDivAssign, L2Norm, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
     SubScalarAssign, SumEntries, VectorOwned, VectorView, VectorViewMut,

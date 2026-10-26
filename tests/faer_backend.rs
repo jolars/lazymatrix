@@ -45,6 +45,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn csr_backend_suite() {
+                common::run_submatrix_suite(build_csr, to_col);
                 common::run_backend_suite(build_csr, to_col, from_col);
                 common::run_fused_suite(build_csr, to_col);
                 common::run_materialization_suite(build_csr);
@@ -246,6 +247,8 @@ macro_rules! backend_suite {
 
             #[test]
             fn faer_backend_suite() {
+                common::run_submatrix_suite(build, to_col);
+                common::run_submatrix_suite(build_dense, to_col);
                 common::run_materialization_suite(build);
                 common::run_materialization_suite(build_dense);
                 common::run_eager_product_suite::<_, Mat<f64>, _>(build, to_col, from_col);
@@ -395,6 +398,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn faer_weighted_norms_combine_unsorted_duplicates() {
+                use lazymatrix::{MatTransposeVec, MatVec};
                 let symbolic = faer::sparse::SymbolicSparseColMat::new_unsorted_checked(
                     3,
                     1,
@@ -404,6 +408,20 @@ macro_rules! backend_suite {
                 );
                 let matrix = SparseColMat::new(symbolic, vec![0.25, 1.0, 0.75, 99.0]);
                 let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.0]), Some(vec![-2.0]));
+                let restricted = lazy.submatrix(0..3, 0..1);
+                let column = restricted.sparse_column(0);
+                assert_eq!(
+                    column.stored_entries().collect::<Vec<_>>(),
+                    vec![(2, 0.25), (0, 1.0), (2, 0.75)]
+                );
+                approx::assert_abs_diff_eq!(column.norm_squared(), 0.25);
+                let eager = restricted.to_eager::<Mat<f64>>().unwrap();
+                assert_eq!(eager.data()[(1, 0)], 0.5);
+                assert_eq!(restricted.matvec(&vec![2.0]).unwrap(), vec![0.0, 1.0, 0.0]);
+                assert_eq!(
+                    restricted.mat_transpose_vec(&vec![1.0, 2.0, 3.0]).unwrap(),
+                    vec![1.0]
+                );
                 let weights = [1e16, 1.0, 1e16];
                 for column in [lazy.column(0), lazy.sparse_column(0)] {
                     approx::assert_abs_diff_eq!(column.weighted_norm_squared(&weights), 0.25);

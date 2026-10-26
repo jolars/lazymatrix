@@ -249,3 +249,109 @@ where
         Ok(())
     }
 }
+
+impl<F, I, IP, IS, DS, Iptr> crate::SubmatrixKernel<F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+{
+    fn submatrix_matvec_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            self.is_csc(),
+            |outer, f| {
+                let vector = self.outer_view(outer).unwrap();
+                for (i, &v) in vector.iter() {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            false,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn submatrix_transpose_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_product(
+            self,
+            rows,
+            columns,
+            self.is_csc(),
+            |outer, f| {
+                let vector = self.outer_view(outer).unwrap();
+                for (i, &v) in vector.iter() {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            true,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn materialize_submatrix_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::sparse_materialize(
+            self,
+            rows,
+            columns,
+            self.is_csc(),
+            |outer, f| {
+                let vector = self.outer_view(outer).unwrap();
+                for (i, &v) in vector.iter() {
+                    f(i, v);
+                }
+            },
+            centers,
+            scales,
+            out,
+        );
+        Ok(())
+    }
+}

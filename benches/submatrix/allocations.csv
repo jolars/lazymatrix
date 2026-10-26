@@ -1,0 +1,13 @@
+rows,columns,operation,peak_workspace_bytes
+128,32,construct_dense,0
+128,32,construct_sparse,0
+128,32,dense_forward,0
+128,32,dense_transpose,0
+128,32,sparse_forward,2208
+128,32,sparse_transpose,1440
+1024,64,construct_dense,0
+1024,64,construct_sparse,0
+1024,64,dense_forward,0
+1024,64,dense_transpose,0
+1024,64,sparse_forward,17536
+1024,64,sparse_transpose,9856

@@ -25,6 +25,13 @@ fn build(tm: &TestMatrix) -> CsMat<f64> {
 
 #[test]
 fn sprs_backend_suite() {
+    common::run_submatrix_suite(build, |v| v.to_vec());
+    common::run_submatrix_suite(|tm| build(tm).to_csr(), |v| v.to_vec());
+    common::run_submatrix_suite(|tm| SprsCsc::try_new(build(tm)).unwrap(), |v| v.to_vec());
+    common::run_submatrix_suite(
+        |tm| SprsCsr::try_new(build(tm).to_csr()).unwrap(),
+        |v| v.to_vec(),
+    );
     common::run_materialization_suite(build);
     common::run_materialization_suite(|tm| build(tm).to_csr());
     common::run_materialization_suite(|tm| SprsCsc::try_new(build(tm)).unwrap());

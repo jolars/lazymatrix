@@ -40,6 +40,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn csr_backend_suite() {
+                common::run_submatrix_suite(build_csr, to_dvec);
                 common::run_backend_suite(build_csr, to_dvec, from_dvec);
                 common::run_fused_suite(build_csr, to_dvec);
                 common::run_materialization_suite(build_csr);
@@ -165,6 +166,8 @@ macro_rules! backend_suite {
 
             #[test]
             fn nalgebra_backend_suite() {
+                common::run_submatrix_suite(build, to_dvec);
+                common::run_submatrix_suite(build_dense, to_dvec);
                 common::run_materialization_suite(build);
                 common::run_materialization_suite(build_dense);
                 common::run_eager_product_suite::<_, DMatrix<f64>, _>(build, to_dvec, from_dvec);

@@ -463,19 +463,23 @@ system still requires O(p^2) storage.
 
 ## Submatrices
 
-- [ ] Add submatrix support only after row and column views are established.
-  - Define `lazy.submatrix(rows, cols)` as a restriction of the already
-    normalized matrix; inherit the selected columns' existing centers and scales
-    rather than recomputing them.
-  - Start with contiguous ranges, where global-to-local index mapping is cheap.
-  - Treat a block as the range-selected form of a submatrix rather than as an
-    unrelated abstraction.
-  - Use filtering view adapters when restriction breaks slice contiguity; do not
-    weaken full CSC/CSR access merely to give every view the same type.
-  - Defer arbitrary index selections until their ordering, duplicate-index,
-    mapping, allocation, and complexity contracts are clear.
-  - Keep selecting raw data and then normalizing it as a distinct operation with
-    distinct statistical semantics.
+- [x] Add borrowed contiguous submatrices after row and column views.
+  - `lazy.submatrix(rows, cols)` restricts the already normalized matrix and
+    borrows the selected columns' fitted centers and scales without refitting.
+  - Nested selections use local coordinates and flatten to the original parent.
+    A block is a rectangular submatrix, not a separate logical abstraction.
+  - Support allocating, reusable, and fused forward and transpose products,
+    filtered columns and sparse rows, and explicit dense conversion across all
+    in-memory backend versions.
+  - Filter and rebase sparse indices through view adapters; preserve the full
+    CSC/CSR slice-borrowing capabilities without pretending restricted indices
+    remain contiguous borrowed slices.
+  - Raw selection followed by normalization remains a distinct operation with
+    different statistical semantics.
+- [ ] Extend submatrices to bounded Zarr reads and weighted operations.
+- [ ] Evaluate arbitrary index selections after defining ordering, duplicate-index,
+  mapping, allocation, and complexity contracts.
+- [ ] Expose submatrix selection in Python after defining indexing and ownership.
 
 ## Tests and maintenance
 

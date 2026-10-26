@@ -457,3 +457,83 @@ where
         }
     }
 }
+
+impl<F: Scalar + 'static, S: Data<Elem = F>> crate::SubmatrixKernel<F> for ArrayBase<S, Ix2> {
+    fn submatrix_matvec_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::dense_product(
+            self,
+            rows,
+            columns,
+            |i, j| self[(i, j)],
+            centers,
+            scales,
+            false,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn submatrix_transpose_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::dense_product(
+            self,
+            rows,
+            columns,
+            |i, j| self[(i, j)],
+            centers,
+            scales,
+            true,
+            alpha,
+            x,
+            beta,
+            out,
+        );
+        Ok(())
+    }
+    fn materialize_submatrix_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        crate::submatrix_kernels::dense_materialize(
+            self,
+            rows,
+            columns,
+            |i, j| self[(i, j)],
+            centers,
+            scales,
+            out,
+        );
+        Ok(())
+    }
+}

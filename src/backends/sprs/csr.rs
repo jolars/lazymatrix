@@ -230,3 +230,51 @@ impl<M: crate::MaterializeDense<F>, F: Scalar> crate::MaterializeDense<F> for Sp
         self.inner.materialize_normalized_into(centers, scales, out)
     }
 }
+
+impl<M: crate::SubmatrixKernel<F>, F: Scalar> crate::SubmatrixKernel<F> for SprsCsr<M> {
+    fn submatrix_matvec_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        self.inner
+            .submatrix_matvec_into(rows, columns, centers, scales, alpha, x, beta, out)
+    }
+    fn submatrix_transpose_into<
+        X: crate::VectorView<F> + ?Sized,
+        Y: crate::VectorViewMut<F> + ?Sized,
+    >(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        alpha: F,
+        x: &X,
+        beta: F,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        self.inner
+            .submatrix_transpose_into(rows, columns, centers, scales, alpha, x, beta, out)
+    }
+    fn materialize_submatrix_into<O: crate::MatrixWrite<F> + ?Sized>(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut O,
+    ) -> Result<(), Self::Error> {
+        self.inner
+            .materialize_submatrix_into(rows, columns, centers, scales, out)
+    }
+}
