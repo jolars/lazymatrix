@@ -55,7 +55,7 @@ jobs:
           rust-toolchain: "1.89.0"
           working-directory: python
           command: sdist
-          args: --locked --out dist
+          args: --out dist
       - uses: actions/upload-artifact@v7
         with:
           name: python-sdist

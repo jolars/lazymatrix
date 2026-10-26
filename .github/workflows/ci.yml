@@ -200,7 +200,9 @@ jobs:
         with:
           workspaces: python/rust
       - run: uv sync --project python --locked --no-install-project
-      - run: python ../scripts/python-tool.py maturin build --release --locked --sdist --out dist
+      - run: python ../scripts/python-tool.py maturin build --release --locked --out dist
+        working-directory: python
+      - run: python ../scripts/python-tool.py maturin sdist --out dist
         working-directory: python
       - run: python scripts/python-tool.py python scripts/check-python-dist.py
 

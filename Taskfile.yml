@@ -79,7 +79,8 @@ tasks:
     dir: python
     cmds:
       - task: python:install
-      - python ../scripts/python-tool.py maturin build --release --locked --sdist --out dist
+      - python ../scripts/python-tool.py maturin build --release --locked --out dist
+      - python ../scripts/python-tool.py maturin sdist --out dist
       - python ../scripts/python-tool.py python ../scripts/check-python-dist.py
 
   website:reference:
