@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.8.0](https://github.com/jolars/lazymatrix/compare/v0.7.0...v0.8.0) (2026-10-26)
+
+### Breaking changes
+
+- add zarrs 0.23 support ([`a589d43`](https://github.com/jolars/lazymatrix/commit/a589d43e9ed6d9b9f415264eabba1502ab15b3ac))
+
+### Features
+
+- add dense faer weighted Gram and column sums ([`a65a4dc`](https://github.com/jolars/lazymatrix/commit/a65a4dc8f25dc486eb67acee0945735309e497e4))
+- add zarrs 0.23 support ([`a589d43`](https://github.com/jolars/lazymatrix/commit/a589d43e9ed6d9b9f415264eabba1502ab15b3ac))
+- lower MSRV to 1.84 ([`5a327d6`](https://github.com/jolars/lazymatrix/commit/5a327d667fe8790930f6736aa4f4c1cafcb21491))
+- add Python bindings and coordinated releases ([`4e44fa2`](https://github.com/jolars/lazymatrix/commit/4e44fa258d3799b29c1b3e2e94e45972d7d3f82b))
+
+### Bug Fixes
+
+- pin uuid for Rust 1.87 checks ([`f663e68`](https://github.com/jolars/lazymatrix/commit/f663e68cdebe82c85aa84f2f89c0f765d0f5e48d))
+- **security:** update undici ([`c44d7a2`](https://github.com/jolars/lazymatrix/commit/c44d7a2ae934a4d94fa9b3cf303aed6c9140ea47))
+- **ci:** select compatible sprs for MSRV checks ([`fd13e87`](https://github.com/jolars/lazymatrix/commit/fd13e87c0c92c1bcf5384d2c78c3b34c4ba8d4b1))
+- stabilize centered dense products ([`3a1fa16`](https://github.com/jolars/lazymatrix/commit/3a1fa164ed36b970825f2a087030f1de538dbbbc))
+
 ## [0.7.0](https://github.com/jolars/lazymatrix/compare/v0.6.0...v0.7.0) (2026-10-20)
 
 ### Features
