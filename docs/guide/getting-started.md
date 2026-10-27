@@ -24,14 +24,15 @@ cargo add ndarray@0.17
 
 Match your direct backend dependency to the selected release. Versioned features
 such as `nalgebra_v0_34` select an older supported release line. See the
-[README](https://github.com/jolars/lazymatrix#matrix-backends) for supported releases.
+[README](https://github.com/jolars/lazymatrix#matrix-backends) for supported
+releases.
 
 The core supports Rust 1.84. Backend dependencies can require a newer compiler.
 sprs 0.11.4 requires Rust 1.85, while sprs 0.11.5 and newer require Rust 1.88.
 For Rust 1.85 through 1.87, select sprs 0.11.4 using
 `cargo update --package sprs --precise 0.11.4`. The `nalgebra` feature requires
-Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust 1.87
-support.
+Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust
+1.87 support.
 
 ## Fit normalization and apply a product
 
@@ -56,37 +57,6 @@ mismatches panic.
 For repeated operations, reusable-output traits and workspace methods can reduce
 allocation. See the [API documentation](https://docs.rs/lazymatrix) for the
 capabilities supported by each backend.
-
-## Select a submatrix
-
-Use contiguous ranges to restrict an already normalized matrix:
-
-```rust
-let block = lazy.submatrix(1..3, 0..2);
-let y = block.matvec(&array![1.0, -1.0]).unwrap();
-let smaller = block.submatrix(0..1, 1..2);
-```
-
-Submatrix construction borrows data and fitted parameters without allocating.
-Nested selections use local coordinates. Row selection preserves the original
-centers and scales; it does not fit new statistics. To normalize a raw subset
-independently, select it through your backend before calling `LazyMatrix::new`.
-Empty ranges are allowed, and invalid ranges panic.
-
-Submatrices support forward and transpose products, reusable and fused products,
-and `to_eager` and `to_eager_into` on all in-memory backends. Dense products visit
-only the selected rectangle. Sparse products scan stored entries in the selected
-outer rows or columns and filter the other axis, using O(selected rows +
-selected columns) workspace. Construction allocates nothing, but reusable sparse
-products still allocate working vectors.
-
-Column access requires the same natural column-borrowing capability as the
-parent. A filtered column traversal scans the parent column. Checked CSC column
-and CSR row views expose `stored_entries()` and `stored_corrections()` iterators
-with local indices, preserving stored zeros and duplicates. Each row traversal
-scans the parent row. These views do not expose rebased index slices. Zarr,
-arbitrary index lists, weighted Gram operations, and Python indexing remain
-outside this API.
 
 ## Materialize explicitly
 
