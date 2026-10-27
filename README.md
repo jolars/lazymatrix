@@ -134,20 +134,18 @@ reference](https://lazymatrix.org/reference/python/) for details.
 If you use LazyMatrix in your research, please cite the [Zenodo
 archive](https://doi.org/10.5281/zenodo.23666452):
 
-> Larsson, Johan. (2026). jolars/lazymatrix: python-v0.1.0 (python-v0.1.0)
-> \[Software\]. Zenodo. https://doi.org/10.5281/zenodo.23666452
-
-This DOI identifies the archived `python-v0.1.0` release. Python and Rust
-releases are versioned independently.
+> Larsson, Johan. (2026). LazyMatrix: Lazy representations of normalized
+> matrices (v0.1.0) \[Software\]. Zenodo.
+> https://doi.org/10.5281/zenodo.23666452
 
 ### BibLaTeX
 
 ```bibtex
-@software{larsson2026lazymatrix,
+@software{lazymatrix,
   author    = {Larsson, Johan},
-  title     = {jolars/lazymatrix: python-v0.1.0},
+  title     = {{LazyMatrix}: Lazy representations of normalized matrices},
   date      = {2026-10-26},
-  version   = {python-v0.1.0},
+  version   = {v0.1.0},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.23666452},
   url       = {https://doi.org/10.5281/zenodo.23666452}
@@ -159,13 +157,13 @@ releases are versioned independently.
 For styles that do not support `@software`, use `@misc`:
 
 ```bibtex
-@misc{larsson2026lazymatrix,
+@misc{lazymatrix,
   author       = {Larsson, Johan},
-  title        = {jolars/lazymatrix: python-v0.1.0},
+  title        = {{LazyMatrix}: Lazy representations of normalized matrices},
   year         = {2026},
   month        = oct,
   howpublished = {Zenodo},
-  note         = {Software, version python-v0.1.0},
+  note         = {Software, version v0.1.0},
   doi          = {10.5281/zenodo.23666452},
   url          = {https://doi.org/10.5281/zenodo.23666452}
 }
