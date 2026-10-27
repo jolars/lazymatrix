@@ -395,7 +395,18 @@ pub fn run_dense_centered_product_suite<M, V>(
         + lazymatrix::VectorOwned<f64, Owned = V>
         + lazymatrix::VectorViewMut<f64>,
 {
-    for (rows, columns) in [(7, 3), (513, 37), (0, 3), (5, 0)] {
+    for (rows, columns) in [
+        (7, 3),
+        (31, 33),
+        (32, 32),
+        (33, 31),
+        (127, 129),
+        (128, 128),
+        (129, 127),
+        (513, 37),
+        (0, 3),
+        (5, 0),
+    ] {
         let centers: Vec<_> = (0..columns).map(|j| 1e12 + j as f64 / 8.0).collect();
         let dense: Vec<Vec<_>> = (0..rows)
             .map(|i| {
@@ -435,29 +446,50 @@ pub fn run_dense_centered_product_suite<M, V>(
         }
     }
     for (raw, center, scale, coefficient) in [
+        (1.0, 1.0, 1.0, -1.0),
         (1e300, 0.0, 1e-300, 1e-300),
         (1e300, 0.0, 1e-300, 0.0),
+        (1e300, 0.0, 1e300, 1e-300),
+        (1e-300, 0.0, 1e300, 1e300),
+        (1e-300, 0.0, 1e-300, 1e300),
         (f64::INFINITY, f64::INFINITY, 1.0, 1.0),
         (1.0, f64::NAN, 1.0, 1.0),
         (1.0, 0.0, f64::INFINITY, f64::INFINITY),
         (1.0, 0.0, f64::NAN, 1.0),
     ] {
         let tm = TestMatrix {
-            nrows: 1,
-            ncols: 1,
-            dense: vec![vec![raw]],
-            triplets: vec![(0, 0, raw)],
+            nrows: 129,
+            ncols: 33,
+            dense: vec![vec![raw; 33]; 129],
+            triplets: (0..129)
+                .flat_map(|i| (0..33).map(move |j| (i, j, raw)))
+                .collect(),
         };
         check_dense_centered_products(
             &build(&tm),
             &tm.dense,
-            vec![center],
-            Some(vec![scale]),
-            &[coefficient],
-            &[coefficient],
+            vec![center; 33],
+            Some(vec![scale; 33]),
+            &[coefficient; 33],
+            &[coefficient; 129],
             &to_v,
         );
     }
+    let tm = TestMatrix {
+        nrows: 2,
+        ncols: 2,
+        dense: vec![vec![1e308; 2]; 2],
+        triplets: vec![(0, 0, 1e308), (0, 1, 1e308), (1, 0, 1e308), (1, 1, 1e308)],
+    };
+    check_dense_centered_products(
+        &build(&tm),
+        &tm.dense,
+        vec![0.0; 2],
+        Some(vec![1e308; 2]),
+        &[1.0; 2],
+        &[1.0; 2],
+        &to_v,
+    );
 }
 
 pub fn run_dense_centered_f32_suite<M, V>(
@@ -503,8 +535,28 @@ pub fn run_dense_centered_f32_suite<M, V>(
         Some(vec![1.3, -2.7]),
         &[0.25, -0.75],
         &[0.3, -0.1, 0.7],
-        to_v,
+        &to_v,
     );
+    for (raw, center, scale, coefficient) in [
+        (1e6 + 1.0, 1e6, -1.3, 0.25),
+        (1.0, 1.0, 1.0, -1.0),
+        (1e30, 0.0, 1e-30, 0.0),
+        (1e30, 0.0, 1e30, 1e-30),
+        (1e-30, 0.0, 1e30, 1e30),
+        (f32::INFINITY, f32::INFINITY, 1.0, 1.0),
+        (1.0, 0.0, f32::NAN, 1.0),
+    ] {
+        let dense = vec![vec![raw; 133]; 129];
+        check_dense_centered_products(
+            &build(&dense),
+            &dense,
+            vec![center; 133],
+            Some(vec![scale; 133]),
+            &[coefficient; 133],
+            &[coefficient; 129],
+            &to_v,
+        );
+    }
 }
 
 pub fn check_dense_centered_products<M, V, F>(
@@ -544,11 +596,22 @@ pub fn check_dense_centered_products<M, V, F>(
                 assert!(actual.is_nan(), "entry {i}: {actual:?} should be NaN");
             } else if value.is_infinite() {
                 assert_eq!(actual, value);
+            } else if value == F::zero() {
+                assert_eq!(actual, value);
+                assert_eq!(
+                    actual.is_sign_negative(),
+                    value.is_sign_negative(),
+                    "entry {i}: zero sign"
+                );
             } else {
                 approx::assert_relative_eq!(
                     actual,
                     value,
-                    epsilon = tolerance,
+                    epsilon = if value.abs() < F::min_positive_value().sqrt() {
+                        F::zero()
+                    } else {
+                        tolerance
+                    },
                     max_relative = tolerance
                 );
             }

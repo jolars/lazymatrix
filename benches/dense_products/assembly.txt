@@ -1,0 +1,18 @@
+Representative x86-64 instructions from the default bench build.
+Full compiler and CPU details are in metadata.json.
+These are vector lanes for independent outputs, not reassociated reductions.
+
+Before: scalar forward reduction (faer, f64).
+   c5d63:	f2 43 0f 59 0c d1    	mulsd  (%r9,%r10,8),%xmm1
+   c5d6c:	f2 0f 58 c1          	addsd  %xmm1,%xmm0
+   c5dbe:	f2 0f 5c ca          	subsd  %xmm2,%xmm1
+   c5dc7:	f2 0f 5e cb          	divsd  %xmm3,%xmm1
+
+After: forward output panel (faer, f64).
+   cf2f0:	66 45 0f 10 14 cc    	movupd (%r12,%rcx,8),%xmm10
+   cf2f6:	66 44 0f 5c d7       	subpd  %xmm7,%xmm10
+   cf2fb:	66 45 0f 5e d0       	divpd  %xmm8,%xmm10
+   cf300:	66 45 0f 59 d1       	mulpd  %xmm9,%xmm10
+   cf305:	66 44 0f 58 94 cc 90 	addpd  0x90(%rsp,%rcx,8),%xmm10
+   cf30c:	00 00 00
+

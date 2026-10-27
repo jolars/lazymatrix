@@ -129,7 +129,7 @@ companion packages; the Rust core remains independent of Python and solvers.
 
 ## Operator performance
 
-- [ ] Investigate the performance regression in stable centered dense products.
+- [x] Investigate the performance regression in stable centered dense products.
   - Profile forward and transpose products across faer, nalgebra, and ndarray,
     including contiguous and strided layouts, to separate division costs from
     traversal and vectorization costs.
@@ -138,6 +138,7 @@ companion packages; the Rust core remains independent of Python and solvers.
     the fused zero-coefficient contracts.
   - Rerun product and consumer benchmarks before choosing an optimization.
     Preserve the stable default and avoid a full normalized design copy.
+  - Results: [centered dense product investigation](benches/dense_products/README.md).
 
 - [ ] Make workspace reuse compose through `WithIntercept<LazyMatrix<M>>`.
   - The current intercept workspace reuses only the wrapper's buffer. Its inner

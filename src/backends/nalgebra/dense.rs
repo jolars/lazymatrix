@@ -194,6 +194,7 @@ where
             crate::dense_products::matvec(
                 (self.nrows(), self.ncols()),
                 |i, j| self[(i, j)],
+                self.strides().0 <= self.strides().1,
                 centers,
                 scales,
                 F::one(),
@@ -260,6 +261,7 @@ where
         crate::dense_products::matvec(
             (self.nrows(), self.ncols()),
             |i, j| self[(i, j)],
+            self.strides().0 <= self.strides().1,
             centers,
             scales,
             alpha,
@@ -301,6 +303,7 @@ where
             crate::dense_products::transpose(
                 (self.nrows(), self.ncols()),
                 |i, j| self[(i, j)],
+                self.strides().0 <= self.strides().1,
                 centers,
                 scales,
                 F::one(),
@@ -367,6 +370,7 @@ where
         crate::dense_products::transpose(
             (self.nrows(), self.ncols()),
             |i, j| self[(i, j)],
+            self.strides().0 <= self.strides().1,
             centers,
             scales,
             alpha,

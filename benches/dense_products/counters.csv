@@ -1,0 +1,9 @@
+phase,event,count,counter_runtime_ns,percent_running
+before,cycles:u,18339164937,3782259374,100.00
+before,instructions:u,90503548941,3782259374,100.00
+before,cache-references:u,2126525187,3782259374,100.00
+before,cache-misses:u,52543849,3782259374,100.00
+after,cycles:u,18841827228,4031654484,100.00
+after,instructions:u,35938623357,4031654484,100.00
+after,cache-references:u,3232501922,4031654484,100.00
+after,cache-misses:u,103635874,4031654484,100.00

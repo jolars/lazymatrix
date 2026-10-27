@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-27",
+  "baseline_commit": "9c570a66c58b0bd1aaf7be607f2b9560fa7a26a2",
+  "cpu": "AMD Ryzen 9 7900, logical CPU 10",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "target": "x86_64-unknown-linux-gnu",
+  "rustflags": null,
+  "profile": "bench (Cargo defaults)",
+  "backend_versions": {
+    "faer": "0.24.4",
+    "nalgebra": "0.35.0",
+    "ndarray": "0.17.2"
+  },
+  "product_features": "faer,nalgebra,ndarray",
+  "consumer_features": "faer,nalgebra,ndarray,sprs,zarrs",
+  "parallel": false,
+  "criterion": {
+    "version": "0.8.2",
+    "samples": 20,
+    "resamples": 1000,
+    "confidence_level": 0.95,
+    "dense-investigation": {
+      "warm_up_seconds": 0.05,
+      "measurement_seconds": 0.15
+    },
+    "stable-dense-before": {
+      "warm_up_seconds": 0.1,
+      "measurement_seconds": 0.4
+    },
+    "stable-dense-after": {
+      "products": {
+        "warm_up_seconds": 0.05,
+        "measurement_seconds": 0.2
+      },
+      "consumers": {
+        "warm_up_seconds": 0.05,
+        "measurement_seconds": 0.2
+      }
+    }
+  },
+  "timing_records": {
+    "dense-investigation": 432,
+    "stable-dense-before": 192,
+    "stable-dense-after": 264
+  },
+  "timing_units": {
+    "dense_products": "nanoseconds per product",
+    "overwrite_products": "nanoseconds per batch of 10 products",
+    "consumer": "nanoseconds per batch of 10 least-squares steps"
+  },
+  "counter_profile": {
+    "benchmark": "dense_products/faer/column/10000x128/standardized/forward/operator",
+    "profile_seconds": 3,
+    "events": [
+      "cycles:u",
+      "instructions:u",
+      "cache-references:u",
+      "cache-misses:u"
+    ],
+    "scope": "Whole process, including untimed fixture setup and correctness checks. Fixed wall time, not a fixed product count.",
+    "sampling": "perf record was unavailable under the host perf permissions; perf stat counting succeeded."
+  }
+}

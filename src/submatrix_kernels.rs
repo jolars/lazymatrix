@@ -76,10 +76,15 @@ pub(crate) fn dense_product<F: Scalar, X: VectorView<F> + ?Sized, Y: VectorViewM
     if let Some(centers) = centers {
         let shape = (rows.len(), columns.len());
         let selected = |i, j| at(rows.start + i, columns.start + j);
+        // The rectangular capability does not carry strides, so retain scalar traversal.
         if transpose {
-            crate::dense_products::transpose(shape, selected, centers, scales, alpha, x, beta, out);
+            crate::dense_products::transpose(
+                shape, selected, true, centers, scales, alpha, x, beta, out,
+            );
         } else {
-            crate::dense_products::matvec(shape, selected, centers, scales, alpha, x, beta, out);
+            crate::dense_products::matvec(
+                shape, selected, false, centers, scales, alpha, x, beta, out,
+            );
         }
         return;
     }

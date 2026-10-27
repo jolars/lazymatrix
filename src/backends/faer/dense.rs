@@ -243,6 +243,7 @@ macro_rules! impl_dense_ops {
                 crate::dense_products::matvec(
                     (self.nrows(), self.ncols()),
                     |i, j| self[(i, j)],
+                    self.row_stride().unsigned_abs() <= self.col_stride().unsigned_abs(),
                     centers,
                     scales,
                     alpha,
@@ -286,6 +287,7 @@ macro_rules! impl_dense_ops {
                 crate::dense_products::transpose(
                     (self.nrows(), self.ncols()),
                     |i, j| self[(i, j)],
+                    self.row_stride().unsigned_abs() <= self.col_stride().unsigned_abs(),
                     centers,
                     scales,
                     alpha,
@@ -317,6 +319,7 @@ macro_rules! impl_dense_ops {
                     crate::dense_products::matvec(
                         (self.nrows(), self.ncols()),
                         |i, j| self[(i, j)],
+                        self.row_stride().unsigned_abs() <= self.col_stride().unsigned_abs(),
                         centers,
                         scales,
                         F::one(),
@@ -355,6 +358,7 @@ macro_rules! impl_dense_ops {
                     crate::dense_products::transpose(
                         (self.nrows(), self.ncols()),
                         |i, j| self[(i, j)],
+                        self.row_stride().unsigned_abs() <= self.col_stride().unsigned_abs(),
                         centers,
                         scales,
                         F::one(),
