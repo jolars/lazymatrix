@@ -7,12 +7,14 @@ archive](https://doi.org/10.5281/zenodo.23666452):
 > matrices, v0.1.0) \[Software\]. Zenodo.
 > <https://doi.org/10.5281/zenodo.23666452>
 
-This DOI identifies the archived `python-v0.1.0` release. Python and Rust
-releases are versioned independently.
+This DOI identifies the archived `v0.1.0` release. Python and Rust releases are
+versioned independently.
 
-## BibLaTeX
+For BibTeX styles that do not support `@software`, use the `@misc` entry.
 
-```bibtex
+::: code-group
+
+```bibtex [BibLaTeX]
 @software{larsson2026lazymatrix,
   author    = {Larsson, Johan},
   title     = {{LazyMatrix}: Lazy representations of normalized matrices},
@@ -24,11 +26,7 @@ releases are versioned independently.
 }
 ```
 
-## BibTeX
-
-For styles that do not support `@software`, use `@misc`:
-
-```bibtex
+```bibtex [BibTeX]
 @misc{larsson2026lazymatrix,
   author       = {Larsson, Johan},
   title        = {{LazyMatrix}: Lazy representations of normalized matrices},
@@ -40,6 +38,8 @@ For styles that do not support `@software`, use `@misc`:
   url          = {https://doi.org/10.5281/zenodo.23666452}
 }
 ```
+
+:::
 
 Machine-readable metadata is available in
 [CITATION.cff](https://github.com/jolars/lazymatrix/blob/main/CITATION.cff).
