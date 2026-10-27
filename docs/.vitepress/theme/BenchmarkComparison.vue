@@ -1,357 +1,285 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import results from "./benchmark-results.json";
-import { breakEven } from "../../scripts/benchmark-data.mjs";
+import BenchmarkFigure from "./BenchmarkFigure.vue";
 
 const labels = {
   sprs_to_ndarray: "sprs CSC → ndarray dense",
   faer_csc_to_dense: "faer CSC → faer dense",
 };
-const normalizationLabels = {
-  standardized: "Mean centering + SD scaling",
-  scaled: "SD scaling only",
-};
 const backend = ref("sprs_to_ndarray");
-const normalization = ref("standardized");
-const denseBytes = ref(32 * 2 ** 20);
-const direction = ref("forward");
-const memoryMetric = ref("peak_total_bytes");
-const density = ref(0.01);
+const size = ref("8192x512");
+const backends = [...new Set(results.cases.map((c) => c.backend))];
+const sizes = [
+  ...new Map(results.cases.map((c) => [`${c.n}x${c.p}`, c])).values(),
+].sort((a, b) => a.n - b.n || a.p - b.p);
 const ready = ref(false);
 onMounted(() => {
   ready.value = true;
 });
-const backends = [...new Set(results.plotSets.map((p) => p.backend))];
-const normalizations = [
-  ...new Set(results.plotSets.map((p) => p.normalization)),
-];
-const sizes = [...new Set(results.plotSets.map((p) => p.dense_bytes))].sort(
-  (a, b) => a - b,
-);
-const plots = computed(() =>
-  results.plotSets.find(
-    (p) =>
-      p.backend === backend.value &&
-      p.normalization === normalization.value &&
-      p.dense_bytes === denseBytes.value,
+const selected = computed(() =>
+  results.cases.find(
+    (c) => c.backend === backend.value && `${c.n}x${c.p}` === size.value,
   ),
 );
-const groups = computed(() =>
-  results.groups
-    .filter(
-      (g) =>
-        g.backend === backend.value &&
-        g.normalization === normalization.value &&
-        g.n * g.p * 8 === denseBytes.value,
-    )
-    .sort(
-      (a, b) => b.n / b.p - a.n / a.p || a.target_density - b.target_density,
-    ),
+const run = computed(
+  () =>
+    results.metadata.timing_runs?.find((r) =>
+      r.shapes.some(
+        ([n, p]) => n === selected.value.n && p === selected.value.p,
+      ),
+    ) ?? results.metadata,
 );
-const total = computed(() =>
-  plots.value.total.find((p) => p.density === density.value),
-);
-const thresholds = computed(() =>
-  groups.value
-    .filter((g) => g.target_density === density.value)
-    .map((g) => ({ group: g, value: breakEven(g) })),
-);
-const runtimePath = computed(() => plots.value.runtime[direction.value]);
-const memoryPath = computed(() => plots.value.memory[memoryMetric.value]);
-const shape = (g) =>
-  `${g.n.toLocaleString("en-US")} × ${g.p.toLocaleString("en-US")}`;
 const number = (x) => x.toLocaleString("en-US", { maximumFractionDigits: 3 });
-const microseconds = (x) => number(x / 1e3);
+const dimensions = computed(
+  () => `${number(selected.value.n)} × ${number(selected.value.p)}`,
+);
 const mib = (x) => number(x / 2 ** 20);
-const strategyLabels = {
-  lazy: "Lazy sparse",
-  eager: "Eager dense",
-  raw: "Raw sparse (unnormalized)",
-};
-const timingSamples = [
-  ...new Set(
-    (results.metadata.timing_runs ?? [results.metadata]).map(
-      (run) => run.sample_size,
-    ),
-  ),
-]
-  .sort((a, b) => a - b)
-  .join(" or ");
-const date = new Date(results.metadata.collected_at_utc).toLocaleDateString(
-  "en-US",
-  { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" },
+const milliseconds = (x) => number(x / 1e6);
+const microseconds = (x) => number(x / 1e3);
+const strategies = { lazy: "Lazy sparse", eager: "Eager dense" };
+const date = computed(() =>
+  new Date(run.value.collected_at_utc).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }),
 );
 </script>
 
 <template>
-  <div class="benchmark-explorer">
-    <div class="controls">
+  <div class="benchmark-comparison">
+    <div class="benchmark-context">
+      <p>
+        <strong>{{ dimensions }}</strong> rows × columns · f64 · mean centering
+        + SD scaling<br />
+        The normalized dense matrix alone occupies
+        {{ mib(selected.n * selected.p * 8) }} MiB.
+      </p>
       <label>
-        Source → dense destination
-        <select v-model="backend" :disabled="!ready">
+        Backend
+        <select id="benchmark-backend" v-model="backend" :disabled="!ready">
           <option v-for="b in backends" :key="b" :value="b">
             {{ labels[b] }}
           </option>
         </select>
       </label>
       <label>
-        Matrix size (dense storage)
-        <select v-model="denseBytes" :disabled="!ready">
-          <option v-for="bytes in sizes" :key="bytes" :value="bytes">
-            {{ mib(bytes) }} MiB
-          </option>
-        </select>
-      </label>
-      <label>
-        Normalization
-        <select v-model="normalization" :disabled="!ready">
-          <option v-for="n in normalizations" :key="n" :value="n">
-            {{ normalizationLabels[n] }}
+        Matrix size (rows × columns)
+        <select id="benchmark-size" v-model="size" :disabled="!ready">
+          <option
+            v-for="s in sizes"
+            :key="`${s.n}x${s.p}`"
+            :value="`${s.n}x${s.p}`"
+          >
+            {{ number(s.n) }} × {{ number(s.p) }}
           </option>
         </select>
       </label>
     </div>
+
+    <section aria-labelledby="fit-title">
+      <h2 id="fit-title">A complete fit</h2>
+      <p>
+        Fit ridge regression with gradient descent across seven nonzero
+        densities, from 0.1% to 100%. Both paths use the same data, algorithm,
+        and accuracy target, starting with the raw sparse input.
+      </p>
+      <div class="plot-grid">
+        <BenchmarkFigure
+          :plot="selected.plots.fitTime"
+          title="Total wall-clock time"
+          :alt="`Complete ridge fit time versus nonzero density for ${dimensions} matrices, comparing lazy sparse and eager dense normalization.`"
+        >
+          Includes fitting normalization parameters, materialization for eager,
+          step-size estimation, and solving to convergence. Shading shows 95%
+          confidence intervals. Lower is faster.
+        </BenchmarkFigure>
+        <BenchmarkFigure
+          :plot="selected.plots.fitMemory"
+          title="Peak memory during the fit"
+          :alt="`Peak live Rust allocation bytes across normalization and a complete ridge fit versus density for ${dimensions} matrices.`"
+        >
+          The largest live allocation total from normalization through
+          convergence, including the source matrix, response, normalized
+          storage, and solver workspace. Both paths retain the source. Lower
+          uses less memory.
+        </BenchmarkFigure>
+      </div>
+      <p class="measurement-note">
+        Memory counts requested Rust bytes, excluding allocator overhead and
+        native-library allocations. It does not measure total process RAM.
+      </p>
+      <details>
+        <summary>Fit measurements and convergence</summary>
+        <p>
+          Both paths satisfy the same gradient tolerance and produce matching
+          coefficients and objectives. Iterations count coefficient updates; the
+          CSV also records the objective and final gradient norm.
+        </p>
+        <div
+          class="table-scroll"
+          tabindex="0"
+          role="region"
+          aria-label="Complete fit measurements"
+        >
+          <table>
+            <thead>
+              <tr>
+                <th>Nonzeros (%)</th>
+                <th>Strategy</th>
+                <th>Total (ms)</th>
+                <th>Peak (MiB)</th>
+                <th>Iterations</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="g in selected.fits" :key="g.target_density">
+                <tr v-for="(label, strategy) in strategies" :key="strategy">
+                  <td>{{ number((100 * g.nnz) / (g.n * g.p)) }}</td>
+                  <td>{{ label }}</td>
+                  <td>{{ milliseconds(g.fits[strategy].estimate_ns) }}</td>
+                  <td>{{ mib(g.fits[strategy].peak_total_bytes) }}</td>
+                  <td>{{ g.fits[strategy].iterations }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section aria-labelledby="operations-title">
+      <h2 id="operations-title">Individual operations</h2>
+      <p>
+        These timings measure one product with normalization already fitted and
+        eager storage already materialized. Outputs are reused; any scratch
+        allocation inside the operation is included.
+      </p>
+      <div class="plot-grid">
+        <BenchmarkFigure
+          :plot="selected.plots.forward"
+          title="Forward product: X̃v"
+          :alt="`Forward product time excluding setup versus density for ${dimensions} matrices, comparing lazy sparse and eager dense operators.`"
+        >
+          Multiply by a coefficient vector. Shading shows 95% confidence
+          intervals. Lower is faster.
+        </BenchmarkFigure>
+        <BenchmarkFigure
+          :plot="selected.plots.transpose"
+          title="Transpose product: X̃ᵀu"
+          :alt="`Transpose product time excluding setup versus density for ${dimensions} matrices, comparing lazy sparse and eager dense operators.`"
+        >
+          Multiply by a vector of observations. Shading shows 95% confidence
+          intervals. Lower is faster.
+        </BenchmarkFigure>
+      </div>
+      <details>
+        <summary>Operation measurements and memory breakdown</summary>
+        <p>
+          The memory column includes normalization, eager construction, and ten
+          forward/transpose pairs, with the sparse source retained. This is a
+          separate workload from the complete fit above. The CSV includes
+          normalized storage, workspace, setup timings, and raw sparse timings.
+        </p>
+        <div
+          class="table-scroll"
+          tabindex="0"
+          role="region"
+          aria-label="Individual operation measurements"
+        >
+          <table>
+            <thead>
+              <tr>
+                <th>Nonzeros (%)</th>
+                <th>Strategy</th>
+                <th>Forward (µs)</th>
+                <th>Transpose (µs)</th>
+                <th>Peak (MiB)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template
+                v-for="g in selected.operations"
+                :key="g.target_density"
+              >
+                <tr v-for="(label, strategy) in strategies" :key="strategy">
+                  <td>{{ number((100 * g.nnz) / (g.n * g.p)) }}</td>
+                  <td>{{ label }}</td>
+                  <td>
+                    {{
+                      microseconds(g.timings[`${strategy}_forward`].estimate_ns)
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      microseconds(
+                        g.timings[`${strategy}_transpose`].estimate_ns,
+                      )
+                    }}
+                  </td>
+                  <td>{{ mib(g.memory[strategy].peak_total_bytes) }}</td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
     <p class="measurement-note">
       {{ date }} · {{ results.metadata.cpu }} ·
-      {{ results.metadata.threads }} thread · {{ timingSamples }} timing samples
-      per case. Panels compare n ≫ p, n = p, and n ≪ p with ratios 16:1, 1:1,
-      and 1:16. Each contains the same number of entries and uses the same axes.
-      Dimensions are rows × columns.
+      {{ results.metadata.threads }} thread · {{ run.sample_size }} timing
+      samples per case. Both axes use logarithmic scales. Points show measured
+      nonzero densities; lines connect the samples.
     </p>
-
-    <section aria-labelledby="runtime-title">
-      <div class="plot-heading">
-        <h2 id="runtime-title">Runtime versus density</h2>
-        <label>
-          Product
-          <select v-model="direction" :disabled="!ready">
-            <option value="forward">Forward: X̃v</option>
-            <option value="transpose">Transpose: X̃ᵀu</option>
-          </select>
-        </label>
-      </div>
-      <figure>
-        <div
-          class="plot-frame"
-          tabindex="0"
-          role="group"
-          aria-labelledby="runtime-title"
-        >
-          <img
-            :src="runtimePath"
-            width="960"
-            height="370"
-            :alt="`${direction === 'forward' ? 'Forward' : 'Transpose'} product time versus nonzero density, comparing lazy sparse, eager dense, and unnormalized sparse products for tall, square, and wide matrices at ${mib(denseBytes)} MiB dense storage.`"
-          />
-        </div>
-        <figcaption>
-          Points show measured nonzero density and mean product time. Shaded
-          bands show 95% bootstrap confidence intervals. Raw sparse products
-          provide an unnormalized reference. Lower times are faster; farther
-          left means sparser input. Output writes and normalization passes
-          impose a floor at low densities.
-          <a :href="runtimePath" download>Download SVG</a>.
-        </figcaption>
-      </figure>
-    </section>
-
-    <section aria-labelledby="memory-title">
-      <div class="plot-heading">
-        <h2 id="memory-title">Memory versus density</h2>
-        <label>
-          Memory measure
-          <select v-model="memoryMetric" :disabled="!ready">
-            <option value="peak_total_bytes">Full lifecycle peak</option>
-            <option value="representation_bytes">Normalized storage</option>
-            <option value="workspace_bytes">Peak workspace</option>
-          </select>
-        </label>
-      </div>
-      <figure>
-        <div
-          class="plot-frame"
-          tabindex="0"
-          role="group"
-          aria-labelledby="memory-title"
-        >
-          <img
-            :src="memoryPath"
-            width="960"
-            height="370"
-            :alt="`Lazy and eager ${memoryMetric.replaceAll('_', ' ')} versus density for tall, square, and wide matrices at ${mib(denseBytes)} MiB dense storage.`"
-          />
-        </div>
-        <figcaption>
-          <template v-if="memoryMetric === 'peak_total_bytes'">
-            Peak live requested Rust bytes across parameter fitting,
-            construction, and ten forward/transpose pairs. Both paths retain the
-            original sparse input; eager peaks also include the normalized dense
-            matrix throughout its lifetime.
-          </template>
-          <template v-else-if="memoryMetric === 'representation_bytes'">
-            Storage for the normalized representation, including fitted
-            parameters and sparse values, indices, and column pointers. Eager
-            storage here excludes the retained source; the full lifecycle peak
-            includes it.
-          </template>
-          <template v-else>
-            Peak additional bytes after subtracting retained representation
-            storage. Includes input and output vectors, temporary statistics,
-            materialization buffers, and product scratch, whichever phase
-            produces the overall peak.
-          </template>
-          <a :href="memoryPath" download>Download SVG</a>.
-        </figcaption>
-      </figure>
-    </section>
-
-    <section aria-labelledby="total-title">
-      <div class="plot-heading">
-        <h2 id="total-title">Does eager construction pay off?</h2>
-        <label>
-          Target nonzeros
-          <select v-model="density" :disabled="!ready">
-            <option
-              v-for="p in plots.total"
-              :key="p.density"
-              :value="p.density"
-            >
-              {{ number(100 * p.density) }}%
-            </option>
-          </select>
-        </label>
-      </div>
-      <figure>
-        <div
-          class="plot-frame"
-          tabindex="0"
-          role="group"
-          aria-labelledby="total-title"
-        >
-          <img
-            :src="total.path"
-            width="960"
-            height="370"
-            :alt="`Projected total time including setup versus number of forward/transpose pairs at ${100 * density}% target density for tall, square, and wide matrices at ${mib(denseBytes)} MiB dense storage.`"
-          />
-        </div>
-        <figcaption>
-          Projection from measured parameter fitting, materialization, and
-          individual product costs. One repetition means one forward and one
-          transpose product. These curves assume fixed operation costs.
-          <a :href="total.path" download>Download SVG</a>.
-        </figcaption>
-      </figure>
-      <ul class="crossovers">
-        <li v-for="threshold in thresholds" :key="shape(threshold.group)">
-          <strong>{{ shape(threshold.group) }}: </strong>
-          <template v-if="threshold.value !== null"
-            >estimated crossover at
-            {{ number(Math.ceil(threshold.value)) }} pairs.</template
-          >
-          <template v-else
-            >eager products are slower per pair, so construction does not pay
-            off in this model.</template
-          >
-        </li>
-      </ul>
-    </section>
-
-    <details class="measurements">
-      <summary>Detailed measurements and nonzero counts</summary>
-      <p>
-        Times are Criterion means. The CSV also includes confidence bounds and
-        setup timings.
-      </p>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Rows × columns</th>
-              <th>Target / actual nonzeros (%)</th>
-              <th>Nonzeros</th>
-              <th>Empty columns</th>
-              <th>Strategy</th>
-              <th>Forward (µs)</th>
-              <th>Transpose (µs)</th>
-              <th>Storage (MiB)</th>
-              <th>Workspace (KiB)</th>
-              <th>Peak total (MiB)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template
-              v-for="group in groups"
-              :key="`${group.n}:${group.p}:${group.target_density}`"
-            >
-              <tr v-for="strategy in ['lazy', 'eager', 'raw']" :key="strategy">
-                <td>{{ shape(group) }}</td>
-                <td>
-                  {{ number(100 * group.target_density) }} /
-                  {{ number((100 * group.nnz) / (group.n * group.p)) }}
-                </td>
-                <td>{{ number(group.nnz) }}</td>
-                <td>{{ group.empty_columns }}</td>
-                <td>{{ strategyLabels[strategy] }}</td>
-                <td>
-                  {{
-                    microseconds(
-                      group.timings[`${strategy}_forward`].estimate_ns,
-                    )
-                  }}
-                </td>
-                <td>
-                  {{
-                    microseconds(
-                      group.timings[`${strategy}_transpose`].estimate_ns,
-                    )
-                  }}
-                </td>
-                <td>{{ mib(group.memory[strategy].representation_bytes) }}</td>
-                <td>
-                  {{ number(group.memory[strategy].workspace_bytes / 1024) }}
-                </td>
-                <td>{{ mib(group.memory[strategy].peak_total_bytes) }}</td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </details>
     <p class="downloads">
-      <a href="/benchmarks/results.csv" download>All measurements (CSV)</a> ·
-      <a href="/benchmarks/metadata.json" download>Run metadata (JSON)</a>
+      <a href="/benchmarks/least-squares.csv" download
+        >Fit measurements (CSV)</a
+      >
+      ·
+      <a href="/benchmarks/products.csv" download
+        >Operation measurements (CSV)</a
+      >
+      ·
+      <a href="/benchmarks/least-squares-metadata.json" download
+        >Run metadata</a
+      >
     </p>
   </div>
 </template>
 
 <style scoped>
-.benchmark-explorer {
+.benchmark-comparison {
   margin: 1.5rem 0;
 }
-.controls,
-.plot-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
+.benchmark-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
   gap: 1rem;
-}
-.controls {
   padding: 1rem;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--vp-c-bg-soft);
+}
+.benchmark-context p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.9rem;
 }
 label {
   display: grid;
-  max-width: 100%;
   min-width: 0;
+  max-width: 100%;
   gap: 0.35rem;
   font-size: 0.85rem;
   font-weight: 600;
 }
 select {
   appearance: auto;
+  min-width: 0;
   max-width: 100%;
   border: 1px solid var(--vp-c-divider);
   border-radius: 6px;
@@ -361,50 +289,30 @@ select {
   font: inherit;
 }
 select:focus-visible,
-.plot-frame:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+.table-scroll:focus-visible {
   outline: 2px solid var(--vp-c-brand-1);
   outline-offset: 3px;
 }
-.plot-heading {
-  justify-content: space-between;
-  margin-top: 2.5rem;
+.plot-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2rem;
+  margin: 1.5rem 0;
 }
-.plot-heading h2 {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  font-size: 1.3rem;
+@media (min-width: 1280px) {
+  .plot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-figure {
-  margin: 1rem 0;
+@media (max-width: 639px) {
+  .benchmark-context {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
-.plot-frame {
-  overflow-x: auto;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  background: white;
-}
-.plot-frame img {
-  display: block;
-  width: 100%;
-  min-width: 760px;
-  height: auto;
-}
-figcaption,
-.measurement-note {
-  color: var(--vp-c-text-2);
-  font-size: 0.85rem;
-  line-height: 1.6;
-}
-figcaption {
-  margin-top: 0.7rem;
-}
-.crossovers {
-  font-size: 0.85rem;
-}
-.measurements {
-  margin-top: 2rem;
+details {
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
 }
 summary {
   cursor: pointer;
@@ -416,6 +324,11 @@ summary {
 table {
   font-size: 0.8rem;
   white-space: nowrap;
+}
+.measurement-note {
+  color: var(--vp-c-text-2);
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 .downloads {
   font-size: 0.9rem;

@@ -131,29 +131,109 @@ export function validateMeasurements(rows) {
   );
 }
 
-export function totalTime(group, strategy, repetitions) {
-  const { timings } = group;
-  const setup =
-    strategy === "raw"
-      ? 0
-      : timings.fit_parameters.estimate_ns +
-        (strategy === "eager" ? timings.materialize.estimate_ns : 0);
-  return (
-    setup +
-    repetitions *
-      (timings[`${strategy}_forward`].estimate_ns +
-        timings[`${strategy}_transpose`].estimate_ns)
+export function validateFits(rows) {
+  const groups = new Map();
+  for (const source of rows) {
+    const row = Object.fromEntries(
+      Object.entries(source).map(([key, value]) => [
+        key,
+        ["backend", "strategy"].includes(key)
+          ? value
+          : value === ""
+            ? null
+            : Number(value),
+      ]),
+    );
+    const { backend, n, p, target_density, nnz, empty_columns, strategy } = row;
+    if (
+      !["sprs_to_ndarray", "faer_csc_to_dense"].includes(backend) ||
+      !["lazy", "eager"].includes(strategy) ||
+      !integer(n) ||
+      n === 0 ||
+      !integer(p) ||
+      p === 0 ||
+      !positive(target_density) ||
+      target_density > 1 ||
+      !integer(nnz) ||
+      nnz > n * p ||
+      !integer(empty_columns) ||
+      empty_columns > p
+    )
+      throw new Error("Invalid complete-fit fixture");
+    const { estimate_ns, lower_ns, upper_ns } = row;
+    if (
+      ![estimate_ns, lower_ns, upper_ns].every(positive) ||
+      lower_ns > estimate_ns ||
+      upper_ns < estimate_ns
+    )
+      throw new Error("Invalid complete-fit timing interval");
+    if (
+      !integer(row.iterations) ||
+      row.iterations === 0 ||
+      !Number.isFinite(row.objective) ||
+      row.objective < 0 ||
+      !Number.isFinite(row.gradient_norm) ||
+      row.gradient_norm < 0 ||
+      !positive(row.gradient_threshold) ||
+      row.gradient_norm > row.gradient_threshold
+    )
+      throw new Error("Complete fit did not converge");
+    if (
+      ![row.source_bytes, row.response_bytes, row.peak_total_bytes].every(
+        integer,
+      ) ||
+      row.source_bytes === 0 ||
+      row.response_bytes !== n * 8 ||
+      row.peak_total_bytes <
+        row.source_bytes +
+          row.response_bytes +
+          2 * p * 8 +
+          (strategy === "eager" ? n * p * 8 : 0)
+    )
+      throw new Error("Invalid complete-fit memory accounting");
+    const key = [backend, n, p, target_density].join(":");
+    if (!groups.has(key))
+      groups.set(key, {
+        backend,
+        n,
+        p,
+        target_density,
+        nnz,
+        empty_columns,
+        source_bytes: row.source_bytes,
+        response_bytes: row.response_bytes,
+        fits: {},
+      });
+    const group = groups.get(key);
+    if (
+      ["nnz", "empty_columns", "source_bytes", "response_bytes"].some(
+        (field) => group[field] !== row[field],
+      )
+    )
+      throw new Error("Inconsistent complete-fit fixture");
+    if (group.fits[strategy]) throw new Error("Duplicate complete-fit result");
+    group.fits[strategy] = row;
+  }
+  if (!groups.size) throw new Error("No complete-fit measurements");
+  for (const group of groups.values()) {
+    if (!group.fits.lazy || !group.fits.eager)
+      throw new Error("Missing complete-fit strategy");
+    const { lazy, eager } = group.fits;
+    if (
+      Math.abs(lazy.objective - eager.objective) >
+      1e-9 * Math.max(1, lazy.objective, eager.objective)
+    )
+      throw new Error("Complete-fit objectives disagree");
+  }
+  const cases = [...groups.values()];
+  const coverage = [
+    (g) => g.backend,
+    (g) => `${g.n}x${g.p}`,
+    (g) => g.target_density,
+  ].reduce((count, key) => count * new Set(cases.map(key)).size, 1);
+  if (cases.length !== coverage)
+    throw new Error("Incomplete complete-fit grid");
+  return cases.sort(
+    (a, b) => a.n - b.n || a.p - b.p || a.target_density - b.target_density,
   );
-}
-
-export function breakEven(group) {
-  const { timings } = group;
-  const difference =
-    timings.lazy_forward.estimate_ns +
-    timings.lazy_transpose.estimate_ns -
-    timings.eager_forward.estimate_ns -
-    timings.eager_transpose.estimate_ns;
-  return difference > 0
-    ? group.timings.materialize.estimate_ns / difference
-    : null;
 }

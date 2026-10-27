@@ -70,9 +70,11 @@ the site; docs.rs remains available. `python/` contains the independently
 versioned Python package, with a private PyO3 extension under `python/rust/`.
 Keep Python dependencies and FFI out of the core crate. Keep benchmark
 data and methodology synchronized; the site build reads the checked-in CSV and
-metadata in `benches/normalization_tradeoffs/` and generates SVG plots without
-running benchmarks. Historical consumer profiles remain in
-`benches/normalization_allocations/`. GitHub Actions
+metadata in `benches/least_squares/` and generates responsive SVG plots without
+running benchmarks. The main page compares complete gradient descent fits and
+individual products at three selectable matrix sizes. The earlier size and shape
+sweep remains in `benches/normalization_tradeoffs/`. Historical consumer profiles
+remain in `benches/normalization_allocations/`. GitHub Actions
 checks pull requests and deploys pushes to `main` to Cloudflare Workers.
 
 ## Development Status

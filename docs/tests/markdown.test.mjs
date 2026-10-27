@@ -46,15 +46,19 @@ test("serves clean Markdown for every page with equations, code, and tables", as
     if (path === "/benchmarks") {
       assert.match(
         body,
-        /\| Rows × columns \| Target \/ actual nonzeros \(%\)/,
+        /\| Nonzeros \(%\) \| Strategy \| Total \(ms\) \| Peak \(MiB\) \| Iterations \|/,
       );
       assert.match(body, /sprs CSC → ndarray dense/);
       assert.match(body, /8,192 × 512/);
-      assert.match(body, /2,048 × 2,048/);
-      assert.match(body, /512 × 8,192/);
-      assert.match(body, /Runtime versus density/);
+      assert.match(body, /A complete fit/);
+      assert.match(body, /Individual operations/);
+      assert.match(body, /!\[Complete ridge fit time/);
       assert.match(body, /!\[Forward product time/);
-      assert.match(body, /All measurements \(CSV\)/);
+      assert.match(body, /Fit measurements \(CSV\)/);
+      assert.doesNotMatch(
+        body,
+        /Projected total time|Does eager construction pay off/,
+      );
       assert.doesNotMatch(body, /ndarrayfaer/);
     }
   }

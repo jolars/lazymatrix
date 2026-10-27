@@ -89,46 +89,51 @@ for (const page of [
 }
 const benchmarkPage = await readFile(join(root, "benchmarks.html"), "utf8");
 for (const text of [
-  "Runtime versus density",
-  "Memory versus density",
-  "Does eager construction pay off?",
-  "Detailed measurements and nonzero counts",
+  "A complete fit",
+  "Total wall-clock time",
+  "Peak memory during the fit",
+  "Individual operations",
+  "Fit measurements and convergence",
+  "Matrix size (rows × columns)",
 ]) {
   if (!benchmarkPage.includes(text))
     errors.push(`Benchmark content was not rendered into static HTML: ${text}`);
 }
-const { plotSets } = JSON.parse(
+for (const removed of [
+  "Matrix size (dense storage)",
+  "Does eager construction pay off?",
+  "Memory measure",
+]) {
+  if (benchmarkPage.includes(removed))
+    errors.push(
+      `Removed benchmark control or projection is still present: ${removed}`,
+    );
+}
+const { cases } = JSON.parse(
   await readFile(
     new URL("../.vitepress/theme/benchmark-results.json", import.meta.url),
     "utf8",
   ),
 );
-const defaults = plotSets.find(
-  (p) =>
-    p.backend === "sprs_to_ndarray" &&
-    p.normalization === "standardized" &&
-    p.dense_bytes === 32 * 2 ** 20,
+const defaults = cases.find(
+  (c) => c.backend === "sprs_to_ndarray" && c.n === 8192 && c.p === 512,
 );
-for (const path of [
-  defaults.runtime.forward,
-  defaults.memory.peak_total_bytes,
-  defaults.total.find((p) => p.density === 0.01).path,
-]) {
-  const filename = path.split("/").at(-1);
-  if (!benchmarkPage.includes(path))
-    errors.push(`Missing benchmark plot in static HTML: ${filename}`);
+for (const plot of Object.values(defaults.plots)) {
+  for (const path of Object.values(plot)) {
+    if (!benchmarkPage.includes(path))
+      errors.push(`Missing responsive benchmark plot in static HTML: ${path}`);
+  }
 }
-for (const path of plotSets.flatMap((p) => [
-  ...Object.values(p.runtime),
-  ...Object.values(p.memory),
-  ...p.total.map((t) => t.path),
-])) {
+for (const path of cases.flatMap((c) =>
+  Object.values(c.plots).flatMap(Object.values),
+)) {
   const filename = path.split("/").at(-1);
   const svg = await readFile(join(root, "benchmarks", filename), "utf8");
   if (
     !svg.includes("<svg") ||
     !svg.includes("<path") ||
-    !svg.includes("Lazy sparse")
+    !svg.includes("Lazy sparse") ||
+    !svg.includes("Eager dense")
   )
     errors.push(`Invalid benchmark SVG: ${filename}`);
   const hash = createHash("sha256").update(svg).digest("hex").slice(0, 10);

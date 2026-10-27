@@ -32,22 +32,25 @@ To render an existing snapshot without extracting again:
 pnpm reference --snapshot ../.diplodocus/vitepress/documentation.sqlite
 ```
 
-The build validates `benches/normalization_tradeoffs/results.csv` and its run
-metadata, then uses Observable Plot to generate standalone SVGs for runtime,
-memory, and projected total time. Each plot compares tall, square, and wide
-matrices with matching element counts and aspect ratios 16:1, 1:1, and 1:16.
-The controls select a matrix size (2, 32, or 128 MiB of dense storage), backend,
-normalization, product direction, memory measure, or repetition-plot density.
-The default charts and detailed table render into
-static HTML. Plotting dependencies run only during the build. SVG filenames
-include a content hash so chart updates invalidate browser caches.
+The build validates the complete-fit results, operation results, and run
+metadata in `benches/least_squares/`, then uses Observable Plot to generate
+standalone SVGs. The page leads with total time and peak memory for a complete
+gradient descent fit, then shows forward and transpose timings with setup
+excluded. It uses 2,048 × 128, 8,192 × 512, and 16,384 × 1,024 matrices, mean
+centering and SD scaling, and seven densities. Controls select the backend and
+matrix dimensions, updating every chart and table together. Each single-panel chart
+has wide and narrow variants, and charts stack on small screens. The default
+charts and detailed tables render into static HTML. Plotting dependencies run
+only during the build. SVG filenames include a content hash so chart updates
+invalidate browser caches.
 
-Collect new measurements with `bash scripts/bench-normalization-tradeoffs.sh`,
-then copy `results.csv` and `metadata.json` from its output directory into
-`benches/normalization_tradeoffs/`. Update those sources and the methodology in
-`benchmarks.md` together. The build also retains the earlier consumer-fit CSV
-download. Generated website files are ignored by Git. Local development prepares
-the plots; restart the development server after replacing measurements.
+Collect new measurements with `bash scripts/bench-least-squares.sh`, then copy
+`results.csv`, `products.csv`, and `metadata.json` from its output directory into
+`benches/least_squares/`. Update those sources and the methodology in
+`benchmarks.md` together. The build also retains the earlier size/shape sweep
+and consumer-fit CSV downloads with their original metadata. Generated website
+files are ignored by Git. Local development prepares the plots; restart the
+development server after replacing measurements.
 
 The workspace overrides select patched Vite and XML-parser dependencies for
 VitePress 1.x. Revisit those overrides when upgrading VitePress.

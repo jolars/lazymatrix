@@ -83,26 +83,27 @@ pub fn fixtures() -> impl Iterator<Item = Fixture> {
     } else {
         vec![0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0]
     };
+    selected_shapes(sizes).flat_map(move |(rows, cols)| {
+        densities
+            .clone()
+            .into_iter()
+            .map(move |density| Fixture::new(rows, cols, density))
+    })
+}
+
+pub fn selected_shapes(sizes: Vec<(usize, usize)>) -> impl Iterator<Item = (usize, usize)> {
     let selected = std::env::var("LAZYMATRIX_BENCH_SHAPES").ok();
-    sizes
-        .into_iter()
-        .filter(move |(rows, cols)| {
-            selected.as_ref().is_none_or(|selected| {
-                selected
-                    .split(',')
-                    .any(|shape| shape == format!("{rows}x{cols}"))
-            })
+    sizes.into_iter().filter(move |(rows, cols)| {
+        selected.as_ref().is_none_or(|selected| {
+            selected
+                .split(',')
+                .any(|shape| shape == format!("{rows}x{cols}"))
         })
-        .flat_map(move |(rows, cols)| {
-            densities
-                .clone()
-                .into_iter()
-                .map(move |density| Fixture::new(rows, cols, density))
-        })
+    })
 }
 
 impl Fixture {
-    fn new(rows: usize, cols: usize, density: f64) -> Self {
+    pub fn new(rows: usize, cols: usize, density: f64) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(SEED);
         let mut offsets = Vec::with_capacity(cols + 1);
         let mut indices = Vec::new();

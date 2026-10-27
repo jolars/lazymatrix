@@ -1,8 +1,11 @@
 # Normalization trade-offs
 
-The website's runtime, memory, and repetition plots use
+The earlier size, shape, and density sweep is retained in
 [`normalization_tradeoffs/results.csv`](normalization_tradeoffs/results.csv)
-and its [run metadata](normalization_tradeoffs/metadata.json).
+and its [run metadata](normalization_tradeoffs/metadata.json). It remains
+downloadable from the website. The main benchmark page now uses the
+[complete-fit and product measurements](least_squares.md) for three selectable
+matrix sizes; it no longer displays projected repetition curves.
 
 ```sh
 bash scripts/bench-normalization-tradeoffs.sh
@@ -73,7 +76,7 @@ LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked --bench eager_normalization \
 
 Omit `faer` to measure only sprs with ndarray. The version-selection aliases used
 by examples and benchmarks select the newest enabled backend release. The
-website reads checked-in measurements and never invokes either harness.
+website retains this collection as a download and never invokes either harness.
 
 ## Historical consumer fitting measurements
 
