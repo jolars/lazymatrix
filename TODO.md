@@ -291,8 +291,8 @@ companion packages; the Rust core remains independent of Python and solvers.
 
 ## Outreach targets
 
-- [ ] RustyStats: <https://github.com/PricingFrontier/rustystats>
-- [ ] anofox-regression: <https://github.com/sipemu/anofox-regression>
+- [x] RustyStats: <https://github.com/PricingFrontier/rustystats>
+- [x] anofox-regression: <https://github.com/sipemu/anofox-regression>
 - [ ] Greeners: <https://github.com/sheep-farm/Greeners>
 - [ ] Polars for Data Science
   <https://github.com/abstractqqq/polars_ds_extension>
