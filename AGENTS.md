@@ -222,7 +222,7 @@ the original lockfile after the checks, including on failure. Run
 The Python package requires Rust 1.89 for source builds and Python 3.11 or newer.
 Its uv environment lives in `.devenv/python`; tasks set `UV_PROJECT_ENVIRONMENT`.
 Use `scripts/python-tool.py` to prefer native maturin and Ruff executables on
-NixOS. Diplodocus 0.7.0 uses a separate `nightly-2026-09-28` documentation
+NixOS. Diplodocus 0.8.0 uses a separate `nightly-2026-09-28` documentation
 toolchain. The website adapter exports Git-visible Rust sources to exclude local
 environments and generated symlinks from extraction. Python and Rust have
 independent versions, one combined release PR, and Python follows Rust releases.
