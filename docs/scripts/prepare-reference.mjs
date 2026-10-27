@@ -62,10 +62,6 @@ async function executable() {
     const local = resolve(repository, "../diplodocus/target/debug/diplodocus");
     binary = (await exists(local)) ? local : "diplodocus";
   }
-  const version = (await run(binary, ["--version"], true)).trim();
-  if (version !== "diplodocus 0.8.0") {
-    throw new Error(`Expected Diplodocus 0.8.0, received ${version}`);
-  }
   return binary;
 }
 

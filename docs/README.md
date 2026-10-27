@@ -13,12 +13,13 @@ task website:check
 ```
 
 The development and production builds first extract references with Diplodocus
-0.8.0. Prepare the editable Python extension with `task python:build` before
+0.9.0. Prepare the editable Python extension with `task python:build` before
 running `pnpm dev` or `pnpm build` directly. The repository tasks do this
 automatically. The environment supplies the separate Rust documentation nightly
 through `DIPLODOCUS_RUST_TOOLCHAIN`. Set `DIPLODOCUS_BIN` to select a CLI binary;
 the adapter also accepts the compiled binary in `../diplodocus/target/debug/`.
-CI installs the pinned prebuilt CLI.
+CI installs the pinned prebuilt CLI. Local binaries may use other versions;
+the adapter requires fragment format version 2 and validates the generated output.
 
 Run `task website:reference` after editing API documentation. Generated reference
 pages, navigation, assets, and snapshots are ignored by Git. A source export

@@ -70,7 +70,7 @@ jobs:
           echo "DIPLODOCUS_RUST_TOOLCHAIN=$(rustup run nightly-2026-09-28 rustc --print sysroot)" >> "$GITHUB_ENV"
       - uses: jolars/setup-diplodocus@v1
         with:
-          version: "0.8.0"
+          version: "0.9.0"
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: docs/package.json
