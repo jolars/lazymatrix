@@ -24,6 +24,7 @@ test_version() {
     if [[ $1 == faer_v* ]]; then
         cargo test --locked --no-default-features --features "$1" --example least_squares_sgd
         cargo run --locked --no-default-features --features "$1" --example least_squares_sgd
+        cargo run --locked --no-default-features --features "$1" --example multiresponse_least_squares
     fi
 }
 

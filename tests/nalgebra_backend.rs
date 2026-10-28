@@ -30,6 +30,71 @@ macro_rules! backend_suite {
                 DVector::from_column_slice(v)
             }
 
+            #[test]
+            fn batched_products() {
+                use lazymatrix::{MatMat, MatrixRead};
+                common::batched::run_batched_suite(build);
+                common::batched::run_batched_suite(build_csr);
+                common::batched::run_batched_suite(build_dense);
+                let panels = common::random_matrix(74, 131, 129, 0.05);
+                common::batched::check_batched(&build_dense(&panels), &panels.dense);
+                common::batched::check_batched(&build(&panels), &panels.dense);
+                let tm = common::random_matrix(73, 7, 3, 0.5);
+                let matrix = build(&tm);
+                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; 3]), Some(vec![-2.; 3]));
+                let eager = lazy.to_eager::<DMatrix<f64>>().unwrap();
+                common::batched::check_batched(
+                    &eager,
+                    &common::materialize(&tm.dense, lazy.centers(), lazy.scales()),
+                );
+                let rhs = DMatrix::from_fn(3, 2, |i, j| (i + j) as f64);
+                let view: DMatrixView<'_, f64> = rhs.as_view();
+                let native: DMatrix<f64> = lazy.matmat(&view).unwrap();
+                let independent: common::MaterializeOutput = lazy.matmat(&view).unwrap();
+                for i in 0..7 {
+                    for j in 0..2 {
+                        assert_eq!(native[(i, j)], independent.get(i, j));
+                    }
+                }
+                let dense = DMatrix::from_fn(6, 6, |i, j| 1e12 + (i * 6 + j) as f64);
+                let raw = dense.view_with_steps((0, 0), (3, 2), (1, 2));
+                let values: Vec<Vec<_>> = (0..3)
+                    .map(|i| (0..2).map(|j| raw[(i, j)] - 1e12).collect())
+                    .collect();
+                let centered = LazyMatrix::with_centers(raw, vec![1e12; 2]);
+                common::batched::check_batched(&centered, &values);
+                let rhs = DMatrix::from_fn(4, 4, |i, j| (i + j) as f64);
+                let input = rhs.view_with_steps((0, 0), (2, 2), (1, 1));
+                let expected: DMatrix<f64> = centered.matmat(&input).unwrap();
+                let mut storage = DMatrix::from_element(6, 4, 99.);
+                lazymatrix::MatMatInto::matmat_into(
+                    &centered,
+                    &input,
+                    &mut storage.view_with_steps_mut((0, 0), (3, 2), (1, 1)),
+                )
+                .unwrap();
+                for i in 0..6 {
+                    for j in 0..4 {
+                        assert_eq!(
+                            storage[(i, j)],
+                            if i % 2 == 0 && j % 2 == 0 {
+                                expected[(i / 2, j / 2)]
+                            } else {
+                                99.
+                            }
+                        );
+                    }
+                }
+                common::batched::check_batched_f32(
+                    &DMatrix::from_element(2, 1, 1e38_f32),
+                    DVector::from_column_slice,
+                );
+                let sparse =
+                    CscMatrix::try_from_csc_data(2, 1, vec![0, 2], vec![0, 1], vec![1e38_f32; 2])
+                        .unwrap();
+                common::batched::check_batched_f32(&sparse, DVector::from_column_slice);
+            }
+
             fn build_csr(tm: &TestMatrix) -> CsrMatrix<f64> {
                 let mut coo = CooMatrix::new(tm.nrows, tm.ncols);
                 for &(i, j, value) in &tm.triplets {
@@ -56,6 +121,7 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&matrix, DVector::from_column_slice);
+                common::batched::check_batched_f32(&matrix, DVector::from_column_slice);
             }
 
             fn from_dvec(v: &DVector<f64>) -> Vec<f64> {

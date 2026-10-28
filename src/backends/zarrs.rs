@@ -205,6 +205,36 @@ impl<A, F> MatrixErrorType for ZarrMatrix<A, F> {
     type Error = ZarrMatrixError;
 }
 
+macro_rules! batched_products {
+    ($trait:ident, $product:ident, $transpose:expr) => {
+        impl<A: ZarrArray<F>, F: Scalar> crate::$trait<F> for ZarrMatrix<A, F> {
+            fn $product<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
+            where
+                R: crate::MatrixRead<F> + ?Sized,
+                O: crate::MatrixRead<F> + crate::MatrixWrite<F> + ?Sized,
+            {
+                crate::matmat::validate(self, rhs, out, $transpose);
+                crate::matmat::zero(out);
+                if rhs.ncols() == 0 || out.nrows() == 0 {
+                    return Ok(());
+                }
+                self.for_each_value(|row, col, value| {
+                    let (destination, source) = if $transpose { (col, row) } else { (row, col) };
+                    for k in 0..rhs.ncols() {
+                        out.set(
+                            destination,
+                            k,
+                            out.get(destination, k) + value * rhs.get(source, k),
+                        );
+                    }
+                })
+            }
+        }
+    };
+}
+batched_products!(MatMatInto, matmat_into, false);
+batched_products!(MatTransposeMatInto, mat_transpose_mat_into, true);
+
 impl<A, F> crate::ReadBlock<F> for ZarrMatrix<A, F>
 where
     A: ZarrArray<F>,

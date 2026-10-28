@@ -21,10 +21,23 @@
 //! subtract each column's center and apply its scale before accumulating, which
 //! avoids subtracting large, nearly equal raw products. This numerical policy
 //! applies to allocating, reusable-output, fused, and workspace products across
-//! faer, nalgebra, and ndarray. It requires no normalized matrix or temporary
-//! buffer. Uncentered products retain the backend's raw multiplication path.
+//! faer, nalgebra, and ndarray. It requires no normalized matrix or heap-allocated
+//! design buffer. Uncentered products retain the backend's raw multiplication path.
 //! Sparse and chunked storage use the algebraic identities above to preserve
 //! their storage and access patterns.
+//!
+//! # Multiple right-hand sides
+//!
+//! [`MatMat`] and [`MatTransposeMat`] apply forward and transpose products to
+//! dense matrices of responses. The caller selects allocating output through
+//! its return type. [`MatMatInto`] and [`MatTransposeMatInto`] instead overwrite
+//! reusable storage, including strided views. [`MatrixRead`] borrows in-memory
+//! entries without cloning; [`MatrixWrite`] and [`MatrixOwned`] describe output.
+//! Every supported backend release provides these products. Sparse kernels
+//! retain their storage, and Zarr scans chunks once for the entire batch.
+//! [`LazyMatrix`], [`EagerMatrix`], and [`WithIntercept`] preserve their vector
+//! normalization semantics. Internal scratch is permitted. Batched submatrix,
+//! fused coefficient, and explicit workspace APIs remain future work.
 //!
 //! # Submatrices
 //!
@@ -416,6 +429,7 @@ mod eager;
 mod gram;
 mod intercept;
 mod materialize;
+mod matmat;
 mod matrix;
 mod normalization;
 mod row;
@@ -445,10 +459,11 @@ pub use row::LazyRow;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};
 pub use traits::{
     ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign, L2Norm,
-    LogicalColumn, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
-    MatVecInto, MatVecScaledInto, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixShape,
-    MatrixWrite, RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign, ScaledAddAssign,
-    ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel, SumEntries,
-    VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel,
-    WeightedGramInto, WeightedGramKernel,
+    LogicalColumn, MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatTransposeVec,
+    MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
+    MaterializeDense, MatrixErrorType, MatrixOwned, MatrixRead, MatrixShape, MatrixWrite,
+    RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
+    SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel, SumEntries, VectorOwned,
+    VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto,
+    WeightedGramKernel,
 };

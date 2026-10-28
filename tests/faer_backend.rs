@@ -34,6 +34,83 @@ macro_rules! backend_suite {
                 Col::from_fn(v.len(), |i| v[i])
             }
 
+            #[test]
+            fn batched_products() {
+                use lazymatrix::{MatMat, MatrixRead};
+                common::batched::run_batched_suite(build);
+                common::batched::run_batched_suite(build_csr);
+                common::batched::run_batched_suite(build_dense);
+                let panels = common::random_matrix(74, 131, 129, 0.05);
+                common::batched::check_batched(&build_dense(&panels), &panels.dense);
+                common::batched::check_batched(&build(&panels), &panels.dense);
+                let tm = common::random_matrix(73, 7, 3, 0.5);
+                let mut matrix = build_csr(&tm);
+                common::batched::check_batched(&matrix.as_ref(), &tm.dense);
+                common::batched::check_batched(&matrix.rb_mut(), &tm.dense);
+                let matrix = build(&tm);
+                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; 3]), Some(vec![-2.; 3]));
+                let eager = lazy.to_eager::<Mat<f64>>().unwrap();
+                common::batched::check_batched(
+                    &eager,
+                    &common::materialize(&tm.dense, lazy.centers(), lazy.scales()),
+                );
+                let rhs = Mat::from_fn(3, 2, |i, j| (i + j) as f64);
+                let native: Mat<f64> = lazy.matmat(&rhs.as_ref()).unwrap();
+                let independent: common::MaterializeOutput = lazy.matmat(&rhs.as_ref()).unwrap();
+                for i in 0..7 {
+                    for j in 0..2 {
+                        assert_eq!(native[(i, j)], independent.get(i, j));
+                    }
+                }
+                let mut dense = Mat::from_fn(6, 6, |i, j| 1e12 + (i * 6 + j) as f64);
+                let raw = dense.as_ref().submatrix(1, 1, 3, 2).transpose();
+                let values: Vec<Vec<_>> = (0..2)
+                    .map(|i| (0..3).map(|j| raw[(i, j)] - 1e12).collect())
+                    .collect();
+                let centered = LazyMatrix::with_centers(raw, vec![1e12; 3]);
+                common::batched::check_batched(&centered, &values);
+                let rhs = Mat::from_fn(3, 2, |i, j| (i + j) as f64);
+                let expected: Mat<f64> = centered.matmat(&rhs.as_ref().reverse_cols()).unwrap();
+                let mut storage = Mat::full(4, 4, 99.);
+                lazymatrix::MatMatInto::matmat_into(
+                    &centered,
+                    &rhs.as_ref().reverse_cols(),
+                    &mut storage.as_mut().submatrix_mut(1, 1, 2, 2),
+                )
+                .unwrap();
+                for i in 0..4 {
+                    for j in 0..4 {
+                        assert_eq!(
+                            storage[(i, j)],
+                            if (1..3).contains(&i) && (1..3).contains(&j) {
+                                expected[(i - 1, j - 1)]
+                            } else {
+                                99.
+                            }
+                        );
+                    }
+                }
+                let values: Vec<Vec<_>> = (0..6)
+                    .map(|i| (0..6).map(|j| dense[(i, j)]).collect())
+                    .collect();
+                common::batched::check_batched(&dense.as_mut(), &values);
+                let matrix = Mat::from_fn(2, 1, |_, _| 1e38_f32);
+                common::batched::check_batched_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
+                let nonfinite =
+                    Mat::from_fn(2, 1, |i, _| if i == 0 { f32::NAN } else { f32::INFINITY });
+                common::batched::check_batched_f32(&nonfinite, |v| Col::from_fn(v.len(), |i| v[i]));
+                let sparse = SparseColMat::try_new_from_triplets(
+                    2,
+                    1,
+                    &[
+                        Triplet::new(0_usize, 0_usize, 1e38_f32),
+                        Triplet::new(1, 0, 1e38_f32),
+                    ],
+                )
+                .unwrap();
+                common::batched::check_batched_f32(&sparse, |v| Col::from_fn(v.len(), |i| v[i]));
+            }
+
             fn build_csr(tm: &TestMatrix) -> SparseRowMat<usize, f64> {
                 let triplets: Vec<_> = tm
                     .triplets
@@ -64,6 +141,10 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
+                common::batched::check_batched_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
+                common::batched::check_batched_f32(&matrix.as_ref(), |v| {
+                    Col::from_fn(v.len(), |i| v[i])
+                });
                 common::check_fused_f32(&matrix.as_ref(), |v| Col::from_fn(v.len(), |i| v[i]));
                 common::check_fused_f32(&matrix.rb_mut(), |v| Col::from_fn(v.len(), |i| v[i]));
             }
@@ -80,6 +161,10 @@ macro_rules! backend_suite {
                 );
                 let mut matrix =
                     SparseRowMat::new(symbolic, vec![2.0, 0.0, -3.0, 99.0, 99.0, 4.0, 99.0]);
+                common::batched::check_batched(
+                    &matrix,
+                    &[vec![0., -1.], vec![0., 0.], vec![4., 0.]],
+                );
                 let check = |matrix: &dyn ColumnStats<f64, Error = std::convert::Infallible>| {
                     common::assert_close(
                         &matrix.col_means().unwrap(),

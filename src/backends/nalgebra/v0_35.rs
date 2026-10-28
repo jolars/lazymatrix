@@ -8,6 +8,8 @@ mod csr;
 mod dense;
 #[path = "gram.rs"]
 mod gram;
+#[path = "matmat.rs"]
+mod matmat;
 #[path = "sparse.rs"]
 mod sparse;
 #[path = "vector.rs"]

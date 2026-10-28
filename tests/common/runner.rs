@@ -4,6 +4,9 @@
 //! matrix–vector products; every backend's lazy operator is checked against it.
 #![allow(dead_code)]
 
+#[path = "batched.rs"]
+pub mod batched;
+
 use lazymatrix::VectorView;
 use lazymatrix::{
     Centering, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm, LazyMatrix,

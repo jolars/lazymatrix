@@ -89,6 +89,39 @@ impl<M: MatrixShape, T> MatrixShape for EagerMatrix<M, T> {
     }
 }
 
+macro_rules! batched_products {
+    ($trait:ident, $product:ident, $normalized:ident) => {
+        impl<M: crate::$trait<F>, F: Scalar, T> crate::$trait<F> for EagerMatrix<M, T> {
+            fn $product<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
+            where
+                R: crate::MatrixRead<F> + ?Sized,
+                O: crate::MatrixRead<F> + MatrixWrite<F> + ?Sized,
+            {
+                self.data.$product(rhs, out)
+            }
+            fn $normalized<R, O>(
+                &self,
+                rhs: &R,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                R: crate::MatrixRead<F> + ?Sized,
+                O: crate::MatrixRead<F> + MatrixWrite<F> + ?Sized,
+            {
+                self.data.$normalized(rhs, centers, scales, out)
+            }
+        }
+    };
+}
+batched_products!(MatMatInto, matmat_into, matmat_normalized_into);
+batched_products!(
+    MatTransposeMatInto,
+    mat_transpose_mat_into,
+    mat_transpose_mat_normalized_into
+);
+
 impl<M, V, T> MatVec<V> for EagerMatrix<M, T>
 where
     M: MatVec<V>,

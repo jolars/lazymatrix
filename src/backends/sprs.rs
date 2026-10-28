@@ -17,6 +17,94 @@ use crate::traits::{
     MatVecScaledInto, MatrixShape, Scalar, VectorView, VectorViewMut,
 };
 
+macro_rules! batched_products {
+    ($trait:ident, $product:ident, $transpose:expr) => {
+        impl<F, I, IP, IS, DS, Iptr> crate::$trait<F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+        where
+            F: Scalar,
+            I: SpIndex,
+            Iptr: SpIndex,
+            IP: Deref<Target = [Iptr]>,
+            IS: Deref<Target = [I]>,
+            DS: Deref<Target = [F]>,
+        {
+            fn $product<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
+            where
+                R: crate::MatrixRead<F> + ?Sized,
+                O: crate::MatrixRead<F> + crate::MatrixWrite<F> + ?Sized,
+            {
+                crate::matmat::validate(self, rhs, out, $transpose);
+                crate::matmat::zero(out);
+                if rhs.ncols() == 0 || out.nrows() == 0 {
+                    return Ok(());
+                }
+                for (outer, entries) in self.outer_iterator().enumerate() {
+                    for (inner, &value) in entries.iter() {
+                        let (row, col) = if self.is_csr() {
+                            (outer, inner)
+                        } else {
+                            (inner, outer)
+                        };
+                        let (destination, source) =
+                            if $transpose { (col, row) } else { (row, col) };
+                        for k in 0..rhs.ncols() {
+                            out.set(
+                                destination,
+                                k,
+                                out.get(destination, k) + value * rhs.get(source, k),
+                            );
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
+    };
+}
+batched_products!(MatMatInto, matmat_into, false);
+batched_products!(MatTransposeMatInto, mat_transpose_mat_into, true);
+
+macro_rules! checked_batched_products {
+    ($wrapper:ident, $trait:ident, $product:ident, $normalized:ident) => {
+        impl<M: crate::$trait<F>, F: Scalar> crate::$trait<F> for $wrapper<M> {
+            fn $product<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
+            where
+                R: crate::MatrixRead<F> + ?Sized,
+                O: crate::MatrixRead<F> + crate::MatrixWrite<F> + ?Sized,
+            {
+                self.as_inner().$product(rhs, out)
+            }
+            fn $normalized<R, O>(
+                &self,
+                rhs: &R,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                R: crate::MatrixRead<F> + ?Sized,
+                O: crate::MatrixRead<F> + crate::MatrixWrite<F> + ?Sized,
+            {
+                self.as_inner().$normalized(rhs, centers, scales, out)
+            }
+        }
+    };
+}
+checked_batched_products!(SprsCsc, MatMatInto, matmat_into, matmat_normalized_into);
+checked_batched_products!(SprsCsr, MatMatInto, matmat_into, matmat_normalized_into);
+checked_batched_products!(
+    SprsCsc,
+    MatTransposeMatInto,
+    mat_transpose_mat_into,
+    mat_transpose_mat_normalized_into
+);
+checked_batched_products!(
+    SprsCsr,
+    MatTransposeMatInto,
+    mat_transpose_mat_into,
+    mat_transpose_mat_normalized_into
+);
+
 impl<F, I, IP, IS, DS, Iptr> MatrixShape for CsMatBase<F, I, IP, IS, DS, Iptr>
 where
     I: SpIndex,

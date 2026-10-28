@@ -1,0 +1,30 @@
+{
+  "measured_at": "2026-10-28T10:26:03.592276+00:00",
+  "source_revision": "86fcd3b0bd8c88beb7601d1448b0936ab41dedca",
+  "source_has_uncommitted_changes": true,
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "features": ["faer", "nalgebra", "ndarray", "sprs", "zarrs"],
+  "parallel_feature": false,
+  "backend_versions": {
+    "faer": "0.24.4",
+    "nalgebra": "0.35.0",
+    "nalgebra-sparse": "0.12.0",
+    "ndarray": "0.17.2",
+    "sprs": "0.11.6",
+    "zarrs": "0.23.14"
+  },
+  "seed": 205,
+  "rows": 1024,
+  "predictors": 64,
+  "target_density": 0.05,
+  "responses": [1, 4, 16, 64],
+  "samples": 7,
+  "minimum_sample_ms": 10,
+  "setup_included": false,
+  "allocation_profiles": "One separate warmed operation per CSV row; peaks exclude resident input, output, and source buffers.",
+  "zarr_storage": "Uncompressed MemoryStore with counting reads; 128x32 chunks, 16 chunks per scan.",
+  "consumer": "Ten gradient updates plus final evaluation, standardized predictors, implicit intercept, 4 or 16 responses.",
+  "command": "compute bench --reason \"Compare batched products with vector calls\" -- cargo bench --locked --bench batched_products --features faer,nalgebra,ndarray,sprs,zarrs"
+}

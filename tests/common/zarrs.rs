@@ -26,10 +26,118 @@ fn build(tm: &common::TestMatrix, chunk: [u64; 2]) -> ZarrMatrix<Array<MemorySto
 #[test]
 fn zarrs_backend_suite() {
     for chunks in [[3, 2], [1, 7], [16, 1], [32, 32]] {
+        common::batched::run_batched_suite(|tm| build(tm, chunks));
         common::run_materialization_suite(|tm| build(tm, chunks));
         common::run_fused_suite(|tm| build(tm, chunks), |v| v.to_vec());
         common::run_backend_suite(|tm| build(tm, chunks), |v| v.to_vec(), |v| v.clone());
     }
+}
+
+#[test]
+fn batched_products_scan_once_and_discard_failed_normalization() {
+    use lazymatrix::{
+        MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatrixOwned, MatrixRead,
+        MatrixShape,
+    };
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let (n, p) = (matrix.nrows(), matrix.ncols());
+        let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; p]), Some(vec![2.; p]));
+        for k in [0, 1, 4, 17, 33] {
+            let mut rhs = common::MaterializeOutput::zeros(p, k);
+            rhs.values.fill(2.);
+            let mut u = common::MaterializeOutput::zeros(n, k);
+            u.values.fill(1.);
+            store.reset();
+            let out: common::MaterializeOutput = lazy.matmat(&rhs).unwrap();
+            assert_scans(&store, &matrix, usize::from(k != 0));
+            store.reset();
+            let transpose: common::MaterializeOutput = lazy.mat_transpose_mat(&u).unwrap();
+            assert_scans(&store, &matrix, usize::from(k != 0));
+            for i in 0..n {
+                for r in 0..k {
+                    assert_eq!(
+                        out.get(i, r),
+                        (0..p).map(|j| (i * p + j) as f64).sum::<f64>()
+                    );
+                }
+            }
+            for j in 0..p {
+                for r in 0..k {
+                    assert_eq!(
+                        transpose.get(j, r),
+                        (0..n).map(|i| (i * p + j) as f64 / 2.).sum::<f64>()
+                    );
+                }
+            }
+        }
+        let mut rhs = common::MaterializeOutput::zeros(p, 3);
+        rhs.values.fill(1.);
+        let mut raw = common::MaterializeOutput::zeros(n, 3);
+        store.reset();
+        store.fail_after.store(2, Ordering::Relaxed);
+        assert!(matrix.matmat_into(&rhs, &mut raw).is_err());
+        rhs.values.fill(2.);
+        let mut corrected = common::MaterializeOutput::zeros(n, 3);
+        corrected.values.fill(999.);
+        store.reset();
+        store.fail_after.store(2, Ordering::Relaxed);
+        assert!(
+            lazy.matmat_into(&rhs, &mut corrected)
+                .unwrap_err()
+                .to_string()
+                .contains("injected read failure")
+        );
+        assert_eq!(corrected.values, raw.values);
+        let mut u = common::MaterializeOutput::zeros(n, 3);
+        u.values.fill(1.);
+        let mut raw_t = common::MaterializeOutput::zeros(p, 3);
+        store.reset();
+        store.fail_after.store(2, Ordering::Relaxed);
+        assert!(matrix.mat_transpose_mat_into(&u, &mut raw_t).is_err());
+        let mut corrected_t = common::MaterializeOutput::zeros(p, 3);
+        store.reset();
+        store.fail_after.store(2, Ordering::Relaxed);
+        assert!(lazy.mat_transpose_mat_into(&u, &mut corrected_t).is_err());
+        assert_eq!(corrected_t.values, raw_t.values);
+        store.reset();
+        lazy.matmat_into(&rhs, &mut corrected).unwrap();
+        assert_scans(&store, &matrix, 1);
+        store.reset();
+        let mut wrong = common::MaterializeOutput::zeros(n + 1, 3);
+        wrong.values.fill(99.);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                || lazy.matmat_into(&rhs, &mut wrong)
+            ))
+            .is_err()
+        );
+        assert!(wrong.values.iter().all(|&v| v == 99.));
+        assert!(store.keys.lock().unwrap().is_empty());
+    }
+    let array = ArrayBuilder::new(vec![2, 1], vec![2, 1], float32(), 1e38_f32)
+        .build(Arc::new(MemoryStore::new()), "/batched-f32")
+        .unwrap();
+    common::batched::check_batched_f32(&ZarrMatrix::<_, f32>::try_new(array).unwrap(), |v| {
+        v.to_vec()
+    });
+}
+
+#[test]
+fn batched_products_preserve_nonzero_fill_and_exclude_edge_padding() {
+    use lazymatrix::{DenseBlock, MatMat, MatTransposeMat, MatrixRead};
+    let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], float64(), 5_f64)
+        .build(Arc::new(MemoryStore::new()), "/batched-fill")
+        .unwrap();
+    let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
+    let lazy = LazyMatrix::from_parts(matrix, Some(vec![1.; 2]), Some(vec![2.; 2]));
+    let rhs = DenseBlock::new(&[1.; 8], 2, 4);
+    let out: common::MaterializeOutput = lazy.matmat(&rhs).unwrap();
+    assert!(out.values.iter().all(|&v| v == 4.));
+    let u = DenseBlock::new(&[1.; 12], 3, 4);
+    let transpose: common::MaterializeOutput = lazy.mat_transpose_mat(&u).unwrap();
+    assert_eq!(transpose.get(0, 0), 6.);
+    assert!(transpose.values.iter().all(|&v| v == 6.));
 }
 
 #[test]

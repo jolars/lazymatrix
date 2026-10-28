@@ -25,6 +25,10 @@ fn build(tm: &TestMatrix) -> CsMat<f64> {
 
 #[test]
 fn sprs_backend_suite() {
+    common::batched::run_batched_suite(build);
+    common::batched::run_batched_suite(|tm| build(tm).to_csr());
+    common::batched::run_batched_suite(|tm| SprsCsc::try_new(build(tm)).unwrap());
+    common::batched::run_batched_suite(|tm| SprsCsr::try_new(build(tm).to_csr()).unwrap());
     common::run_submatrix_suite(build, |v| v.to_vec());
     common::run_submatrix_suite(|tm| build(tm).to_csr(), |v| v.to_vec());
     common::run_submatrix_suite(|tm| SprsCsc::try_new(build(tm)).unwrap(), |v| v.to_vec());
@@ -66,6 +70,26 @@ fn sprs_backend_suite() {
         }
         SprsCsc::try_new(triplets.to_csc::<u64>()).unwrap()
     });
+}
+
+#[test]
+fn batched_products_preserve_f32_edges_and_sliced_outer_ranges() {
+    let matrix = CsMat::new_csc((2, 1), vec![0, 2], vec![0, 1], vec![1e38_f32; 2]);
+    common::batched::check_batched_f32(&matrix, |v| v.to_vec());
+    common::batched::check_batched_f32(&matrix.to_csr(), |v| v.to_vec());
+    let tm = common::random_matrix(73, 7, 5, 0.5);
+    for matrix in [build(&tm), build(&tm).to_csr()] {
+        let view = matrix.slice_outer(1..3);
+        let values = if matrix.is_csc() {
+            tm.dense
+                .iter()
+                .map(|row| row[1..3].to_vec())
+                .collect::<Vec<_>>()
+        } else {
+            tm.dense[1..3].to_vec()
+        };
+        common::batched::check_batched(&view, &values);
+    }
 }
 
 #[test]

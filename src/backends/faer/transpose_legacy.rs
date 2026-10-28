@@ -3,6 +3,39 @@ use crate::Scalar;
 use faer::sparse::SparseColMat;
 use faer::{Accum, Col, Par};
 
+pub(super) fn multiply_csr_mat<F: Scalar + faer_traits::ComplexField>(
+    matrix: faer::sparse::SparseRowMatRef<'_, usize, F>,
+    input: faer::MatRef<'_, F>,
+    output: faer::MatMut<'_, F>,
+    parallelism: Par,
+) {
+    // Older kernels accept CSC, so transpose the complete batched expression.
+    faer::sparse::linalg::matmul::dense_sparse_matmul(
+        output.transpose_mut(),
+        Accum::Replace,
+        input.transpose(),
+        matrix.transpose(),
+        F::one(),
+        parallelism,
+    );
+}
+
+pub(super) fn multiply_transpose_mat<F: Scalar + faer_traits::ComplexField>(
+    matrix: &SparseColMat<usize, F>,
+    input: faer::MatRef<'_, F>,
+    output: faer::MatMut<'_, F>,
+    parallelism: Par,
+) {
+    faer::sparse::linalg::matmul::dense_sparse_matmul(
+        output.transpose_mut(),
+        Accum::Replace,
+        input.transpose(),
+        matrix.as_ref(),
+        F::one(),
+        parallelism,
+    );
+}
+
 pub(super) fn multiply_csr<F: Scalar + faer_traits::ComplexField>(
     matrix: faer::sparse::SparseRowMatRef<'_, usize, F>,
     input: &Col<F>,

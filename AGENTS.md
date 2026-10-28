@@ -22,6 +22,9 @@ re-exports. The main implementation is divided as follows:
   for its Gram cross terms.
 - `src/traits/operator.rs` defines matrix shape and allocating or
   reusable-output matrix-vector products.
+- `src/traits/matmat.rs` defines dense indexed reads and allocating or reusable
+  batched products. `src/matmat.rs` shares normalization, bounded panels, and
+  borrowed intercept adapters; backend modules provide native kernels.
 - `src/traits/gram.rs` defines writable dense output and weighted Gram
   capabilities. `src/gram.rs` contains shared validation and sparse Gram
   kernels.

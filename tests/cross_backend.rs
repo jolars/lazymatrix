@@ -18,6 +18,30 @@ use lazymatrix::{Centering, LazyMatrix, MatTransposeVec, MatVec, Normalization, 
 type Products = (Vec<f64>, Vec<f64>);
 type ProductFn = fn(&TestMatrix, Normalization, &[f64], &[f64]) -> Products;
 
+fn with_batched<M>(matrix: &M, v: &[f64], u: &[f64], mut products: Products) -> Products
+where
+    M: lazymatrix::MatMatInto<f64> + lazymatrix::MatTransposeMatInto<f64>,
+{
+    use lazymatrix::{DenseBlock, MatMat, MatTransposeMat};
+    let coefficients: Vec<_> = v
+        .iter()
+        .flat_map(|&value| [value, -value, 2. * value])
+        .collect();
+    let rows: Vec<_> = u
+        .iter()
+        .flat_map(|&value| [value, -value, 2. * value])
+        .collect();
+    let forward: common::MaterializeOutput = matrix
+        .matmat(&DenseBlock::new(&coefficients, v.len(), 3))
+        .unwrap();
+    let transpose: common::MaterializeOutput = matrix
+        .mat_transpose_mat(&DenseBlock::new(&rows, u.len(), 3))
+        .unwrap();
+    products.0.extend(forward.values);
+    products.1.extend(transpose.values);
+    products
+}
+
 #[cfg(feature = "faer_all")]
 macro_rules! faer_adapter {
     ($name:ident, $backend:ident) => {
@@ -60,9 +84,14 @@ macro_rules! faer_adapter {
                 let z = lazy
                     .mat_transpose_vec(&Col::from_fn(u.len(), |i| u[i]))
                     .unwrap();
-                (
-                    (0..y.nrows()).map(|i| y[i]).collect(),
-                    (0..z.nrows()).map(|i| z[i]).collect(),
+                with_batched(
+                    &lazy,
+                    v,
+                    u,
+                    (
+                        (0..y.nrows()).map(|i| y[i]).collect(),
+                        (0..z.nrows()).map(|i| z[i]).collect(),
+                    ),
                 )
             }
             pub(super) fn products_csr(
@@ -85,9 +114,14 @@ macro_rules! faer_adapter {
                 let z = lazy
                     .mat_transpose_vec(&Col::from_fn(u.len(), |i| u[i]))
                     .unwrap();
-                (
-                    (0..y.nrows()).map(|i| y[i]).collect(),
-                    (0..z.nrows()).map(|i| z[i]).collect(),
+                with_batched(
+                    &lazy,
+                    v,
+                    u,
+                    (
+                        (0..y.nrows()).map(|i| y[i]).collect(),
+                        (0..z.nrows()).map(|i| z[i]).collect(),
+                    ),
                 )
             }
             #[cfg(feature = "ndarray_all")]
@@ -162,15 +196,20 @@ macro_rules! nalgebra_adapter {
                     coo.push(r, c, v);
                 }
                 let lazy = LazyMatrix::new(CscMatrix::from(&coo), spec).unwrap();
-                (
-                    lazy.matvec(&DVector::from_column_slice(v))
-                        .unwrap()
-                        .as_slice()
-                        .to_vec(),
-                    lazy.mat_transpose_vec(&DVector::from_column_slice(u))
-                        .unwrap()
-                        .as_slice()
-                        .to_vec(),
+                with_batched(
+                    &lazy,
+                    v,
+                    u,
+                    (
+                        lazy.matvec(&DVector::from_column_slice(v))
+                            .unwrap()
+                            .as_slice()
+                            .to_vec(),
+                        lazy.mat_transpose_vec(&DVector::from_column_slice(u))
+                            .unwrap()
+                            .as_slice()
+                            .to_vec(),
+                    ),
                 )
             }
             pub(super) fn products_csr(
@@ -187,15 +226,20 @@ macro_rules! nalgebra_adapter {
                     coo.push(r, c, v);
                 }
                 let lazy = LazyMatrix::new(CsrMatrix::from(&coo), spec).unwrap();
-                (
-                    lazy.matvec(&DVector::from_column_slice(v))
-                        .unwrap()
-                        .as_slice()
-                        .to_vec(),
-                    lazy.mat_transpose_vec(&DVector::from_column_slice(u))
-                        .unwrap()
-                        .as_slice()
-                        .to_vec(),
+                with_batched(
+                    &lazy,
+                    v,
+                    u,
+                    (
+                        lazy.matvec(&DVector::from_column_slice(v))
+                            .unwrap()
+                            .as_slice()
+                            .to_vec(),
+                        lazy.mat_transpose_vec(&DVector::from_column_slice(u))
+                            .unwrap()
+                            .as_slice()
+                            .to_vec(),
+                    ),
                 )
             }
             #[cfg(feature = "ndarray_all")]
@@ -247,11 +291,16 @@ macro_rules! ndarray_adapter {
 
                 let matrix = Array2::from_shape_fn((tm.nrows, tm.ncols), |(i, j)| tm.dense[i][j]);
                 let lazy = LazyMatrix::new(matrix, spec).unwrap();
-                (
-                    lazy.matvec(&Array1::from_vec(v.to_vec())).unwrap().to_vec(),
-                    lazy.mat_transpose_vec(&Array1::from_vec(u.to_vec()))
-                        .unwrap()
-                        .to_vec(),
+                with_batched(
+                    &lazy,
+                    v,
+                    u,
+                    (
+                        lazy.matvec(&Array1::from_vec(v.to_vec())).unwrap().to_vec(),
+                        lazy.mat_transpose_vec(&Array1::from_vec(u.to_vec()))
+                            .unwrap()
+                            .to_vec(),
+                    ),
                 )
             }
             #[cfg(feature = "ndarray_all")]
@@ -300,9 +349,14 @@ mod sprs {
             triplets.add_triplet(row, col, value);
         }
         let lazy = LazyMatrix::new(triplets.to_csc::<usize>(), spec).unwrap();
-        (
-            lazy.matvec(&v.to_vec()).unwrap(),
-            lazy.mat_transpose_vec(&u.to_vec()).unwrap(),
+        with_batched(
+            &lazy,
+            v,
+            u,
+            (
+                lazy.matvec(&v.to_vec()).unwrap(),
+                lazy.mat_transpose_vec(&u.to_vec()).unwrap(),
+            ),
         )
     }
     #[cfg(feature = "ndarray_all")]
@@ -352,9 +406,14 @@ macro_rules! zarrs_adapter {
                 u: &[f64],
             ) -> Products {
                 let lazy = LazyMatrix::new(build(tm), spec).unwrap();
-                (
-                    lazy.matvec(&v.to_vec()).unwrap(),
-                    lazy.mat_transpose_vec(&u.to_vec()).unwrap(),
+                with_batched(
+                    &lazy,
+                    v,
+                    u,
+                    (
+                        lazy.matvec(&v.to_vec()).unwrap(),
+                        lazy.mat_transpose_vec(&u.to_vec()).unwrap(),
+                    ),
                 )
             }
 

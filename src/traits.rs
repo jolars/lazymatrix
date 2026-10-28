@@ -11,6 +11,9 @@
 //!   and by [`LazyMatrix`](crate::LazyMatrix) itself. Products return `Result`.
 //!   [`MatVecScaledInto`] and [`MatTransposeVecScaledInto`] provide fused
 //!   `alpha`/`beta` products for all supported backends and [`crate::WithIntercept`].
+//! * [`MatMat`] / [`MatTransposeMat`] and [`MatMatInto`] /
+//!   [`MatTransposeMatInto`] batch multiple right-hand sides. [`MatrixRead`]
+//!   borrows dense inputs, and [`MatrixOwned`] selects allocating output storage.
 //! * Solver-facing vector algebra ([`DotProduct`], [`L2Norm`],
 //!   [`ScaledAddAssign`], and [`ScaleAssign`]).
 //! * [`WeightedGramInto`] computes dense coefficient-space products into
@@ -56,6 +59,7 @@ mod blocks;
 mod columns;
 mod gram;
 mod materialize;
+mod matmat;
 mod operator;
 mod rows;
 mod stats;
@@ -80,6 +84,7 @@ pub use blocks::{DenseBlock, ReadBlock};
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};
 pub use gram::{MatrixWrite, WeightedGramInto, WeightedGramKernel};
 pub use materialize::{DenseNormalize, MaterializeDense, MatrixOwned};
+pub use matmat::{MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatrixRead};
 pub use operator::{
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
     MatVecScaledInto, MatrixErrorType, MatrixShape,

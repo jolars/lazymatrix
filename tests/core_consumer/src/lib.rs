@@ -3,6 +3,10 @@
 #![forbid(unsafe_code)]
 
 #[cfg(test)]
+#[path = "../../matmat.rs"]
+mod batched;
+
+#[cfg(test)]
 mod tests {
     use std::{cell::Cell, convert::Infallible};
 

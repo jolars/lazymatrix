@@ -6,7 +6,10 @@ use lazymatrix::{
 
 pub fn check<M, V>(matrix: M, input: V, rows: V, mut out: V, mut transpose_out: V)
 where
-    M: MatrixShape + ColumnStats<f64>,
+    M: MatrixShape
+        + ColumnStats<f64>
+        + lazymatrix::MatMatInto<f64>
+        + lazymatrix::MatTransposeMatInto<f64>,
     LazyMatrix<M, f64>: MatVec<V>
         + MatTransposeVec<V>
         + MatVecInto<V>
@@ -19,6 +22,15 @@ where
         LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Range)).unwrap();
     assert_eq!(lazy.centers().unwrap(), &[1.0, 3.0]);
     assert_eq!(lazy.scales().unwrap(), &[2.0, 6.0]);
+    {
+        use lazymatrix::{DenseBlock, MatMat, MatTransposeMat};
+        let rhs = DenseBlock::new(&[2., 4., -1., -2.], 2, 2);
+        let actual: DenseOutput = lazy.matmat(&rhs).unwrap();
+        assert_eq!(actual.values, [0.5, 1., 1., 2., -1.5, -3.]);
+        let u = DenseBlock::new(&[1., 2., 2., 4., -1., -2.], 3, 2);
+        let actual: DenseOutput = lazy.mat_transpose_mat(&u).unwrap();
+        assert_eq!(actual.values, [1.5, 3., -1., -2.]);
+    }
     close(&lazy.matvec(&input).unwrap(), &[0.5, 1.0, -1.5]);
     close(&lazy.mat_transpose_vec(&rows).unwrap(), &[1.5, -1.0]);
     lazy.matvec_into(&input, &mut out).unwrap();
@@ -60,6 +72,39 @@ where
         .unwrap();
     close(&out, &[7.0, 8.0, 3.0]);
     close(&augmented_transpose, &[4.0, 3.0, -2.0]);
+}
+
+struct DenseOutput {
+    rows: usize,
+    cols: usize,
+    values: Vec<f64>,
+}
+impl MatrixShape for DenseOutput {
+    fn nrows(&self) -> usize {
+        self.rows
+    }
+    fn ncols(&self) -> usize {
+        self.cols
+    }
+}
+impl lazymatrix::MatrixRead<f64> for DenseOutput {
+    fn get(&self, row: usize, column: usize) -> f64 {
+        self.values[row * self.cols + column]
+    }
+}
+impl lazymatrix::MatrixWrite<f64> for DenseOutput {
+    fn set(&mut self, row: usize, column: usize, value: f64) {
+        self.values[row * self.cols + column] = value;
+    }
+}
+impl lazymatrix::MatrixOwned<f64> for DenseOutput {
+    fn zeros(rows: usize, cols: usize) -> Self {
+        Self {
+            rows,
+            cols,
+            values: vec![0.; rows * cols],
+        }
+    }
 }
 
 fn close(vector: &impl VectorView<f64>, expected: &[f64]) {

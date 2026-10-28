@@ -162,15 +162,19 @@ companion packages; the Rust core remains independent of Python and solvers.
     the public operator. See [the
     investigation](benches/forward_input/README.md).
 
-- [ ] Add multiple-right-hand-side operator capabilities.
-  - Prototype `MatMat` and `MatTransposeMat` for multiresponse and multinomial
-    consumers rather than requiring one allocation and backend call per
-    response.
-  - Fold normalization into the batched products using the same identities as
-    `MatVec` and `MatTransposeVec`.
-  - Keep the capability independent of any response, loss, or solver type.
-  - Consider reusable-output and fused `alpha`/`beta` variants only after the
-    vector forms establish their ownership and workspace contracts.
+- [x] Add multiple-right-hand-side operator capabilities.
+  - `MatMat`, `MatTransposeMat`, and their reusable-output forms support every
+    backend release, fitted normalization, eager operators, and intercepts.
+    `MatrixRead` borrows dense inputs, and callers select allocating output
+    through `MatrixOwned`. Products remain independent of response and solver
+    types and never materialize a normalized design.
+  - The multiresponse least-squares example demonstrates batched predictions
+    and gradients. [Measurements](benches/batched_products/README.md) compare
+    vector and batch products, allocations, storage reads, and consumer updates.
+    Dense and Zarr consumers benefit on the measured fixture; sparse batching
+    can be slower despite fewer allocations.
+  - Batched submatrix products, fused `alpha`/`beta` forms, and explicit
+    workspace methods remain follow-up work.
 
 ## Operator algebra
 

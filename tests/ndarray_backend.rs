@@ -62,6 +62,40 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn batched_products() {
+                use lazymatrix::{MatMat, MatrixRead};
+                common::batched::run_batched_suite(build);
+                common::batched::run_batched_suite(build_fortran);
+                let panels = common::random_matrix(74, 131, 129, 0.05);
+                common::batched::check_batched(&build(&panels), &panels.dense);
+                let tm = common::random_matrix(73, 7, 3, 0.5);
+                let matrix = build(&tm);
+                common::batched::check_batched(&matrix.view(), &tm.dense);
+                common::batched::check_batched(&matrix.t(), &(0..3).map(|j| (0..7).map(|i| tm.dense[i][j]).collect()).collect::<Vec<_>>());
+                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; 3]), Some(vec![-2.; 3]));
+                let eager = lazy.to_eager::<Array2<f64>>().unwrap();
+                common::batched::check_batched(&eager, &common::materialize(&tm.dense, lazy.centers(), lazy.scales()));
+                let rhs = Array2::from_shape_fn((3, 2), |(i, j)| (i + j) as f64);
+                let native: Array2<f64> = lazy.matmat(&rhs.view()).unwrap();
+                let independent: common::MaterializeOutput = lazy.matmat(&rhs.view()).unwrap();
+                for i in 0..7 { for j in 0..2 { assert_eq!(native[(i, j)], independent.get(i, j)); } }
+                let dense = Array2::from_shape_fn((6, 6), |(i, j)| 1e12 + (i * 6 + j) as f64);
+                let raw = dense.slice(s![..;-2, ..;3]);
+                let values: Vec<Vec<_>> = (0..3).map(|i| (0..2).map(|j| raw[(i, j)] - 1e12).collect()).collect();
+                let centered = LazyMatrix::with_centers(raw, vec![1e12; 2]);
+                common::batched::check_batched(&centered, &values);
+                let rhs = Array2::from_shape_fn((4, 4), |(i, j)| (i + j) as f64);
+                let input = rhs.slice(s![..;-2, ..;2]);
+                let expected: Array2<f64> = centered.matmat(&input).unwrap();
+                let mut storage = Array2::from_elem((6, 4), 99.);
+                lazymatrix::MatMatInto::matmat_into(&centered, &input, &mut storage.slice_mut(s![..;2, ..;2])).unwrap();
+                for i in 0..6 { for j in 0..4 {
+                    assert_eq!(storage[(i, j)], if i % 2 == 0 && j % 2 == 0 { expected[(i/2, j/2)] } else { 99. });
+                } }
+                common::batched::check_batched_f32(&Array2::from_elem((2, 1), 1e38_f32), |v| Array1::from_vec(v.to_vec()));
+            }
+
+            #[test]
             fn eager_conversion_supports_strided_outputs_and_fortran_allocation_reuse() {
                 use lazymatrix::{WeightedGramInto, WeightedColumnSumsInto, WithIntercept};
                 let dense = array![[1.0, 2.0], [3.0, 4.0]];

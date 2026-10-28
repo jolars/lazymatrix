@@ -108,6 +108,10 @@ name = "least_squares_gd"
 required-features = ["faer_all"]
 
 [[example]]
+name = "multiresponse_least_squares"
+required-features = ["faer_all"]
+
+[[example]]
 name = "least_squares_sgd"
 required-features = ["faer_all"]
 
@@ -180,3 +184,8 @@ required-features = ["faer_all", "nalgebra_all", "ndarray_all"]
 name = "forward_input"
 harness = false
 required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all"]
+
+[[bench]]
+name = "batched_products"
+harness = false
+required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all", "zarrs_all"]

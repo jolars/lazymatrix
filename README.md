@@ -72,6 +72,7 @@ cargo run --locked --example coordinate_descent --features faer
   maximum absolute value, or range.
 - Forward and transpose matrix–vector products, reusable output buffers, and
   weighted Gram matrices.
+- Batched forward and transpose products with caller-selected dense outputs.
 - Borrowed logical columns and sparse column and row views for supported
   storage.
 - Borrowed contiguous submatrices that retain fitted normalization parameters.
