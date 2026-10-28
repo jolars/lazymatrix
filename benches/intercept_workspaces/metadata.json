@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-28",
+  "cpu": "AMD Ryzen 9 7900",
+  "rustc": "1.98.1",
+  "criterion": "0.8.2",
+  "backends": {
+    "faer": "0.24.4",
+    "nalgebra": "0.35.0",
+    "nalgebra-sparse": "0.12.0",
+    "ndarray": "0.17.2",
+    "sprs": "0.11.6",
+    "zarrs": "0.23.14"
+  },
+  "features": [
+    "faer",
+    "nalgebra",
+    "ndarray",
+    "sprs",
+    "zarrs"
+  ],
+  "parallel": false,
+  "steps_per_batch": 10,
+  "allocation_measurements": 810,
+  "allocation_method": "One warmed untimed batch; count allocation and reallocation calls and cumulative requested bytes, excluding setup. All fixtures run regardless of the Criterion timing filter.",
+  "allocation_command": "compute bench --reason \"Compare public intercept workspace reuse with benchmark-only composition\" -- taskset -c 10 cargo bench --locked --bench fused_consumer --features faer,nalgebra,ndarray,sprs,zarrs -- '^consumer/(faer_csc|nalgebra_csc|sprs_csc)/2000x32/density_0.01/standardized/intercept/(workspace|composed_workspace)$' --warm-up-time 0.2 --measurement-time 0.8 --sample-size 20 --noplot",
+  "cpu_affinity": [
+    10
+  ],
+  "prototype_scope": "Private InterceptWorkspace in benches/fused_consumer.rs; all library APIs remain unchanged.",
+  "timing_measurements": 6,
+  "warm_up_seconds": 0.2,
+  "measurement_seconds": 0.8,
+  "samples_per_case": 20,
+  "timing_method": "Criterion reported time estimates and intervals, in microseconds per ten least-squares steps; one CPU-pinned run.",
+  "compute_coordination": "Exclusive compute bench window; public baseline and private prototype measured in one invocation."
+}

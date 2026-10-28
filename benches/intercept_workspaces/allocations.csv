@@ -1,0 +1,811 @@
+case,allocations,requested_bytes
+consumer/faer_dense/2000x32/density_1/raw/allocating,20,162560
+consumer/faer_dense/2000x32/density_1/raw/overwrite,0,0
+consumer/faer_dense/2000x32/density_1/raw/fused,0,0
+consumer/faer_dense/2000x32/density_1/raw/workspace,0,0
+consumer/faer_dense/2000x32/density_1/raw/intercept/allocating,40,168320
+consumer/faer_dense/2000x32/density_1/raw/intercept/overwrite,20,5120
+consumer/faer_dense/2000x32/density_1/raw/intercept/fused,20,5120
+consumer/faer_dense/2000x32/density_1/raw/intercept/workspace,0,0
+consumer/faer_dense/2000x32/density_1/raw/intercept/composed_workspace,0,0
+consumer/faer_dense/2000x32/density_1/centered/allocating,20,162560
+consumer/faer_dense/2000x32/density_1/centered/overwrite,0,0
+consumer/faer_dense/2000x32/density_1/centered/fused,0,0
+consumer/faer_dense/2000x32/density_1/centered/workspace,0,0
+consumer/faer_dense/2000x32/density_1/centered/intercept/allocating,40,168320
+consumer/faer_dense/2000x32/density_1/centered/intercept/overwrite,20,5120
+consumer/faer_dense/2000x32/density_1/centered/intercept/fused,20,5120
+consumer/faer_dense/2000x32/density_1/centered/intercept/workspace,0,0
+consumer/faer_dense/2000x32/density_1/centered/intercept/composed_workspace,0,0
+consumer/faer_dense/2000x32/density_1/standardized/allocating,20,162560
+consumer/faer_dense/2000x32/density_1/standardized/overwrite,0,0
+consumer/faer_dense/2000x32/density_1/standardized/fused,0,0
+consumer/faer_dense/2000x32/density_1/standardized/workspace,0,0
+consumer/faer_dense/2000x32/density_1/standardized/intercept/allocating,40,168320
+consumer/faer_dense/2000x32/density_1/standardized/intercept/overwrite,20,5120
+consumer/faer_dense/2000x32/density_1/standardized/intercept/fused,20,5120
+consumer/faer_dense/2000x32/density_1/standardized/intercept/workspace,0,0
+consumer/faer_dense/2000x32/density_1/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/raw/allocating,20,162560
+consumer/nalgebra_dense/2000x32/density_1/raw/overwrite,0,0
+consumer/nalgebra_dense/2000x32/density_1/raw/fused,0,0
+consumer/nalgebra_dense/2000x32/density_1/raw/workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/raw/intercept/allocating,40,167760
+consumer/nalgebra_dense/2000x32/density_1/raw/intercept/overwrite,20,5120
+consumer/nalgebra_dense/2000x32/density_1/raw/intercept/fused,20,5120
+consumer/nalgebra_dense/2000x32/density_1/raw/intercept/workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/centered/allocating,20,162560
+consumer/nalgebra_dense/2000x32/density_1/centered/overwrite,0,0
+consumer/nalgebra_dense/2000x32/density_1/centered/fused,0,0
+consumer/nalgebra_dense/2000x32/density_1/centered/workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/centered/intercept/allocating,40,167760
+consumer/nalgebra_dense/2000x32/density_1/centered/intercept/overwrite,20,5120
+consumer/nalgebra_dense/2000x32/density_1/centered/intercept/fused,20,5120
+consumer/nalgebra_dense/2000x32/density_1/centered/intercept/workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/standardized/allocating,20,162560
+consumer/nalgebra_dense/2000x32/density_1/standardized/overwrite,0,0
+consumer/nalgebra_dense/2000x32/density_1/standardized/fused,0,0
+consumer/nalgebra_dense/2000x32/density_1/standardized/workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/standardized/intercept/allocating,40,167760
+consumer/nalgebra_dense/2000x32/density_1/standardized/intercept/overwrite,20,5120
+consumer/nalgebra_dense/2000x32/density_1/standardized/intercept/fused,20,5120
+consumer/nalgebra_dense/2000x32/density_1/standardized/intercept/workspace,0,0
+consumer/nalgebra_dense/2000x32/density_1/standardized/intercept/composed_workspace,0,0
+consumer/ndarray/2000x32/density_1/raw/allocating,20,162560
+consumer/ndarray/2000x32/density_1/raw/overwrite,0,0
+consumer/ndarray/2000x32/density_1/raw/fused,0,0
+consumer/ndarray/2000x32/density_1/raw/workspace,0,0
+consumer/ndarray/2000x32/density_1/raw/intercept/allocating,40,167760
+consumer/ndarray/2000x32/density_1/raw/intercept/overwrite,20,5120
+consumer/ndarray/2000x32/density_1/raw/intercept/fused,20,5120
+consumer/ndarray/2000x32/density_1/raw/intercept/workspace,0,0
+consumer/ndarray/2000x32/density_1/raw/intercept/composed_workspace,0,0
+consumer/ndarray/2000x32/density_1/centered/allocating,20,162560
+consumer/ndarray/2000x32/density_1/centered/overwrite,0,0
+consumer/ndarray/2000x32/density_1/centered/fused,0,0
+consumer/ndarray/2000x32/density_1/centered/workspace,0,0
+consumer/ndarray/2000x32/density_1/centered/intercept/allocating,40,167760
+consumer/ndarray/2000x32/density_1/centered/intercept/overwrite,20,5120
+consumer/ndarray/2000x32/density_1/centered/intercept/fused,20,5120
+consumer/ndarray/2000x32/density_1/centered/intercept/workspace,0,0
+consumer/ndarray/2000x32/density_1/centered/intercept/composed_workspace,0,0
+consumer/ndarray/2000x32/density_1/standardized/allocating,20,162560
+consumer/ndarray/2000x32/density_1/standardized/overwrite,0,0
+consumer/ndarray/2000x32/density_1/standardized/fused,0,0
+consumer/ndarray/2000x32/density_1/standardized/workspace,0,0
+consumer/ndarray/2000x32/density_1/standardized/intercept/allocating,40,167760
+consumer/ndarray/2000x32/density_1/standardized/intercept/overwrite,20,5120
+consumer/ndarray/2000x32/density_1/standardized/intercept/fused,20,5120
+consumer/ndarray/2000x32/density_1/standardized/intercept/workspace,0,0
+consumer/ndarray/2000x32/density_1/standardized/intercept/composed_workspace,0,0
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/allocating",4830,21229440
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/overwrite",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/fused",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/intercept/allocating",4840,21232080
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/intercept/overwrite",4820,21069440
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/intercept/fused",4820,21069440
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/intercept/workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/raw/intercept/composed_workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/allocating",4830,21229440
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/overwrite",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/fused",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/intercept/allocating",4840,21232080
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/intercept/overwrite",4820,21069440
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/intercept/fused",4820,21069440
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/intercept/workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/centered/intercept/composed_workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/allocating",4830,21229440
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/overwrite",4810,21066880
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/fused",4820,21069440
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/workspace",4800,21064320
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/intercept/allocating",4850,21234640
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/intercept/overwrite",4830,21072000
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/intercept/fused",4840,21074560
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/intercept/workspace",4820,21069440
+"consumer/zarrs_[256, 16]/2000x32/density_1/standardized/intercept/composed_workspace",4800,21064320
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/allocating",630,21148240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/overwrite",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/fused",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/intercept/allocating",640,21150880
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/intercept/overwrite",620,20988240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/intercept/fused",620,20988240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/intercept/workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/raw/intercept/composed_workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/allocating",630,21148240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/overwrite",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/fused",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/intercept/allocating",640,21150880
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/intercept/overwrite",620,20988240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/intercept/fused",620,20988240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/intercept/workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/centered/intercept/composed_workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/allocating",630,21148240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/overwrite",610,20985680
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/fused",620,20988240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/workspace",600,20983120
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/intercept/allocating",650,21153440
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/intercept/overwrite",630,20990800
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/intercept/fused",640,20993360
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/intercept/workspace",620,20988240
+"consumer/zarrs_[1024, 32]/2000x32/density_1/standardized/intercept/composed_workspace",600,20983120
+consumer/faer_csc/2000x32/density_0.01/raw/allocating,30,165120
+consumer/faer_csc/2000x32/density_0.01/raw/overwrite,0,0
+consumer/faer_csc/2000x32/density_0.01/raw/fused,0,0
+consumer/faer_csc/2000x32/density_0.01/raw/workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/raw/intercept/allocating,40,168320
+consumer/faer_csc/2000x32/density_0.01/raw/intercept/overwrite,20,5120
+consumer/faer_csc/2000x32/density_0.01/raw/intercept/fused,20,5120
+consumer/faer_csc/2000x32/density_0.01/raw/intercept/workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/centered/allocating,30,165120
+consumer/faer_csc/2000x32/density_0.01/centered/overwrite,0,0
+consumer/faer_csc/2000x32/density_0.01/centered/fused,0,0
+consumer/faer_csc/2000x32/density_0.01/centered/workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/centered/intercept/allocating,40,168320
+consumer/faer_csc/2000x32/density_0.01/centered/intercept/overwrite,20,5120
+consumer/faer_csc/2000x32/density_0.01/centered/intercept/fused,20,5120
+consumer/faer_csc/2000x32/density_0.01/centered/intercept/workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/standardized/allocating,30,165120
+consumer/faer_csc/2000x32/density_0.01/standardized/overwrite,10,2560
+consumer/faer_csc/2000x32/density_0.01/standardized/fused,20,5120
+consumer/faer_csc/2000x32/density_0.01/standardized/workspace,0,0
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/allocating,50,170880
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/overwrite,30,7680
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/fused,40,10240
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/workspace,20,5120
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/raw/allocating,30,165120
+consumer/faer_csr/2000x32/density_0.01/raw/overwrite,0,0
+consumer/faer_csr/2000x32/density_0.01/raw/fused,0,0
+consumer/faer_csr/2000x32/density_0.01/raw/workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/raw/intercept/allocating,40,168320
+consumer/faer_csr/2000x32/density_0.01/raw/intercept/overwrite,20,5120
+consumer/faer_csr/2000x32/density_0.01/raw/intercept/fused,20,5120
+consumer/faer_csr/2000x32/density_0.01/raw/intercept/workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/centered/allocating,30,165120
+consumer/faer_csr/2000x32/density_0.01/centered/overwrite,0,0
+consumer/faer_csr/2000x32/density_0.01/centered/fused,0,0
+consumer/faer_csr/2000x32/density_0.01/centered/workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/centered/intercept/allocating,40,168320
+consumer/faer_csr/2000x32/density_0.01/centered/intercept/overwrite,20,5120
+consumer/faer_csr/2000x32/density_0.01/centered/intercept/fused,20,5120
+consumer/faer_csr/2000x32/density_0.01/centered/intercept/workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/standardized/allocating,30,165120
+consumer/faer_csr/2000x32/density_0.01/standardized/overwrite,10,2560
+consumer/faer_csr/2000x32/density_0.01/standardized/fused,20,5120
+consumer/faer_csr/2000x32/density_0.01/standardized/workspace,0,0
+consumer/faer_csr/2000x32/density_0.01/standardized/intercept/allocating,50,170880
+consumer/faer_csr/2000x32/density_0.01/standardized/intercept/overwrite,30,7680
+consumer/faer_csr/2000x32/density_0.01/standardized/intercept/fused,40,10240
+consumer/faer_csr/2000x32/density_0.01/standardized/intercept/workspace,20,5120
+consumer/faer_csr/2000x32/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/raw/allocating,30,165120
+consumer/nalgebra_csc/2000x32/density_0.01/raw/overwrite,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/raw/fused,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/raw/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/raw/intercept/allocating,40,167760
+consumer/nalgebra_csc/2000x32/density_0.01/raw/intercept/overwrite,20,5120
+consumer/nalgebra_csc/2000x32/density_0.01/raw/intercept/fused,20,5120
+consumer/nalgebra_csc/2000x32/density_0.01/raw/intercept/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/centered/allocating,30,165120
+consumer/nalgebra_csc/2000x32/density_0.01/centered/overwrite,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/centered/fused,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/centered/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/centered/intercept/allocating,40,167760
+consumer/nalgebra_csc/2000x32/density_0.01/centered/intercept/overwrite,20,5120
+consumer/nalgebra_csc/2000x32/density_0.01/centered/intercept/fused,20,5120
+consumer/nalgebra_csc/2000x32/density_0.01/centered/intercept/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/allocating,30,165120
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/overwrite,10,2560
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/fused,20,5120
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/allocating,50,170320
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/overwrite,30,7680
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/fused,40,10240
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/workspace,20,5120
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/raw/allocating,30,165120
+consumer/nalgebra_csr/2000x32/density_0.01/raw/overwrite,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/raw/fused,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/raw/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/raw/intercept/allocating,40,167760
+consumer/nalgebra_csr/2000x32/density_0.01/raw/intercept/overwrite,20,5120
+consumer/nalgebra_csr/2000x32/density_0.01/raw/intercept/fused,20,5120
+consumer/nalgebra_csr/2000x32/density_0.01/raw/intercept/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/centered/allocating,30,165120
+consumer/nalgebra_csr/2000x32/density_0.01/centered/overwrite,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/centered/fused,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/centered/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/centered/intercept/allocating,40,167760
+consumer/nalgebra_csr/2000x32/density_0.01/centered/intercept/overwrite,20,5120
+consumer/nalgebra_csr/2000x32/density_0.01/centered/intercept/fused,20,5120
+consumer/nalgebra_csr/2000x32/density_0.01/centered/intercept/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/allocating,30,165120
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/overwrite,10,2560
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/fused,20,5120
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/intercept/allocating,50,170320
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/intercept/overwrite,30,7680
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/intercept/fused,40,10240
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/intercept/workspace,20,5120
+consumer/nalgebra_csr/2000x32/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/raw/allocating,30,165120
+consumer/sprs_csc/2000x32/density_0.01/raw/overwrite,0,0
+consumer/sprs_csc/2000x32/density_0.01/raw/fused,0,0
+consumer/sprs_csc/2000x32/density_0.01/raw/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/raw/intercept/allocating,40,167760
+consumer/sprs_csc/2000x32/density_0.01/raw/intercept/overwrite,20,5120
+consumer/sprs_csc/2000x32/density_0.01/raw/intercept/fused,20,5120
+consumer/sprs_csc/2000x32/density_0.01/raw/intercept/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/centered/allocating,30,165120
+consumer/sprs_csc/2000x32/density_0.01/centered/overwrite,0,0
+consumer/sprs_csc/2000x32/density_0.01/centered/fused,0,0
+consumer/sprs_csc/2000x32/density_0.01/centered/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/centered/intercept/allocating,40,167760
+consumer/sprs_csc/2000x32/density_0.01/centered/intercept/overwrite,20,5120
+consumer/sprs_csc/2000x32/density_0.01/centered/intercept/fused,20,5120
+consumer/sprs_csc/2000x32/density_0.01/centered/intercept/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/standardized/allocating,30,165120
+consumer/sprs_csc/2000x32/density_0.01/standardized/overwrite,10,2560
+consumer/sprs_csc/2000x32/density_0.01/standardized/fused,20,5120
+consumer/sprs_csc/2000x32/density_0.01/standardized/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/allocating,50,170320
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/overwrite,30,7680
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/fused,40,10240
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/workspace,20,5120
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/raw/allocating,30,165120
+consumer/faer_csc/2000x32/density_0.1/raw/overwrite,0,0
+consumer/faer_csc/2000x32/density_0.1/raw/fused,0,0
+consumer/faer_csc/2000x32/density_0.1/raw/workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/raw/intercept/allocating,40,168320
+consumer/faer_csc/2000x32/density_0.1/raw/intercept/overwrite,20,5120
+consumer/faer_csc/2000x32/density_0.1/raw/intercept/fused,20,5120
+consumer/faer_csc/2000x32/density_0.1/raw/intercept/workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/centered/allocating,30,165120
+consumer/faer_csc/2000x32/density_0.1/centered/overwrite,0,0
+consumer/faer_csc/2000x32/density_0.1/centered/fused,0,0
+consumer/faer_csc/2000x32/density_0.1/centered/workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/centered/intercept/allocating,40,168320
+consumer/faer_csc/2000x32/density_0.1/centered/intercept/overwrite,20,5120
+consumer/faer_csc/2000x32/density_0.1/centered/intercept/fused,20,5120
+consumer/faer_csc/2000x32/density_0.1/centered/intercept/workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/standardized/allocating,30,165120
+consumer/faer_csc/2000x32/density_0.1/standardized/overwrite,10,2560
+consumer/faer_csc/2000x32/density_0.1/standardized/fused,20,5120
+consumer/faer_csc/2000x32/density_0.1/standardized/workspace,0,0
+consumer/faer_csc/2000x32/density_0.1/standardized/intercept/allocating,50,170880
+consumer/faer_csc/2000x32/density_0.1/standardized/intercept/overwrite,30,7680
+consumer/faer_csc/2000x32/density_0.1/standardized/intercept/fused,40,10240
+consumer/faer_csc/2000x32/density_0.1/standardized/intercept/workspace,20,5120
+consumer/faer_csc/2000x32/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/raw/allocating,30,165120
+consumer/faer_csr/2000x32/density_0.1/raw/overwrite,0,0
+consumer/faer_csr/2000x32/density_0.1/raw/fused,0,0
+consumer/faer_csr/2000x32/density_0.1/raw/workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/raw/intercept/allocating,40,168320
+consumer/faer_csr/2000x32/density_0.1/raw/intercept/overwrite,20,5120
+consumer/faer_csr/2000x32/density_0.1/raw/intercept/fused,20,5120
+consumer/faer_csr/2000x32/density_0.1/raw/intercept/workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/centered/allocating,30,165120
+consumer/faer_csr/2000x32/density_0.1/centered/overwrite,0,0
+consumer/faer_csr/2000x32/density_0.1/centered/fused,0,0
+consumer/faer_csr/2000x32/density_0.1/centered/workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/centered/intercept/allocating,40,168320
+consumer/faer_csr/2000x32/density_0.1/centered/intercept/overwrite,20,5120
+consumer/faer_csr/2000x32/density_0.1/centered/intercept/fused,20,5120
+consumer/faer_csr/2000x32/density_0.1/centered/intercept/workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/standardized/allocating,30,165120
+consumer/faer_csr/2000x32/density_0.1/standardized/overwrite,10,2560
+consumer/faer_csr/2000x32/density_0.1/standardized/fused,20,5120
+consumer/faer_csr/2000x32/density_0.1/standardized/workspace,0,0
+consumer/faer_csr/2000x32/density_0.1/standardized/intercept/allocating,50,170880
+consumer/faer_csr/2000x32/density_0.1/standardized/intercept/overwrite,30,7680
+consumer/faer_csr/2000x32/density_0.1/standardized/intercept/fused,40,10240
+consumer/faer_csr/2000x32/density_0.1/standardized/intercept/workspace,20,5120
+consumer/faer_csr/2000x32/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/raw/allocating,30,165120
+consumer/nalgebra_csc/2000x32/density_0.1/raw/overwrite,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/raw/fused,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/raw/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/raw/intercept/allocating,40,167760
+consumer/nalgebra_csc/2000x32/density_0.1/raw/intercept/overwrite,20,5120
+consumer/nalgebra_csc/2000x32/density_0.1/raw/intercept/fused,20,5120
+consumer/nalgebra_csc/2000x32/density_0.1/raw/intercept/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/centered/allocating,30,165120
+consumer/nalgebra_csc/2000x32/density_0.1/centered/overwrite,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/centered/fused,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/centered/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/centered/intercept/allocating,40,167760
+consumer/nalgebra_csc/2000x32/density_0.1/centered/intercept/overwrite,20,5120
+consumer/nalgebra_csc/2000x32/density_0.1/centered/intercept/fused,20,5120
+consumer/nalgebra_csc/2000x32/density_0.1/centered/intercept/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/allocating,30,165120
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/overwrite,10,2560
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/fused,20,5120
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/workspace,0,0
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/intercept/allocating,50,170320
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/intercept/overwrite,30,7680
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/intercept/fused,40,10240
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/intercept/workspace,20,5120
+consumer/nalgebra_csc/2000x32/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/raw/allocating,30,165120
+consumer/nalgebra_csr/2000x32/density_0.1/raw/overwrite,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/raw/fused,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/raw/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/raw/intercept/allocating,40,167760
+consumer/nalgebra_csr/2000x32/density_0.1/raw/intercept/overwrite,20,5120
+consumer/nalgebra_csr/2000x32/density_0.1/raw/intercept/fused,20,5120
+consumer/nalgebra_csr/2000x32/density_0.1/raw/intercept/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/centered/allocating,30,165120
+consumer/nalgebra_csr/2000x32/density_0.1/centered/overwrite,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/centered/fused,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/centered/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/centered/intercept/allocating,40,167760
+consumer/nalgebra_csr/2000x32/density_0.1/centered/intercept/overwrite,20,5120
+consumer/nalgebra_csr/2000x32/density_0.1/centered/intercept/fused,20,5120
+consumer/nalgebra_csr/2000x32/density_0.1/centered/intercept/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/allocating,30,165120
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/overwrite,10,2560
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/fused,20,5120
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/workspace,0,0
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/intercept/allocating,50,170320
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/intercept/overwrite,30,7680
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/intercept/fused,40,10240
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/intercept/workspace,20,5120
+consumer/nalgebra_csr/2000x32/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/raw/allocating,30,165120
+consumer/sprs_csc/2000x32/density_0.1/raw/overwrite,0,0
+consumer/sprs_csc/2000x32/density_0.1/raw/fused,0,0
+consumer/sprs_csc/2000x32/density_0.1/raw/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/raw/intercept/allocating,40,167760
+consumer/sprs_csc/2000x32/density_0.1/raw/intercept/overwrite,20,5120
+consumer/sprs_csc/2000x32/density_0.1/raw/intercept/fused,20,5120
+consumer/sprs_csc/2000x32/density_0.1/raw/intercept/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/centered/allocating,30,165120
+consumer/sprs_csc/2000x32/density_0.1/centered/overwrite,0,0
+consumer/sprs_csc/2000x32/density_0.1/centered/fused,0,0
+consumer/sprs_csc/2000x32/density_0.1/centered/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/centered/intercept/allocating,40,167760
+consumer/sprs_csc/2000x32/density_0.1/centered/intercept/overwrite,20,5120
+consumer/sprs_csc/2000x32/density_0.1/centered/intercept/fused,20,5120
+consumer/sprs_csc/2000x32/density_0.1/centered/intercept/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/standardized/allocating,30,165120
+consumer/sprs_csc/2000x32/density_0.1/standardized/overwrite,10,2560
+consumer/sprs_csc/2000x32/density_0.1/standardized/fused,20,5120
+consumer/sprs_csc/2000x32/density_0.1/standardized/workspace,0,0
+consumer/sprs_csc/2000x32/density_0.1/standardized/intercept/allocating,50,170320
+consumer/sprs_csc/2000x32/density_0.1/standardized/intercept/overwrite,30,7680
+consumer/sprs_csc/2000x32/density_0.1/standardized/intercept/fused,40,10240
+consumer/sprs_csc/2000x32/density_0.1/standardized/intercept/workspace,20,5120
+consumer/sprs_csc/2000x32/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/faer_dense/10000x128/density_1/raw/allocating,20,810240
+consumer/faer_dense/10000x128/density_1/raw/overwrite,0,0
+consumer/faer_dense/10000x128/density_1/raw/fused,0,0
+consumer/faer_dense/10000x128/density_1/raw/workspace,0,0
+consumer/faer_dense/10000x128/density_1/raw/intercept/allocating,40,831360
+consumer/faer_dense/10000x128/density_1/raw/intercept/overwrite,20,20480
+consumer/faer_dense/10000x128/density_1/raw/intercept/fused,20,20480
+consumer/faer_dense/10000x128/density_1/raw/intercept/workspace,0,0
+consumer/faer_dense/10000x128/density_1/raw/intercept/composed_workspace,0,0
+consumer/faer_dense/10000x128/density_1/centered/allocating,20,810240
+consumer/faer_dense/10000x128/density_1/centered/overwrite,0,0
+consumer/faer_dense/10000x128/density_1/centered/fused,0,0
+consumer/faer_dense/10000x128/density_1/centered/workspace,0,0
+consumer/faer_dense/10000x128/density_1/centered/intercept/allocating,40,831360
+consumer/faer_dense/10000x128/density_1/centered/intercept/overwrite,20,20480
+consumer/faer_dense/10000x128/density_1/centered/intercept/fused,20,20480
+consumer/faer_dense/10000x128/density_1/centered/intercept/workspace,0,0
+consumer/faer_dense/10000x128/density_1/centered/intercept/composed_workspace,0,0
+consumer/faer_dense/10000x128/density_1/standardized/allocating,20,810240
+consumer/faer_dense/10000x128/density_1/standardized/overwrite,0,0
+consumer/faer_dense/10000x128/density_1/standardized/fused,0,0
+consumer/faer_dense/10000x128/density_1/standardized/workspace,0,0
+consumer/faer_dense/10000x128/density_1/standardized/intercept/allocating,40,831360
+consumer/faer_dense/10000x128/density_1/standardized/intercept/overwrite,20,20480
+consumer/faer_dense/10000x128/density_1/standardized/intercept/fused,20,20480
+consumer/faer_dense/10000x128/density_1/standardized/intercept/workspace,0,0
+consumer/faer_dense/10000x128/density_1/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/raw/allocating,20,810240
+consumer/nalgebra_dense/10000x128/density_1/raw/overwrite,0,0
+consumer/nalgebra_dense/10000x128/density_1/raw/fused,0,0
+consumer/nalgebra_dense/10000x128/density_1/raw/workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/raw/intercept/allocating,40,830800
+consumer/nalgebra_dense/10000x128/density_1/raw/intercept/overwrite,20,20480
+consumer/nalgebra_dense/10000x128/density_1/raw/intercept/fused,20,20480
+consumer/nalgebra_dense/10000x128/density_1/raw/intercept/workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/centered/allocating,20,810240
+consumer/nalgebra_dense/10000x128/density_1/centered/overwrite,0,0
+consumer/nalgebra_dense/10000x128/density_1/centered/fused,0,0
+consumer/nalgebra_dense/10000x128/density_1/centered/workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/centered/intercept/allocating,40,830800
+consumer/nalgebra_dense/10000x128/density_1/centered/intercept/overwrite,20,20480
+consumer/nalgebra_dense/10000x128/density_1/centered/intercept/fused,20,20480
+consumer/nalgebra_dense/10000x128/density_1/centered/intercept/workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/standardized/allocating,20,810240
+consumer/nalgebra_dense/10000x128/density_1/standardized/overwrite,0,0
+consumer/nalgebra_dense/10000x128/density_1/standardized/fused,0,0
+consumer/nalgebra_dense/10000x128/density_1/standardized/workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/standardized/intercept/allocating,40,830800
+consumer/nalgebra_dense/10000x128/density_1/standardized/intercept/overwrite,20,20480
+consumer/nalgebra_dense/10000x128/density_1/standardized/intercept/fused,20,20480
+consumer/nalgebra_dense/10000x128/density_1/standardized/intercept/workspace,0,0
+consumer/nalgebra_dense/10000x128/density_1/standardized/intercept/composed_workspace,0,0
+consumer/ndarray/10000x128/density_1/raw/allocating,20,810240
+consumer/ndarray/10000x128/density_1/raw/overwrite,0,0
+consumer/ndarray/10000x128/density_1/raw/fused,0,0
+consumer/ndarray/10000x128/density_1/raw/workspace,0,0
+consumer/ndarray/10000x128/density_1/raw/intercept/allocating,40,830800
+consumer/ndarray/10000x128/density_1/raw/intercept/overwrite,20,20480
+consumer/ndarray/10000x128/density_1/raw/intercept/fused,20,20480
+consumer/ndarray/10000x128/density_1/raw/intercept/workspace,0,0
+consumer/ndarray/10000x128/density_1/raw/intercept/composed_workspace,0,0
+consumer/ndarray/10000x128/density_1/centered/allocating,20,810240
+consumer/ndarray/10000x128/density_1/centered/overwrite,0,0
+consumer/ndarray/10000x128/density_1/centered/fused,0,0
+consumer/ndarray/10000x128/density_1/centered/workspace,0,0
+consumer/ndarray/10000x128/density_1/centered/intercept/allocating,40,830800
+consumer/ndarray/10000x128/density_1/centered/intercept/overwrite,20,20480
+consumer/ndarray/10000x128/density_1/centered/intercept/fused,20,20480
+consumer/ndarray/10000x128/density_1/centered/intercept/workspace,0,0
+consumer/ndarray/10000x128/density_1/centered/intercept/composed_workspace,0,0
+consumer/ndarray/10000x128/density_1/standardized/allocating,20,810240
+consumer/ndarray/10000x128/density_1/standardized/overwrite,0,0
+consumer/ndarray/10000x128/density_1/standardized/fused,0,0
+consumer/ndarray/10000x128/density_1/standardized/workspace,0,0
+consumer/ndarray/10000x128/density_1/standardized/intercept/allocating,40,830800
+consumer/ndarray/10000x128/density_1/standardized/intercept/overwrite,20,20480
+consumer/ndarray/10000x128/density_1/standardized/intercept/fused,20,20480
+consumer/ndarray/10000x128/density_1/standardized/intercept/workspace,0,0
+consumer/ndarray/10000x128/density_1/standardized/intercept/composed_workspace,0,0
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/allocating",96030,422106880
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/overwrite",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/fused",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/intercept/allocating",96040,422117200
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/intercept/overwrite",96020,421306880
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/intercept/fused",96020,421306880
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/intercept/workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/raw/intercept/composed_workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/allocating",96030,422106880
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/overwrite",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/fused",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/intercept/allocating",96040,422117200
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/intercept/overwrite",96020,421306880
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/intercept/fused",96020,421306880
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/intercept/workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/centered/intercept/composed_workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/allocating",96030,422106880
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/overwrite",96010,421296640
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/fused",96020,421306880
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/workspace",96000,421286400
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/intercept/allocating",96050,422127440
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/intercept/overwrite",96030,421317120
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/intercept/fused",96040,421327360
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/intercept/workspace",96020,421306880
+"consumer/zarrs_[256, 16]/10000x128/density_1/standardized/intercept/composed_workspace",96000,421286400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/allocating",12030,420482880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/overwrite",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/fused",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/intercept/allocating",12040,420493200
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/intercept/overwrite",12020,419682880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/intercept/fused",12020,419682880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/intercept/workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/raw/intercept/composed_workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/allocating",12030,420482880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/overwrite",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/fused",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/intercept/allocating",12040,420493200
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/intercept/overwrite",12020,419682880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/intercept/fused",12020,419682880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/intercept/workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/centered/intercept/composed_workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/allocating",12030,420482880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/overwrite",12010,419672640
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/fused",12020,419682880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/workspace",12000,419662400
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/intercept/allocating",12050,420503440
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/intercept/overwrite",12030,419693120
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/intercept/fused",12040,419703360
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/intercept/workspace",12020,419682880
+"consumer/zarrs_[1024, 32]/10000x128/density_1/standardized/intercept/composed_workspace",12000,419662400
+consumer/faer_csc/10000x128/density_0.01/raw/allocating,30,820480
+consumer/faer_csc/10000x128/density_0.01/raw/overwrite,0,0
+consumer/faer_csc/10000x128/density_0.01/raw/fused,0,0
+consumer/faer_csc/10000x128/density_0.01/raw/workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/raw/intercept/allocating,40,831360
+consumer/faer_csc/10000x128/density_0.01/raw/intercept/overwrite,20,20480
+consumer/faer_csc/10000x128/density_0.01/raw/intercept/fused,20,20480
+consumer/faer_csc/10000x128/density_0.01/raw/intercept/workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/centered/allocating,30,820480
+consumer/faer_csc/10000x128/density_0.01/centered/overwrite,0,0
+consumer/faer_csc/10000x128/density_0.01/centered/fused,0,0
+consumer/faer_csc/10000x128/density_0.01/centered/workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/centered/intercept/allocating,40,831360
+consumer/faer_csc/10000x128/density_0.01/centered/intercept/overwrite,20,20480
+consumer/faer_csc/10000x128/density_0.01/centered/intercept/fused,20,20480
+consumer/faer_csc/10000x128/density_0.01/centered/intercept/workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/standardized/allocating,30,820480
+consumer/faer_csc/10000x128/density_0.01/standardized/overwrite,10,10240
+consumer/faer_csc/10000x128/density_0.01/standardized/fused,20,20480
+consumer/faer_csc/10000x128/density_0.01/standardized/workspace,0,0
+consumer/faer_csc/10000x128/density_0.01/standardized/intercept/allocating,50,841600
+consumer/faer_csc/10000x128/density_0.01/standardized/intercept/overwrite,30,30720
+consumer/faer_csc/10000x128/density_0.01/standardized/intercept/fused,40,40960
+consumer/faer_csc/10000x128/density_0.01/standardized/intercept/workspace,20,20480
+consumer/faer_csc/10000x128/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/raw/allocating,30,820480
+consumer/faer_csr/10000x128/density_0.01/raw/overwrite,0,0
+consumer/faer_csr/10000x128/density_0.01/raw/fused,0,0
+consumer/faer_csr/10000x128/density_0.01/raw/workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/raw/intercept/allocating,40,831360
+consumer/faer_csr/10000x128/density_0.01/raw/intercept/overwrite,20,20480
+consumer/faer_csr/10000x128/density_0.01/raw/intercept/fused,20,20480
+consumer/faer_csr/10000x128/density_0.01/raw/intercept/workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/centered/allocating,30,820480
+consumer/faer_csr/10000x128/density_0.01/centered/overwrite,0,0
+consumer/faer_csr/10000x128/density_0.01/centered/fused,0,0
+consumer/faer_csr/10000x128/density_0.01/centered/workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/centered/intercept/allocating,40,831360
+consumer/faer_csr/10000x128/density_0.01/centered/intercept/overwrite,20,20480
+consumer/faer_csr/10000x128/density_0.01/centered/intercept/fused,20,20480
+consumer/faer_csr/10000x128/density_0.01/centered/intercept/workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/standardized/allocating,30,820480
+consumer/faer_csr/10000x128/density_0.01/standardized/overwrite,10,10240
+consumer/faer_csr/10000x128/density_0.01/standardized/fused,20,20480
+consumer/faer_csr/10000x128/density_0.01/standardized/workspace,0,0
+consumer/faer_csr/10000x128/density_0.01/standardized/intercept/allocating,50,841600
+consumer/faer_csr/10000x128/density_0.01/standardized/intercept/overwrite,30,30720
+consumer/faer_csr/10000x128/density_0.01/standardized/intercept/fused,40,40960
+consumer/faer_csr/10000x128/density_0.01/standardized/intercept/workspace,20,20480
+consumer/faer_csr/10000x128/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/raw/allocating,30,820480
+consumer/nalgebra_csc/10000x128/density_0.01/raw/overwrite,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/raw/fused,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/raw/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/raw/intercept/allocating,40,830800
+consumer/nalgebra_csc/10000x128/density_0.01/raw/intercept/overwrite,20,20480
+consumer/nalgebra_csc/10000x128/density_0.01/raw/intercept/fused,20,20480
+consumer/nalgebra_csc/10000x128/density_0.01/raw/intercept/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/centered/allocating,30,820480
+consumer/nalgebra_csc/10000x128/density_0.01/centered/overwrite,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/centered/fused,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/centered/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/centered/intercept/allocating,40,830800
+consumer/nalgebra_csc/10000x128/density_0.01/centered/intercept/overwrite,20,20480
+consumer/nalgebra_csc/10000x128/density_0.01/centered/intercept/fused,20,20480
+consumer/nalgebra_csc/10000x128/density_0.01/centered/intercept/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/allocating,30,820480
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/overwrite,10,10240
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/fused,20,20480
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/intercept/allocating,50,841040
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/intercept/overwrite,30,30720
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/intercept/fused,40,40960
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/intercept/workspace,20,20480
+consumer/nalgebra_csc/10000x128/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/raw/allocating,30,820480
+consumer/nalgebra_csr/10000x128/density_0.01/raw/overwrite,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/raw/fused,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/raw/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/raw/intercept/allocating,40,830800
+consumer/nalgebra_csr/10000x128/density_0.01/raw/intercept/overwrite,20,20480
+consumer/nalgebra_csr/10000x128/density_0.01/raw/intercept/fused,20,20480
+consumer/nalgebra_csr/10000x128/density_0.01/raw/intercept/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/centered/allocating,30,820480
+consumer/nalgebra_csr/10000x128/density_0.01/centered/overwrite,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/centered/fused,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/centered/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/centered/intercept/allocating,40,830800
+consumer/nalgebra_csr/10000x128/density_0.01/centered/intercept/overwrite,20,20480
+consumer/nalgebra_csr/10000x128/density_0.01/centered/intercept/fused,20,20480
+consumer/nalgebra_csr/10000x128/density_0.01/centered/intercept/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/allocating,30,820480
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/overwrite,10,10240
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/fused,20,20480
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/intercept/allocating,50,841040
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/intercept/overwrite,30,30720
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/intercept/fused,40,40960
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/intercept/workspace,20,20480
+consumer/nalgebra_csr/10000x128/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/raw/allocating,30,820480
+consumer/sprs_csc/10000x128/density_0.01/raw/overwrite,0,0
+consumer/sprs_csc/10000x128/density_0.01/raw/fused,0,0
+consumer/sprs_csc/10000x128/density_0.01/raw/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/raw/intercept/allocating,40,830800
+consumer/sprs_csc/10000x128/density_0.01/raw/intercept/overwrite,20,20480
+consumer/sprs_csc/10000x128/density_0.01/raw/intercept/fused,20,20480
+consumer/sprs_csc/10000x128/density_0.01/raw/intercept/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/raw/intercept/composed_workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/centered/allocating,30,820480
+consumer/sprs_csc/10000x128/density_0.01/centered/overwrite,0,0
+consumer/sprs_csc/10000x128/density_0.01/centered/fused,0,0
+consumer/sprs_csc/10000x128/density_0.01/centered/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/centered/intercept/allocating,40,830800
+consumer/sprs_csc/10000x128/density_0.01/centered/intercept/overwrite,20,20480
+consumer/sprs_csc/10000x128/density_0.01/centered/intercept/fused,20,20480
+consumer/sprs_csc/10000x128/density_0.01/centered/intercept/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/centered/intercept/composed_workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/standardized/allocating,30,820480
+consumer/sprs_csc/10000x128/density_0.01/standardized/overwrite,10,10240
+consumer/sprs_csc/10000x128/density_0.01/standardized/fused,20,20480
+consumer/sprs_csc/10000x128/density_0.01/standardized/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.01/standardized/intercept/allocating,50,841040
+consumer/sprs_csc/10000x128/density_0.01/standardized/intercept/overwrite,30,30720
+consumer/sprs_csc/10000x128/density_0.01/standardized/intercept/fused,40,40960
+consumer/sprs_csc/10000x128/density_0.01/standardized/intercept/workspace,20,20480
+consumer/sprs_csc/10000x128/density_0.01/standardized/intercept/composed_workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/raw/allocating,30,820480
+consumer/faer_csc/10000x128/density_0.1/raw/overwrite,0,0
+consumer/faer_csc/10000x128/density_0.1/raw/fused,0,0
+consumer/faer_csc/10000x128/density_0.1/raw/workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/raw/intercept/allocating,40,831360
+consumer/faer_csc/10000x128/density_0.1/raw/intercept/overwrite,20,20480
+consumer/faer_csc/10000x128/density_0.1/raw/intercept/fused,20,20480
+consumer/faer_csc/10000x128/density_0.1/raw/intercept/workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/centered/allocating,30,820480
+consumer/faer_csc/10000x128/density_0.1/centered/overwrite,0,0
+consumer/faer_csc/10000x128/density_0.1/centered/fused,0,0
+consumer/faer_csc/10000x128/density_0.1/centered/workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/centered/intercept/allocating,40,831360
+consumer/faer_csc/10000x128/density_0.1/centered/intercept/overwrite,20,20480
+consumer/faer_csc/10000x128/density_0.1/centered/intercept/fused,20,20480
+consumer/faer_csc/10000x128/density_0.1/centered/intercept/workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/standardized/allocating,30,820480
+consumer/faer_csc/10000x128/density_0.1/standardized/overwrite,10,10240
+consumer/faer_csc/10000x128/density_0.1/standardized/fused,20,20480
+consumer/faer_csc/10000x128/density_0.1/standardized/workspace,0,0
+consumer/faer_csc/10000x128/density_0.1/standardized/intercept/allocating,50,841600
+consumer/faer_csc/10000x128/density_0.1/standardized/intercept/overwrite,30,30720
+consumer/faer_csc/10000x128/density_0.1/standardized/intercept/fused,40,40960
+consumer/faer_csc/10000x128/density_0.1/standardized/intercept/workspace,20,20480
+consumer/faer_csc/10000x128/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/raw/allocating,30,820480
+consumer/faer_csr/10000x128/density_0.1/raw/overwrite,0,0
+consumer/faer_csr/10000x128/density_0.1/raw/fused,0,0
+consumer/faer_csr/10000x128/density_0.1/raw/workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/raw/intercept/allocating,40,831360
+consumer/faer_csr/10000x128/density_0.1/raw/intercept/overwrite,20,20480
+consumer/faer_csr/10000x128/density_0.1/raw/intercept/fused,20,20480
+consumer/faer_csr/10000x128/density_0.1/raw/intercept/workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/centered/allocating,30,820480
+consumer/faer_csr/10000x128/density_0.1/centered/overwrite,0,0
+consumer/faer_csr/10000x128/density_0.1/centered/fused,0,0
+consumer/faer_csr/10000x128/density_0.1/centered/workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/centered/intercept/allocating,40,831360
+consumer/faer_csr/10000x128/density_0.1/centered/intercept/overwrite,20,20480
+consumer/faer_csr/10000x128/density_0.1/centered/intercept/fused,20,20480
+consumer/faer_csr/10000x128/density_0.1/centered/intercept/workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/standardized/allocating,30,820480
+consumer/faer_csr/10000x128/density_0.1/standardized/overwrite,10,10240
+consumer/faer_csr/10000x128/density_0.1/standardized/fused,20,20480
+consumer/faer_csr/10000x128/density_0.1/standardized/workspace,0,0
+consumer/faer_csr/10000x128/density_0.1/standardized/intercept/allocating,50,841600
+consumer/faer_csr/10000x128/density_0.1/standardized/intercept/overwrite,30,30720
+consumer/faer_csr/10000x128/density_0.1/standardized/intercept/fused,40,40960
+consumer/faer_csr/10000x128/density_0.1/standardized/intercept/workspace,20,20480
+consumer/faer_csr/10000x128/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/raw/allocating,30,820480
+consumer/nalgebra_csc/10000x128/density_0.1/raw/overwrite,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/raw/fused,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/raw/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/raw/intercept/allocating,40,830800
+consumer/nalgebra_csc/10000x128/density_0.1/raw/intercept/overwrite,20,20480
+consumer/nalgebra_csc/10000x128/density_0.1/raw/intercept/fused,20,20480
+consumer/nalgebra_csc/10000x128/density_0.1/raw/intercept/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/centered/allocating,30,820480
+consumer/nalgebra_csc/10000x128/density_0.1/centered/overwrite,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/centered/fused,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/centered/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/centered/intercept/allocating,40,830800
+consumer/nalgebra_csc/10000x128/density_0.1/centered/intercept/overwrite,20,20480
+consumer/nalgebra_csc/10000x128/density_0.1/centered/intercept/fused,20,20480
+consumer/nalgebra_csc/10000x128/density_0.1/centered/intercept/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/allocating,30,820480
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/overwrite,10,10240
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/fused,20,20480
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/workspace,0,0
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/intercept/allocating,50,841040
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/intercept/overwrite,30,30720
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/intercept/fused,40,40960
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/intercept/workspace,20,20480
+consumer/nalgebra_csc/10000x128/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/raw/allocating,30,820480
+consumer/nalgebra_csr/10000x128/density_0.1/raw/overwrite,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/raw/fused,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/raw/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/raw/intercept/allocating,40,830800
+consumer/nalgebra_csr/10000x128/density_0.1/raw/intercept/overwrite,20,20480
+consumer/nalgebra_csr/10000x128/density_0.1/raw/intercept/fused,20,20480
+consumer/nalgebra_csr/10000x128/density_0.1/raw/intercept/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/centered/allocating,30,820480
+consumer/nalgebra_csr/10000x128/density_0.1/centered/overwrite,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/centered/fused,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/centered/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/centered/intercept/allocating,40,830800
+consumer/nalgebra_csr/10000x128/density_0.1/centered/intercept/overwrite,20,20480
+consumer/nalgebra_csr/10000x128/density_0.1/centered/intercept/fused,20,20480
+consumer/nalgebra_csr/10000x128/density_0.1/centered/intercept/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/allocating,30,820480
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/overwrite,10,10240
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/fused,20,20480
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/workspace,0,0
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/intercept/allocating,50,841040
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/intercept/overwrite,30,30720
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/intercept/fused,40,40960
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/intercept/workspace,20,20480
+consumer/nalgebra_csr/10000x128/density_0.1/standardized/intercept/composed_workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/raw/allocating,30,820480
+consumer/sprs_csc/10000x128/density_0.1/raw/overwrite,0,0
+consumer/sprs_csc/10000x128/density_0.1/raw/fused,0,0
+consumer/sprs_csc/10000x128/density_0.1/raw/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/raw/intercept/allocating,40,830800
+consumer/sprs_csc/10000x128/density_0.1/raw/intercept/overwrite,20,20480
+consumer/sprs_csc/10000x128/density_0.1/raw/intercept/fused,20,20480
+consumer/sprs_csc/10000x128/density_0.1/raw/intercept/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/raw/intercept/composed_workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/centered/allocating,30,820480
+consumer/sprs_csc/10000x128/density_0.1/centered/overwrite,0,0
+consumer/sprs_csc/10000x128/density_0.1/centered/fused,0,0
+consumer/sprs_csc/10000x128/density_0.1/centered/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/centered/intercept/allocating,40,830800
+consumer/sprs_csc/10000x128/density_0.1/centered/intercept/overwrite,20,20480
+consumer/sprs_csc/10000x128/density_0.1/centered/intercept/fused,20,20480
+consumer/sprs_csc/10000x128/density_0.1/centered/intercept/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/centered/intercept/composed_workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/standardized/allocating,30,820480
+consumer/sprs_csc/10000x128/density_0.1/standardized/overwrite,10,10240
+consumer/sprs_csc/10000x128/density_0.1/standardized/fused,20,20480
+consumer/sprs_csc/10000x128/density_0.1/standardized/workspace,0,0
+consumer/sprs_csc/10000x128/density_0.1/standardized/intercept/allocating,50,841040
+consumer/sprs_csc/10000x128/density_0.1/standardized/intercept/overwrite,30,30720
+consumer/sprs_csc/10000x128/density_0.1/standardized/intercept/fused,40,40960
+consumer/sprs_csc/10000x128/density_0.1/standardized/intercept/workspace,20,20480
+consumer/sprs_csc/10000x128/density_0.1/standardized/intercept/composed_workspace,0,0

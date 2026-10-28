@@ -9,7 +9,7 @@ use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use lazymatrix::{
     Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVec,
     MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
-    Normalization, ScaledSubSlice, Scaling, SubScalarAssign, SumEntries, VectorOwned,
+    MatrixShape, Normalization, ScaledSubSlice, Scaling, SubScalarAssign, SumEntries, VectorOwned,
     VectorViewMut, WithIntercept, ZarrMatrix,
 };
 
@@ -61,18 +61,145 @@ static ALLOCATOR: CountedAllocator = CountedAllocator;
 
 const STEPS: usize = 10;
 
-fn count_allocations(name: &str, mut run: impl FnMut()) {
+type AllocationCount = (usize, usize);
+
+struct InterceptWorkspace<V> {
+    wrapper: V,
+    normalization: V,
+}
+
+impl<V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>> InterceptWorkspace<V> {
+    fn new(columns: usize) -> Self {
+        Self {
+            wrapper: V::owned_from_fn(columns, |_| 0.0),
+            normalization: V::owned_from_fn(columns, |_| 0.0),
+        }
+    }
+
+    fn validate<M: lazymatrix::MatrixShape>(
+        &self,
+        matrix: &M,
+        input: usize,
+        output: usize,
+        transpose: bool,
+    ) {
+        let (rows, cols) = (matrix.nrows(), matrix.ncols());
+        assert_eq!(input, if transpose { rows } else { cols + 1 });
+        assert_eq!(output, if transpose { cols + 1 } else { rows });
+        assert_eq!(self.wrapper.len(), cols);
+        assert_eq!(self.normalization.len(), cols);
+    }
+
+    fn forward<M>(
+        &mut self,
+        matrix: &LazyMatrix<M, f64>,
+        alpha: f64,
+        x: &V,
+        beta: f64,
+        out: &mut V,
+    ) -> Result<(), M::Error>
+    where
+        M: MatVecScaledInto<V, V, f64>,
+    {
+        self.validate(matrix, x.len(), out.len(), false);
+        if alpha == 0.0 {
+            scale_output(beta, out);
+            return Ok(());
+        }
+        if matrix.ncols() == 0 {
+            scale_output(beta, out);
+        } else {
+            for j in 0..self.wrapper.len() {
+                self.wrapper.set(j, x.get(j + 1));
+            }
+            matrix.matvec_scaled_with_workspace(
+                alpha,
+                &self.wrapper,
+                beta,
+                out,
+                &mut self.normalization,
+            )?;
+        }
+        let intercept = alpha * x.get(0);
+        for i in 0..out.len() {
+            out.set(i, out.get(i) + intercept);
+        }
+        Ok(())
+    }
+
+    fn transpose<M>(
+        &mut self,
+        matrix: &LazyMatrix<M, f64>,
+        alpha: f64,
+        x: &V,
+        beta: f64,
+        out: &mut V,
+    ) -> Result<(), M::Error>
+    where
+        M: MatTransposeVecScaledInto<V, V, f64>,
+    {
+        self.validate(matrix, x.len(), out.len(), true);
+        if alpha == 0.0 {
+            scale_output(beta, out);
+            return Ok(());
+        }
+        if matrix.ncols() != 0 {
+            for j in 0..self.wrapper.len() {
+                self.wrapper
+                    .set(j, if beta == 0.0 { 0.0 } else { out.get(j + 1) });
+            }
+            matrix.mat_transpose_vec_scaled_with_workspace(
+                alpha,
+                x,
+                beta,
+                &mut self.wrapper,
+                &mut self.normalization,
+            )?;
+            for j in 0..self.wrapper.len() {
+                out.set(j + 1, self.wrapper.get(j));
+            }
+        }
+        let intercept = alpha * x.sum();
+        out.set(
+            0,
+            if beta == 0.0 {
+                intercept
+            } else {
+                intercept + beta * out.get(0)
+            },
+        );
+        Ok(())
+    }
+}
+
+fn scale_output<V: VectorViewMut<f64>>(beta: f64, out: &mut V) {
+    if beta == 0.0 {
+        for i in 0..out.len() {
+            out.set(i, 0.0);
+        }
+    } else if beta != 1.0 {
+        for i in 0..out.len() {
+            out.set(i, beta * out.get(i));
+        }
+    }
+}
+
+fn count_allocations(name: &str, mut run: impl FnMut()) -> AllocationCount {
     run();
     ALLOCATIONS.store(0, Ordering::Relaxed);
     BYTES.store(0, Ordering::Relaxed);
     COUNTING.store(true, Ordering::Relaxed);
     run();
     COUNTING.store(false, Ordering::Relaxed);
-    eprintln!(
-        "allocations {name}: {} calls, {} bytes per {STEPS} operations",
+    let count = (
         ALLOCATIONS.load(Ordering::Relaxed),
         BYTES.load(Ordering::Relaxed),
     );
+    eprintln!(
+        "allocations {name}: {} calls, {} bytes per {STEPS} operations",
+        count.0, count.1,
+    );
+    count
 }
 
 fn measure<V: VectorViewMut<f64>>(
@@ -81,7 +208,7 @@ fn measure<V: VectorViewMut<f64>>(
     coefficients: &mut V,
     mut batch: impl FnMut(&mut V),
     expected: Option<&[f64]>,
-) -> Vec<f64> {
+) -> (Vec<f64>, AllocationCount) {
     let mut run = |coefficients: &mut V| {
         for j in 0..coefficients.len() {
             coefficients.set(j, 0.0);
@@ -89,7 +216,7 @@ fn measure<V: VectorViewMut<f64>>(
         batch(black_box(coefficients));
         black_box(&*coefficients);
     };
-    count_allocations(name, || run(coefficients));
+    let allocations = count_allocations(name, || run(coefficients));
     let actual: Vec<_> = (0..coefficients.len())
         .map(|j| coefficients.get(j))
         .collect();
@@ -100,7 +227,7 @@ fn measure<V: VectorViewMut<f64>>(
     }
     // Criterion filters still apply; allocation sampling is intentionally untimed.
     c.bench_function(name, |b| b.iter(|| run(coefficients)));
-    actual
+    (actual, allocations)
 }
 
 fn measure_product<V>(
@@ -216,7 +343,7 @@ fn bench_overwrite_operator<O, V>(
             },
             expected_coefficients.as_deref(),
         );
-        expected_coefficients = Some(actual);
+        expected_coefficients = Some(actual.0);
     }
 }
 
@@ -228,7 +355,8 @@ fn bench_operator<O, V>(
     step: f64,
     mut forward_workspace: impl FnMut(f64, &V, f64, &mut V),
     mut transpose_workspace: impl FnMut(f64, &V, f64, &mut V),
-) where
+) -> (Vec<f64>, AllocationCount)
+where
     O: MatVec<V>
         + MatTransposeVec<V>
         + MatVecInto<V>
@@ -284,7 +412,7 @@ fn bench_operator<O, V>(
                 }
             }
         },
-        Some(&expected),
+        Some(&expected.0),
     );
     measure(
         c,
@@ -301,7 +429,7 @@ fn bench_operator<O, V>(
                     .unwrap();
             }
         },
-        Some(&expected),
+        Some(&expected.0),
     );
     measure(
         c,
@@ -316,8 +444,8 @@ fn bench_operator<O, V>(
                 transpose_workspace(-step, &residual, 1.0, coefficients);
             }
         },
-        Some(&expected),
-    );
+        Some(&expected.0),
+    )
 }
 
 fn bench_matrix<M, V>(c: &mut Criterion, label: &str, matrix: &M, vector: impl Fn(&[f64]) -> V)
@@ -369,7 +497,7 @@ where
         let name = format!("{label}/{normalization}");
         let mut forward_scratch = V::owned_from_fn(matrix.ncols(), |_| 0.0);
         let mut transpose_scratch = V::owned_from_fn(matrix.ncols(), |_| 0.0);
-        bench_operator(
+        let (_, allocations) = bench_operator(
             c,
             &name,
             &lazy,
@@ -391,7 +519,7 @@ where
             },
         );
         let design = WithIntercept::new(&lazy);
-        bench_operator(
+        let (expected, _) = bench_operator(
             c,
             &format!("{name}/intercept"),
             &design,
@@ -414,6 +542,34 @@ where
                     .unwrap()
             },
         );
+        let mut prototype = InterceptWorkspace::<V>::new(matrix.ncols());
+        let mut coefficients = V::owned_from_fn(design.ncols(), |_| 0.0);
+        let mut residual = V::owned_from_fn(design.nrows(), |_| 0.0);
+        let (_, prototype_allocations) = measure(
+            c,
+            &format!("consumer/{name}/intercept/composed_workspace"),
+            &mut coefficients,
+            |coefficients| {
+                for _ in 0..STEPS {
+                    for i in 0..residual.len() {
+                        residual.set(i, -response.get(i));
+                    }
+                    prototype
+                        .forward(&lazy, 1.0, coefficients, 1.0, &mut residual)
+                        .unwrap();
+                    prototype
+                        .transpose(&lazy, -step, &residual, 1.0, coefficients)
+                        .unwrap();
+                }
+            },
+            Some(&expected),
+        );
+        if !cfg!(feature = "parallel") {
+            assert_eq!(
+                prototype_allocations, allocations,
+                "{name}: composed intercept prototype added allocations"
+            );
+        }
     }
 }
 

@@ -1,0 +1,7 @@
+case,lower_us,estimate_us,upper_us
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/workspace,54.464,54.498,54.523
+consumer/faer_csc/2000x32/density_0.01/standardized/intercept/composed_workspace,51.949,51.971,51.993
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/workspace,66.532,66.595,66.681
+consumer/nalgebra_csc/2000x32/density_0.01/standardized/intercept/composed_workspace,66.477,66.531,66.619
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/workspace,47.737,47.821,47.927
+consumer/sprs_csc/2000x32/density_0.01/standardized/intercept/composed_workspace,49.527,49.579,49.638

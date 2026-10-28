@@ -150,6 +150,9 @@ companion packages; the Rust core remains independent of Python and solvers.
     scaled forward and transpose products, zero `alpha` and `beta`, and backend
     failures after partial output writes. Normalization and intercept
     corrections must run only after the inner product succeeds.
+  - A benchmark-only composed-workspace prototype removes the nested scratch
+    allocations, but no reliable speedup has been established. Defer a public
+    API until a concrete consumer needs it. See [the comparison](benches/fused_consumer.md).
 
 - [ ] Evaluate native-vector borrowing in Shrinkage's proximal consumer.
   - `VectorOwned`, `VectorView`, and `VectorViewMut` already cover buffer
