@@ -1,8 +1,11 @@
 {
-  "recorded_at": "2026-10-26T15:02:15.970430+00:00",
+  "recorded_at": "2026-10-28T12:19:34.396349+00:00",
   "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
   "cpu": "AMD Ryzen 9 7900 12-Core Processor",
-  "command": "cargo bench --locked --bench submatrix --features ndarray,sprs -- --sample-size 10 --warm-up-time 0.1 --measurement-time 0.2",
+  "base_revision": "de360194c980d3fc39570bad18ce142c989d076c",
+  "source_state": "Working tree implementing bounded Zarr submatrices and weighted operations.",
+  "command": "compute bench --reason 'verified submatrix products and weighted operations versus native views' -- cargo bench --locked --bench submatrix --features ndarray,sprs,zarrs -- --sample-size 10 --warm-up-time 0.1 --measurement-time 0.2",
+  "timing_statistic": "Criterion bootstrap mean with 95% confidence intervals, in nanoseconds.",
   "source_shape": [
     4096,
     256
@@ -14,5 +17,15 @@
     "center": 1.0,
     "scale": 2.0
   },
-  "notes": "Short smoke measurements while other validation tasks were running; timings are illustrative, not a stable performance comparison. Allocation measurements are untimed and exclude source matrices and caller-owned inputs and outputs."
+  "weights_formula": "(local_row % 7) * 0.25 - 0.5",
+  "zarr": {
+    "release": "0.23.14",
+    "store": "MemoryStore",
+    "chunk_shape": [
+      128,
+      32
+    ],
+    "compression": "none"
+  },
+  "notes": "Short smoke measurements in one exclusive compute window with all baselines and candidates. Timings are illustrative. Allocation measurements are untimed peak live heap workspace and exclude source matrices and caller-owned inputs and outputs. Fixed stack panels are excluded; Submatrix Gram uses three 32-by-32 scalar arrays. Zarr results include chunk retrieval and decoding from an in-memory store, not cold disk I/O."
 }

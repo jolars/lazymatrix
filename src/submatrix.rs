@@ -7,6 +7,7 @@ use crate::{
     MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixErrorType, MatrixOwned,
     MatrixShape, MatrixWrite, NormalizationParams, RawColumn, RawColumns, Scalar, SparseColumnRef,
     SparseColumns, SparseRows, SubmatrixKernel, VectorOwned, VectorView, VectorViewMut,
+    WeightedColumnSumsInto, WeightedGramInto,
 };
 
 /// A borrowed restriction of an already normalized matrix to contiguous ranges.
@@ -19,6 +20,21 @@ use crate::{
 /// entries in selected outer rows or columns, filtering the other axis. They
 /// use O(selected rows + selected columns) workspace, never a dense design copy.
 /// Column filtering scans the parent column; row filtering scans the parent row.
+///
+/// Zarr products, eager conversion, and weighted column sums read each
+/// intersecting chunk once, serially, excluding values outside the selection.
+/// Products use O(selected output length) scratch. Decoded storage chunks and
+/// codec workspaces, including outer shards, are additional to that scratch.
+/// Empty rectangles and products with zero `alpha` perform no storage reads.
+/// Zarr storage does not provide borrowed columns or rows.
+///
+/// [`WeightedColumnSumsInto`] and [`WeightedGramInto`] accept weights indexed
+/// by local rows and normalize entries before accumulating. Gram products use
+/// two fixed 32-by-32 panels and a fixed accumulator, in addition to backend
+/// workspace and the O(selected columns²) output. Dense arithmetic costs
+/// O(selected rows * selected columns²). Sparse kernels revisit stored entries,
+/// and Zarr kernels may decode chunks repeatedly for different panels. Weighted
+/// sums on in-memory sources use the same bounded panel traversal.
 ///
 /// This is a logical operator, not a contiguous sparse storage capability.
 /// Filtered sparse views expose iterators instead of rebased index slices.
@@ -202,6 +218,40 @@ impl<M: RawColumns<F>, F: Scalar> Columns<F> for Submatrix<'_, M, F> {
     }
 }
 
+impl<M: SubmatrixKernel<F>, F: Scalar> WeightedColumnSumsInto<F> for Submatrix<'_, M, F> {
+    fn weighted_column_sums_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: VectorViewMut<F> + ?Sized,
+    {
+        self.parent.data().submatrix_weighted_column_sums_into(
+            self.rows.clone(),
+            self.columns.clone(),
+            self.centers(),
+            self.scales(),
+            weights,
+            out,
+        )
+    }
+}
+
+impl<M: SubmatrixKernel<F>, F: Scalar> WeightedGramInto<F> for Submatrix<'_, M, F> {
+    fn weighted_gram_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: MatrixWrite<F> + ?Sized,
+    {
+        self.parent.data().submatrix_weighted_gram_into(
+            self.rows.clone(),
+            self.columns.clone(),
+            self.centers(),
+            self.scales(),
+            weights,
+            out,
+        )
+    }
+}
+
 impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
     fn fitted_parameters(&self) -> NormalizationParams<F> {
         NormalizationParams::from_parts(
@@ -229,8 +279,9 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
     }
     /// Overwrite dense output and return an eager operator borrowing it.
     ///
-    /// Fitted metadata is cloned, and kernels may allocate one working row or
-    /// column. Output may be partial on a source error.
+    /// Fitted metadata is cloned. In-memory kernels may allocate one working
+    /// row or column; Zarr kernels decode one intersecting chunk at a time.
+    /// Output may be partial on a source error.
     ///
     /// # Panics
     /// Panics before writing if the output shape differs from this rectangle.

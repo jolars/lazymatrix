@@ -50,6 +50,53 @@ pub trait SubmatrixKernel<F: Scalar>: MatrixShape + MatrixErrorType {
         scales: Option<&[F]>,
         out: &mut O,
     ) -> Result<(), Self::Error>;
+
+    /// Accumulate weighted logical-column sums over a rectangle.
+    ///
+    /// Weights use local row indices, and output uses local column indices.
+    /// The validation, nonfinite, and error contracts are those of
+    /// [`super::WeightedColumnSumsKernel`]. The default reads normalized panels
+    /// of at most 32 rows and 32 columns through `materialize_submatrix_into`.
+    /// It may revisit stored entries or decode a chunk more than once.
+    fn submatrix_weighted_column_sums_into<W, O>(
+        &self,
+        rows: Range<usize>,
+        columns: Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        weights: &W,
+        out: &mut O,
+    ) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: VectorViewMut<F> + ?Sized,
+    {
+        crate::submatrix_weighted::sums(self, rows, columns, centers, scales, weights, out)
+    }
+
+    /// Accumulate a symmetric weighted Gram product over a rectangle.
+    ///
+    /// Weights use local row indices. Output has shape `(columns.len(),
+    /// columns.len())`. The validation, nonfinite, and error contracts are those
+    /// of [`super::WeightedGramKernel`]. The default centers entries before
+    /// multiplication using two normalized panels and one accumulator, each
+    /// at most 32 by 32. It revisits source panels for each column-panel pair.
+    /// Backend chunk and codec workspace is additional to these fixed buffers.
+    fn submatrix_weighted_gram_into<W, O>(
+        &self,
+        rows: Range<usize>,
+        columns: Range<usize>,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        weights: &W,
+        out: &mut O,
+    ) -> Result<(), Self::Error>
+    where
+        W: VectorView<F> + ?Sized,
+        O: MatrixWrite<F> + ?Sized,
+    {
+        crate::submatrix_weighted::gram(self, rows, columns, centers, scales, weights, out)
+    }
 }
 
 macro_rules! forward {
@@ -91,6 +138,38 @@ macro_rules! forward {
                 out: &mut O,
             ) -> Result<(), Self::Error> {
                 (**self).materialize_submatrix_into(rows, columns, centers, scales, out)
+            }
+            fn submatrix_weighted_column_sums_into<W, O>(
+                &self,
+                rows: Range<usize>,
+                columns: Range<usize>,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                weights: &W,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                W: VectorView<F> + ?Sized,
+                O: VectorViewMut<F> + ?Sized,
+            {
+                (**self).submatrix_weighted_column_sums_into(
+                    rows, columns, centers, scales, weights, out,
+                )
+            }
+            fn submatrix_weighted_gram_into<W, O>(
+                &self,
+                rows: Range<usize>,
+                columns: Range<usize>,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                weights: &W,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                W: VectorView<F> + ?Sized,
+                O: MatrixWrite<F> + ?Sized,
+            {
+                (**self).submatrix_weighted_gram_into(rows, columns, centers, scales, weights, out)
             }
         }
     };

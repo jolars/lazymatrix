@@ -26,6 +26,7 @@ fn build(tm: &common::TestMatrix, chunk: [u64; 2]) -> ZarrMatrix<Array<MemorySto
 #[test]
 fn zarrs_backend_suite() {
     for chunks in [[3, 2], [1, 7], [16, 1], [32, 32]] {
+        common::run_submatrix_suite(|tm| build(tm, chunks), |v| v.to_vec());
         common::batched::run_batched_suite(|tm| build(tm, chunks));
         common::run_materialization_suite(|tm| build(tm, chunks));
         common::run_fused_suite(|tm| build(tm, chunks), |v| v.to_vec());
@@ -250,6 +251,272 @@ fn rectangular_reads_preserve_fill_values_and_f32_edge_values() {
         matrix.read_block(1..3, 1..3, &mut buffer).unwrap().values(),
         &[7.0, 7.0, 7.0, 3.0]
     );
+}
+
+#[test]
+fn submatrices_read_only_intersecting_chunks_and_inherit_parameters() {
+    use lazymatrix::{MatrixOwned, WeightedColumnSumsInto, WeightedGramInto};
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let lazy = LazyMatrix::from_parts(
+            &matrix,
+            Some(vec![f64::NAN, f64::NAN, 3.0]),
+            Some(vec![f64::NAN, f64::NAN, -2.0]),
+        );
+        let view = lazy.submatrix(1..5, 1..3).submatrix(2..4, 1..2);
+        assert!(store.keys.lock().unwrap().is_empty());
+        let expected: Vec<_> = [1, 2]
+            .map(|i| matrix.as_inner().chunk_key(&[i, 1]).to_string())
+            .into();
+        macro_rules! check_reads {
+            ($operation:expr) => {{
+                store.reset();
+                let value = $operation;
+                assert_eq!(*store.keys.lock().unwrap(), expected);
+                value
+            }};
+        }
+        assert_eq!(
+            check_reads!(view.matvec(&vec![2.0]).unwrap()),
+            [-9.0, -12.0]
+        );
+        assert_eq!(
+            check_reads!(view.mat_transpose_vec(&vec![-1.0, 2.0]).unwrap()),
+            [-7.5]
+        );
+        let eager = check_reads!(view.to_eager::<common::MaterializeOutput>().unwrap());
+        assert_eq!(eager.data().values, [-4.5, -6.0]);
+        assert_eq!(eager.centers().unwrap(), &[3.0]);
+        assert_eq!(eager.scales().unwrap(), &[-2.0]);
+        let mut sums = [f64::NAN];
+        check_reads!(
+            view.weighted_column_sums_into(&[-1.0, 2.0], &mut sums)
+                .unwrap()
+        );
+        assert_eq!(sums, [-7.5]);
+        let mut gram = common::MaterializeOutput::zeros(1, 1);
+        check_reads!(view.weighted_gram_into(&[-1.0, 2.0], &mut gram).unwrap());
+        assert_eq!(gram.values, [51.75]);
+    }
+}
+
+#[test]
+fn submatrix_failures_stop_reads_and_outputs_can_be_reused() {
+    use lazymatrix::{MatrixOwned, WeightedColumnSumsInto, WeightedGramInto};
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let lazy = LazyMatrix::from_parts(&matrix, Some(vec![3.0; 3]), Some(vec![-2.0; 3]));
+        let view = lazy.submatrix(3..5, 2..3);
+        macro_rules! fail_read {
+            ($operation:expr) => {{
+                store.reset();
+                store.fail_after.store(1, Ordering::Relaxed);
+                let error: ZarrMatrixError = $operation.err().expect("read must fail");
+                assert!(error.to_string().contains("injected read failure"));
+                assert!(std::error::Error::source(&error).is_some());
+                assert_eq!(store.keys.lock().unwrap().len(), 2);
+            }};
+        }
+        let mut y = vec![99.0; 2];
+        fail_read!(view.matvec_into(&vec![2.0], &mut y));
+        assert_eq!(y, [99.0; 2]);
+        let mut t = vec![99.0];
+        fail_read!(view.mat_transpose_vec_into(&vec![-1.0, 2.0], &mut t));
+        assert_eq!(t, [99.0]);
+        let mut dense = common::MaterializeOutput::zeros(2, 1);
+        dense.values.fill(99.0);
+        fail_read!(view.to_eager_into(&mut dense));
+        assert_eq!(dense.values, [-4.5, 99.0]);
+        let mut sums = [99.0];
+        fail_read!(view.weighted_column_sums_into(&[-1.0, 2.0], &mut sums));
+        assert_eq!(sums, [4.5]);
+        let mut gram = common::MaterializeOutput::zeros(1, 1);
+        gram.values.fill(99.0);
+        fail_read!(view.weighted_gram_into(&[-1.0, 2.0], &mut gram));
+        assert_eq!(gram.values, [99.0]);
+        store.reset();
+        view.matvec_into(&vec![2.0], &mut y).unwrap();
+        view.mat_transpose_vec_into(&vec![-1.0, 2.0], &mut t)
+            .unwrap();
+        view.to_eager_into(&mut dense).unwrap();
+        view.weighted_column_sums_into(&[-1.0, 2.0], &mut sums)
+            .unwrap();
+        view.weighted_gram_into(&[-1.0, 2.0], &mut gram).unwrap();
+        assert_eq!(y, [-9.0, -12.0]);
+        assert_eq!(t, [-7.5]);
+        assert_eq!(dense.values, [-4.5, -6.0]);
+        assert_eq!(sums, [-7.5]);
+        assert_eq!(gram.values, [51.75]);
+    }
+}
+
+#[test]
+fn submatrix_empty_ranges_and_zero_alpha_skip_failing_storage() {
+    use lazymatrix::{
+        MatTransposeVecScaledInto, MatVecScaledInto, MatrixOwned, WeightedColumnSumsInto,
+        WeightedGramInto,
+    };
+    let (matrix, store) = tracked(false);
+    let lazy = LazyMatrix::from_parts(&matrix, Some(vec![f64::NAN; 3]), Some(vec![f64::NAN; 3]));
+    store.fail_after.store(0, Ordering::Relaxed);
+    for (rows, cols) in [(5..5, 0..3), (0..5, 3..3), (5..5, 3..3)] {
+        let view = lazy.submatrix(rows, cols);
+        assert_eq!(
+            view.matvec(&vec![f64::NAN; view.ncols()]).unwrap(),
+            vec![0.0; view.nrows()]
+        );
+        assert_eq!(
+            view.mat_transpose_vec(&vec![f64::NAN; view.nrows()])
+                .unwrap(),
+            vec![0.0; view.ncols()]
+        );
+        view.to_eager::<common::MaterializeOutput>().unwrap();
+        let mut sums = vec![f64::NAN; view.ncols()];
+        view.weighted_column_sums_into(&vec![f64::NAN; view.nrows()], &mut sums)
+            .unwrap();
+        assert_eq!(sums, vec![0.0; view.ncols()]);
+        let mut gram = common::MaterializeOutput::zeros(view.ncols(), view.ncols());
+        gram.values.fill(f64::NAN);
+        view.weighted_gram_into(&vec![f64::NAN; view.nrows()], &mut gram)
+            .unwrap();
+        assert!(gram.values.iter().all(|&v| v == 0.0));
+    }
+    let view = lazy.submatrix(1..5, 1..3);
+    let mut y = vec![f64::NAN; 4];
+    view.matvec_scaled_into(-0.0, &vec![f64::NAN; 2], 0.0, &mut y)
+        .unwrap();
+    assert_eq!(y, [0.0; 4]);
+    let mut t = vec![3.0; 2];
+    view.mat_transpose_vec_scaled_into(0.0, &vec![f64::NAN; 4], -2.0, &mut t)
+        .unwrap();
+    assert_eq!(t, [-6.0; 2]);
+    assert!(store.keys.lock().unwrap().is_empty());
+}
+
+#[test]
+fn submatrix_kernels_validate_before_reading_or_writing() {
+    use lazymatrix::{MatrixOwned, SubmatrixKernel};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let (matrix, store) = tracked(false);
+    store.fail_after.store(0, Ordering::Relaxed);
+    let mut y = vec![99.0; 3];
+    let mut t = vec![99.0; 2];
+    let mut dense = common::MaterializeOutput::zeros(3, 2);
+    dense.values.fill(99.0);
+    let mut gram = common::MaterializeOutput::zeros(2, 2);
+    gram.values.fill(99.0);
+    for (rows, cols, centers, scales) in [
+        (std::ops::Range { start: 2, end: 1 }, 1..3, None, None),
+        (0..6, 1..3, None, None),
+        (1..4, 0..4, None, None),
+        (1..4, 1..3, Some(vec![0.0]), None),
+        (1..4, 1..3, None, Some(vec![1.0])),
+        (1..4, 1..3, None, Some(vec![1.0, 0.0])),
+        (1..4, 1..3, None, Some(vec![-0.0, 1.0])),
+    ] {
+        macro_rules! rejected {
+            ($operation:expr) => {
+                assert!(
+                    catch_unwind(AssertUnwindSafe(|| {
+                        $operation.unwrap();
+                    }))
+                    .is_err()
+                );
+            };
+        }
+        rejected!(matrix.submatrix_matvec_into(
+            rows.clone(),
+            cols.clone(),
+            centers.as_deref(),
+            scales.as_deref(),
+            0.0,
+            &[1.0; 2],
+            0.0,
+            &mut y
+        ));
+        rejected!(matrix.submatrix_transpose_into(
+            rows.clone(),
+            cols.clone(),
+            centers.as_deref(),
+            scales.as_deref(),
+            0.0,
+            &[1.0; 3],
+            0.0,
+            &mut t
+        ));
+        rejected!(matrix.materialize_submatrix_into(
+            rows.clone(),
+            cols.clone(),
+            centers.as_deref(),
+            scales.as_deref(),
+            &mut dense
+        ));
+        rejected!(matrix.submatrix_weighted_column_sums_into(
+            rows.clone(),
+            cols.clone(),
+            centers.as_deref(),
+            scales.as_deref(),
+            &[1.0; 3],
+            &mut t
+        ));
+        rejected!(matrix.submatrix_weighted_gram_into(
+            rows,
+            cols,
+            centers.as_deref(),
+            scales.as_deref(),
+            &[1.0; 3],
+            &mut gram
+        ));
+    }
+    for (input, output) in [(1, 2), (3, 1)] {
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                matrix
+                    .submatrix_weighted_column_sums_into(
+                        1..4,
+                        1..3,
+                        None,
+                        None,
+                        &vec![1.0; input],
+                        &mut vec![99.0; output],
+                    )
+                    .unwrap();
+            }))
+            .is_err()
+        );
+    }
+    assert_eq!(y, [99.0; 3]);
+    assert_eq!(t, [99.0; 2]);
+    assert_eq!(dense.values, [99.0; 6]);
+    assert_eq!(gram.values, [99.0; 4]);
+    assert!(store.keys.lock().unwrap().is_empty());
+}
+
+#[test]
+fn submatrices_preserve_f32_fill_and_ignore_nonfinite_padding() {
+    use lazymatrix::{MatrixOwned, WeightedColumnSumsInto, WeightedGramInto};
+    let array = ArrayBuilder::new(vec![3, 3], vec![2, 2], float32(), 7.0_f32)
+        .build(Arc::new(MemoryStore::new()), "/submatrix-fill")
+        .unwrap();
+    store_chunk(&array, &[1, 1], &[3.0_f32, f32::NAN, f32::NAN, f32::NAN]).unwrap();
+    let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
+    let lazy = LazyMatrix::from_parts(
+        matrix,
+        Some(vec![f32::NAN, 2.0, 3.0]),
+        Some(vec![f32::NAN, 4.0, 2.0]),
+    );
+    let view = lazy.submatrix(1..3, 1..3);
+    assert_eq!(view.matvec(&vec![1.0; 2]).unwrap(), [3.25, 1.25]);
+    assert_eq!(view.mat_transpose_vec(&vec![1.0; 2]).unwrap(), [2.5, 2.0]);
+    let eager = view.to_eager::<common::MaterializeOutput<f32>>().unwrap();
+    assert_eq!(eager.data().values, [1.25, 2.0, 1.25, 0.0]);
+    let mut sums = [f32::NAN; 2];
+    view.weighted_column_sums_into(&[1.0, -1.0], &mut sums)
+        .unwrap();
+    assert_eq!(sums, [0.0, 2.0]);
+    let mut gram = common::MaterializeOutput::<f32>::zeros(2, 2);
+    view.weighted_gram_into(&[1.0, -1.0], &mut gram).unwrap();
+    assert_eq!(gram.values, [0.0, 2.5, 2.5, 4.0]);
 }
 
 #[test]
@@ -601,7 +868,7 @@ fn edge_padding_is_excluded_and_nan_fill_propagates() {
 
 #[test]
 fn oversized_chunks_fail_before_reading_or_allocating_them() {
-    use lazymatrix::ReadBlock;
+    use lazymatrix::{ReadBlock, WeightedColumnSumsInto, WeightedGramInto};
     let array = ArrayBuilder::new(vec![1, 1], vec![u64::MAX, 2], float64(), 0.0f64)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();
@@ -612,6 +879,25 @@ fn oversized_chunks_fail_before_reading_or_allocating_them() {
     ));
     assert!(matches!(
         matrix.read_block(0..1, 0..1, &mut [0.0]),
+        Err(ZarrMatrixError::SizeOverflow)
+    ));
+    let lazy = LazyMatrix::from_parts(&matrix, None, None);
+    let view = lazy.submatrix(0..1, 0..1);
+    assert!(matches!(
+        view.matvec(&vec![1.0]),
+        Err(ZarrMatrixError::SizeOverflow)
+    ));
+    assert!(matches!(
+        view.mat_transpose_vec(&vec![1.0]),
+        Err(ZarrMatrixError::SizeOverflow)
+    ));
+    assert!(matches!(
+        view.weighted_column_sums_into(&[1.0], &mut [0.0]),
+        Err(ZarrMatrixError::SizeOverflow)
+    ));
+    let mut out = common::GramOutput(vec![vec![0.0]]);
+    assert!(matches!(
+        view.weighted_gram_into(&[1.0], &mut out),
         Err(ZarrMatrixError::SizeOverflow)
     ));
 }

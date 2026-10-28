@@ -543,6 +543,7 @@ macro_rules! backend_suite {
                         .collect(),
                 );
                 let dense = vec![vec![0.0, 0.0], vec![0.0, 4.0], vec![-1.0, 0.0]];
+                common::check_submatrix_weighted(&matrix, &dense);
                 common::assert_gram(
                     &actual,
                     &common::materialize(&dense, lazy.centers(), lazy.scales()),

@@ -44,7 +44,10 @@
 //! [`LazyMatrix::submatrix`] borrows contiguous row and column ranges of the
 //! already normalized matrix. It inherits the selected fitted parameters rather
 //! than recomputing them. [`Submatrix`] supports products, filtered column and
-//! sparse-row access, and explicit eager conversion for in-memory backends.
+//! sparse-row access, weighted column sums and Gram products, and explicit eager
+//! conversion. Zarr products and conversion read only intersecting chunks,
+//! serially. Chunk and codec workspace includes outer shards. Weighted Gram
+//! products use bounded normalized panels and may decode chunks repeatedly.
 //! Construction allocates nothing; sparse products use working vectors and
 //! never materialize the selected design matrix.
 //!
@@ -441,6 +444,7 @@ mod submatrix;
     feature = "sprs_all"
 ))]
 mod submatrix_kernels;
+mod submatrix_weighted;
 pub mod traits;
 mod weighted_sums;
 

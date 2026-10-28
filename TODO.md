@@ -257,7 +257,16 @@ companion packages; the Rust core remains independent of Python and solvers.
     remain contiguous borrowed slices.
   - Raw selection followed by normalization remains a distinct operation with
     different statistical semantics.
-- [ ] Extend submatrices to bounded Zarr reads and weighted operations.
+- [x] Extend submatrices to bounded Zarr reads and weighted operations.
+  - Zarr selections stream forward and transpose products, eager conversion,
+    and weighted column sums through intersecting chunks without refitting.
+    Empty ranges and zero-alpha products skip storage reads.
+  - Weighted Gram products normalize entries in bounded panels across all
+    backend releases, combining sparse duplicates before multiplication. Weights
+    use local row indices; signed and nonfinite values retain IEEE behavior.
+  - Shared oracle tests and injected storage failures cover selection semantics
+    and errors. [Measurements](benches/submatrix/README.md) document bounded
+    workspace and the cost of repeated scans and chunk decoding.
 - [ ] Evaluate arbitrary index selections after defining ordering,
   duplicate-index, mapping, allocation, and complexity contracts.
 - [ ] Expose submatrix selection in Python after defining indexing and

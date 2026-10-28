@@ -75,7 +75,8 @@ cargo run --locked --example coordinate_descent --features faer
 - Batched forward and transpose products with caller-selected dense outputs.
 - Borrowed logical columns and sparse column and row views for supported
   storage.
-- Borrowed contiguous submatrices that retain fitted normalization parameters.
+- Borrowed contiguous submatrices that retain fitted normalization parameters,
+  with weighted operations and bounded Zarr reads.
 - An implicit intercept column through `WithIntercept`.
 - Explicit dense conversion through `to_eager` and `to_eager_into`, or in-place
   normalization of writable dense storage through `into_eager`.

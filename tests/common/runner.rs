@@ -2895,6 +2895,7 @@ where
     V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
 {
     use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    run_submatrix_weighted_suite(&build);
     for (n, p, density) in [
         (7, 5, 0.3),
         (7, 5, 1.0),
@@ -3027,6 +3028,119 @@ where
                         .is_err()
                     );
                     assert!(untouched.iter().all(|&v| v == 42.0));
+                }
+            }
+        }
+    }
+}
+
+pub fn run_submatrix_weighted_suite<M: lazymatrix::SubmatrixKernel<f64>>(
+    build: impl Fn(&TestMatrix) -> M,
+) {
+    for (n, p) in [(7, 5), (67, 69), (0, 4), (4, 0), (0, 0)] {
+        let tm = random_matrix(412, n, p, 0.3);
+        check_submatrix_weighted(&build(&tm), &tm.dense);
+    }
+    for values in [
+        vec![
+            vec![f64::NAN, f64::NAN, f64::INFINITY],
+            vec![f64::NAN, 1e12 + 0.25, 1e12 + 0.5],
+            vec![f64::NAN, 1e12 + 0.75, 1e12 + 1.0],
+        ],
+        vec![
+            vec![0.0; 3],
+            vec![0.0, f64::INFINITY, 0.0],
+            vec![0.0, f64::NAN, 1.0],
+        ],
+    ] {
+        let tm = TestMatrix {
+            nrows: 3,
+            ncols: 3,
+            triplets: values
+                .iter()
+                .enumerate()
+                .flat_map(|(i, row)| row.iter().enumerate().map(move |(j, &value)| (i, j, value)))
+                .collect(),
+            dense: values,
+        };
+        check_submatrix_weighted(&build(&tm), &tm.dense);
+    }
+}
+
+/// Verify selected weighted operations, including nested selections and intercepts.
+pub fn check_submatrix_weighted<M: lazymatrix::SubmatrixKernel<f64>>(matrix: &M, raw: &[Vec<f64>]) {
+    use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto, WithIntercept};
+    let (n, p) = (matrix.nrows(), matrix.ncols());
+    let centers: Vec<_> = (0..p)
+        .map(|j| if n == 3 { 1e12 } else { j as f64 * 0.25 })
+        .collect();
+    let scales: Vec<_> = (0..p)
+        .map(|j| if j % 2 == 0 { -2.0 } else { 3.0 })
+        .collect();
+    let mut normalizations = vec![
+        (None, None),
+        (Some(centers.clone()), None),
+        (None, Some(scales.clone())),
+        (Some(centers), Some(scales)),
+    ];
+    if n <= 7 {
+        normalizations.push((Some(vec![f64::NAN; p]), Some(vec![f64::INFINITY; p])));
+    }
+    for (centers, scales) in normalizations {
+        let lazy = LazyMatrix::from_parts(matrix, centers, scales);
+        let normalized = materialize(raw, lazy.centers(), lazy.scales());
+        for (rows, cols) in [
+            (0..n, 0..p),
+            (n.min(1)..n, p.min(1)..p),
+            (n..n, 0..p),
+            (0..n, p..p),
+        ] {
+            let outer = lazy.submatrix(0..n, 0..p);
+            let view = outer.submatrix(rows.clone(), cols.clone());
+            let mut weight_sets = vec![
+                (0..rows.len())
+                    .map(|i| (i % 5) as f64 - 2.0)
+                    .collect::<Vec<_>>(),
+            ];
+            if !rows.is_empty() && n <= 7 {
+                let mut weights = vec![1.0; rows.len()];
+                weights[0] = f64::INFINITY;
+                weight_sets.push(weights);
+                weight_sets.push(vec![f64::NAN; rows.len()]);
+            }
+            let selected: Vec<_> = rows
+                .clone()
+                .map(|i| normalized[i][cols.clone()].to_vec())
+                .collect();
+            for weights in weight_sets {
+                let mut out = GramOutput(vec![vec![f64::NAN; cols.len()]; cols.len()]);
+                view.weighted_gram_into(weights.as_slice(), &mut out)
+                    .unwrap();
+                assert_gram(&out, &selected, &weights);
+                let mut sums = vec![f64::NAN; cols.len()];
+                view.weighted_column_sums_into(weights.as_slice(), &mut sums)
+                    .unwrap();
+                let expected: Vec<f64> = (0..cols.len())
+                    .map(|j| {
+                        selected
+                            .iter()
+                            .zip(&weights)
+                            .map(|(row, &w)| row[j] * w)
+                            .sum()
+                    })
+                    .collect();
+                assert_vector_values(&sums, &expected);
+                if n <= 7 {
+                    let augmented = WithIntercept::new(&view);
+                    let mut out = GramOutput(vec![vec![f64::NAN; cols.len() + 1]; cols.len() + 1]);
+                    augmented
+                        .weighted_gram_into(weights.as_slice(), &mut out)
+                        .unwrap();
+                    let values = selected
+                        .iter()
+                        .map(|row| std::iter::once(1.0).chain(row.iter().copied()).collect())
+                        .collect::<Vec<_>>();
+                    assert_gram(&out, &values, &weights);
                 }
             }
         }
