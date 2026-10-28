@@ -75,7 +75,7 @@ async function files(root) {
   return result.sort();
 }
 
-async function extractionConfig(staging, storage) {
+export async function extractionConfig(staging, storage) {
   const config = parse(
     await readFile(join(repository, "diplodocus.yaml"), "utf8"),
   );
@@ -90,6 +90,7 @@ async function extractionConfig(staging, storage) {
   );
   const exported = join(staging, "rust-source");
   const checkout = join(storage, "rust-source");
+  // Copied agent instructions would become scoped overrides in generated sources.
   const names = (
     await run(
       "git",
@@ -98,7 +99,12 @@ async function extractionConfig(staging, storage) {
     )
   )
     .split("\0")
-    .filter((name) => name && !/^(docs|python)\//.test(name));
+    .filter(
+      (name) =>
+        name &&
+        !/^(docs|python)\//.test(name) &&
+        !/(^|\/)AGENTS(?:\.override)?\.md$/.test(name),
+    );
   // Diplodocus fingerprints the Rust repository. Export source files so local
   // environments and Nix-generated symlinks cannot enter that input boundary.
   for (const name of names) {

@@ -1,94 +1,33 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+Keep this file focused on durable instructions. Record implementation history in
+commits and put detailed background in focused documentation.
 
-`src/lib.rs` contains crate documentation, module declarations, and public
-re-exports. The main implementation is divided as follows:
+## Project Scope and Layout
 
-- `src/normalization.rs` defines `Centering`, `Scaling`, `Normalization`, and
-  reusable fitted `NormalizationParams`.
-- `src/matrix.rs` implements `LazyMatrix`, construction, column and row access,
-  and operator behavior.
-- `src/eager.rs` implements `EagerMatrix`, which retains fitted parameters as
-  metadata and forwards operations to already normalized dense storage.
-  `src/materialize.rs` and `src/traits/materialize.rs` provide explicit dense
-  conversion and in-place dense normalization capabilities.
-- `src/column.rs` contains logical and sparse borrowed column views.
-- `src/row.rs` contains the borrowed normalized sparse row view.
-  `src/csr_stats.rs` shares column reductions over borrowed CSR rows.
-- `src/intercept.rs` implements `WithIntercept`, an implicit leading column of
-  ones added after predictor normalization. `src/weighted_sums.rs` and
-  `src/traits/weighted_sums.rs` provide directly centered weighted-column sums
-  for its Gram cross terms.
-- `src/traits/operator.rs` defines matrix shape and allocating or
-  reusable-output matrix-vector products.
-- `src/traits/matmat.rs` defines dense indexed reads and allocating or reusable
-  batched products. `src/matmat.rs` shares normalization, bounded panels, and
-  borrowed intercept adapters; backend modules provide native kernels.
-- `src/traits/gram.rs` defines writable dense output and weighted Gram
-  capabilities. `src/gram.rs` contains shared validation and sparse Gram
-  kernels.
-- `src/traits/vectors.rs`, `stats.rs`, and `columns.rs` define vector algebra,
-  sparse-aware statistics, and column capabilities.
-- `src/traits/rows.rs` defines the contiguous sparse-row borrowing capability.
-- `src/traits/blocks.rs` defines experimental fallible rectangular reads into
-  caller-owned buffers and the borrowed packed `DenseBlock` view.
-- `src/backends/faer/` and `src/backends/nalgebra/` contain feature-gated dense,
-  sparse, and vector implementations. `src/backends/ndarray/` contains dense
-  matrix and vector implementations. `src/backends/sprs/` contains sparse
-  statistics and the checked `SprsCsc` and `SprsCsr` wrappers;
-  `src/backends/sprs.rs` implements CSC and CSR products.
-  `src/backends/zarrs.rs` and its statistics module scan synchronous Zarr arrays
-  one chunk at a time. Shared helpers live in `src/backends/support.rs`.
+LazyMatrix is in early development. Prefer a robust, consistent API over backward
+compatibility before 1.0.0.
 
-Keep backend-independent logic out of backend implementation directories. With
-no features enabled, the crate provides its traits and `LazyMatrix` with only
-`num-traits`; adding a backend means implementing the existing trait surface for
-a matrix/vector pair. This crate contains no FFI.
+- `src/` contains the Rust core, public traits, and backend implementations.
+- `tests/` contains integration suites and isolated consumer workspaces.
+- `examples/` contains consumer algorithms; `benches/` contains benchmarks.
+- `python/` contains the independently versioned Python package and private
+  native extension. See [python/README.md](python/README.md).
+- `docs/` contains the website and API reference integration. See
+  [docs/README.md](docs/README.md) for development and benchmark workflows.
+- [TODO.md](TODO.md) tracks planned design work.
 
-Each supported backend release has a version feature, such as `faer_v0_22`. The
-unversioned `faer`, `nalgebra`, `ndarray`, `sprs`, and `zarrs` features select
-the newest supported release. Version features are additive: compile independent
-trait implementations for every enabled release. Shared backend files use the
-crate aliases supplied by version-specific wrapper modules; keep API differences
-in those wrappers and their compatibility helpers. Gate backend-independent
-helpers on the internal `*_all` markers.
+Keep backend-independent logic outside backend implementation directories. The
+core must remain dependency-light, with only `num-traits` when no features are
+enabled. Keep Python dependencies and FFI in the companion package.
 
-Keep version aliases in `src/lib.rs` and `tests/common/backend_aliases.rs`
-synchronized. Correctness suites must exercise every enabled release. Only
-examples and benchmarks use the helper's selected-version convenience aliases.
-The isolated `tests/feature_unification` workspace checks separate consumer
-crates with different backend dependencies. Keep its lockfile compatible with
-the root lockfile and include new releases in its consumers, the backend test
-matrix in `scripts/test-backends.sh`, and CI.
+Keep solver algorithms and state in examples or downstream crates. Add reusable
+matrix capabilities when consumers need them; keep residual policies, cached
+solver state, and update rules outside the library and its correctness suites.
 
-Integration tests are in `tests/`. The backend suites reuse
-`tests/common/runner.rs`, while `tests/cross_backend.rs` checks agreement
-between implementations. Runnable demonstrations belong in `examples/`, and
-Criterion benchmarks belong in `benches/`. See `TODO.md` for planned API work.
+## Normalization and Numerical Invariants
 
-`docs/` contains the VitePress landing page, guide, and benchmark comparisons at
-`https://lazymatrix.org`. Diplodocus embeds Python and Rust API references in
-the site; docs.rs remains available. `python/` contains the independently
-versioned Python package, with a private PyO3 extension under `python/rust/`.
-Keep Python dependencies and FFI out of the core crate. Keep benchmark data and
-methodology synchronized; the site build reads the checked-in CSV and metadata
-in `benches/least_squares/` and generates responsive SVG plots without running
-benchmarks. The main page compares complete gradient descent fits and individual
-products at three selectable matrix sizes. The earlier size and shape sweep
-remains in `benches/normalization_tradeoffs/`. Historical consumer profiles
-remain in `benches/normalization_allocations/`. GitHub Actions checks pull
-requests and deploys pushes to `main` to Cloudflare Workers.
-
-## Development Status
-
-LazyMatrix is in early development. Breaking changes are expected. Prefer a
-robust and consistent API over backwards compatibility until the crate reaches
-1.0.0.
-
-## Architecture & Invariants
-
-`LazyMatrix` presents a normalized design matrix as a linear operator:
+`LazyMatrix` represents a normalized design matrix as a linear operator:
 
 ```text
 X_tilde = (X - 1c^T) S^-1
@@ -96,178 +35,102 @@ X_tilde v = X(S^-1 v) - 1(c^T S^-1 v)
 X_tilde^T u = S^-1(X^T u - c sum(u))
 ```
 
-Centering and scaling are independently optional. Lazy operators never
-materialize the centered matrix: doing so turns structural zeros into nonzeros
-and defeats sparse storage. Lazy backends multiply the original `X` and fold
-normalization into the operator calculation. Explicit `to_eager` and
-`to_eager_into` conversions may materialize any supported input into dense
-storage; `into_eager` modifies writable dense storage in place. Eager operators
-must not apply their retained fitted parameters again. Materialization sums raw
-sparse duplicates before normalizing, including implicit zeros, and uses one
-working row or column rather than a second full design matrix.
+Centering and scaling are independently optional. Lazy operations must preserve
+sparse storage and never materialize the full normalized design matrix. Explicit
+eager conversion may materialize dense storage. Eager operators must not apply
+their retained fitted parameters again. Materialization must use bounded
+workspace rather than a second full design matrix.
 
-Preserve these normalization semantics:
+- Store centers and scales as `Vec<F>`.
+- Replace only exact computed zero scales with one. Explicit construction must
+  panic on positive and negative zero scales, while preserving negative scales and
+  IEEE nonfinite values.
+- Compute scales from centered columns when centering is enabled. Include
+  implicit zeros in sparse statistics and centered norms.
+- Sum duplicate raw entries at each cell before applying normalization or
+  computing nonlinear statistics.
+- Center values before accumulating weighted Gram products. Do not correct raw
+  moments afterward; large offsets can erase centered variation. Use bounded
+  workspace and preserve contributions from implicit zeros.
 
-- Replace exact zero scales with one so constant columns do not divide by zero.
-- When centering and scaling are both enabled, compute scales from centered
-  columns. SD and range are centering-invariant; L1, L2, and max-absolute use
-  the sparse closed-form `*_centered` methods, including contributions from
-  implicit zeros. Preserve IEEE nonfinite values.
-- Store centers and scales as `Vec<F>`, not backend-specific vector types.
+## Errors, Borrowing, and Storage
 
-## Fallible Operations and Storage
+Products, column statistics, and computed normalization return `Result`, sharing
+the backend error through `MatrixErrorType`; in-memory backends use
+`Infallible`. Dimension mismatches panic. Reusable outputs may be partial after
+an error; apply normalization corrections only after the backend succeeds.
+Forward `normalization_stats` through references and wrappers so storage backends
+can share scans.
 
-Products, `ColumnStats` methods, and `LazyMatrix::new` return `Result`. Share
-one associated error through `MatrixErrorType`; in-memory backends use
-`Infallible`. Dimension mismatches still panic. Reusable outputs may be partial
-after an error; normalization corrections must run only after the backend
-succeeds. Forward the combined `normalization_stats` hook through references and
-wrappers so storage backends retain their shared scans. `NormalizationStats<F>`
-is the pair of optional center and raw-scale vectors; only computed `LazyMatrix`
-construction replaces exact zero scales with one. Explicit construction panics
-on zero scales, including negative zero, and otherwise preserves parameters,
-including negative scales and nonfinite values.
+Keep operators independent of storage orientation. Expose column and row
+borrowing through capabilities:
 
-Weighted Gram kernels receive normalization parameters through
-`WeightedGramKernel` and center values before accumulating products. Do not
-correct raw moments afterward: large offsets can erase centered variation. Dense
-ndarray kernels use bounded panels; CSC kernels choose bounded panels or
-borrowed column pairs with subtraction-free sums for implicit rows. Noncanonical
-columns and nonfinite arithmetic may use two working columns, but never a full
-dense design matrix. `MatrixWrite` keeps dense coefficient output independent of
-the input backend.
+- `RawColumns` requires natural borrowed column access.
+- `SparseColumns` requires contiguous CSC slices; `SparseRows` requires
+  contiguous CSR slices. Their indices are `usize`.
+- Borrowing must not hide gathering, allocation, decoding, or I/O. Unsupported
+  borrowing should fail at compile time.
 
-The zarrs 0.22 and 0.23 backends support synchronous two-dimensional
-floating-point arrays. Version 0.22 requires Rust 1.87, and version 0.23
-requires Rust 1.91. Read chunks serially, preserve configured fill values, and
-exclude edge padding. Keep working vectors in RAM. Lazy products and statistics
-never materialize the full array. Explicit eager conversion streams chunks into
-caller-selected dense storage. Chunk buffers and codec workspaces depend on
-storage chunk size, including outer shards. Borrowing capabilities must not hide
-decoding or I/O. Tests use counting and failing stores; larger-than-RAM
-benchmarks remain manual.
+Keep logical column operations on borrowed views and document their complexity.
+Sparse row views must preserve storage order and duplicates, have logical length
+`ncols`, and expose the column-dependent background without allocating a dense
+row. Respect backend slice ranges so spare capacity and sliced-view offsets do
+not become logical entries.
 
-## Column Access & Capability Boundaries
+CSR statistics must scan rows with O(ncols) workspace, combine duplicates, and
+include implicit zeros. Do not convert CSR to CSC for products or statistics.
+Chunked storage must read serially, preserve fill values, exclude edge padding,
+and stream lazy products and statistics without materializing the full array.
+Account for storage chunk size, including outer shards, when assessing memory.
 
-Keep storage orientation out of the operator and express contiguous borrowing as
-a capability:
+## Backend Features
 
-- `MatVec`, `MatTransposeVec`, and `ColumnStats` are orientation-agnostic.
-- Dense backends and storage with natural column views implement `RawColumns`.
-- Only storage that can borrow contiguous CSC slices implements `SparseColumns`.
-- Only storage that can borrow contiguous CSR slices implements `SparseRows`.
+Version features are additive: compile independent implementations for every
+enabled backend release. Unversioned aliases select the newest supported release.
+Keep API differences in version wrappers and compatibility helpers, and gate
+implementations on matching version features. Gate shared helpers on internal
+`*_all` markers. Keep heavier backend bounds on matrix and operator implementations.
 
-`LazyMatrix::column(j)` requires `RawColumns`; `sparse_column(j)` retains the
-stronger `SparseColumns` bound. Do not hide an O(nnz)-per-column gather behind
-`SparseColumns`. An incompatible storage layout should fail at compile time
-rather than silently add a gather.
+Keep aliases in `src/lib.rs` and `tests/common/backend_aliases.rs` synchronized.
+Correctness suites must exercise every enabled release; selected-version aliases
+are only for examples and benchmarks. When adding a release, update the consumers
+in `tests/feature_unification`, `scripts/test-backends.sh`, and CI. Keep the
+consumer workspace lockfile compatible with the root lockfile.
 
-Views borrow rather than copy. `LazyColumn` wraps a backend raw view and the two
-normalization scalars; `LazySparseColumn` also exposes CSC slices and the
-sparse-plus-offset representation. Put logical column operations—dots, weighted
-products, scaled additions, and norms—on the view so callers do not rederive
-normalization formulas. Keep raw slices available for specialized algorithms,
-and document complexity: a centered dot requiring a dense vector sum is O(n +
-nnz), while a cached-sum path is O(nnz). sprs supports CSC and CSR operators
-directly because orientation is a runtime flag. Only the checked `SprsCsc`
-wrapper implements column borrowing; `SprsCsr` checks CSR storage for row
-borrowing. `SparseColumns` and `SparseRows` require `usize` row and column
-indices, respectively. faer CSR matrices and views and nalgebra CSR matrices
-provide `MatrixShape` and `SparseRows`; use faer's row ranges to exclude spare
-capacity and sprs's adjusted outer ranges for sliced views. `LazyMatrix::row`
-requires `SparseRows` and returns a `LazyRow` borrowing raw storage and the full
-optional center and scale slices. Its logical length is the column count, even
-when no entries are stored. The background varies by column; expose it and the
-stored scaled corrections without allocating a dense row. Preserve storage order
-and duplicates, and sum duplicate raw values before direct normalization. Faer
-and nalgebra CSR matrices and faer views provide native products and column
-statistics. CSR statistics scan rows serially with O(ncols) workspace, combine
-duplicates at each cell, and include implicit zeros. Do not convert CSR to CSC
-for these operations.
+## Testing and Validation
 
-## Example-Driven Design
+Extend `tests/common/runner.rs` for behavior shared across backends. Use
+backend-specific tests for adapter or representation details. Preserve parity
+with the dense normalization oracle and the adjoint identity. Seed random
+generators with `ChaCha8Rng` and compare floats with `approx`. Import shared
+modules with `#[path = "common/runner.rs"] mod common;`; do not add `mod.rs` files.
 
-Keep solver algorithms and state in `examples/` or downstream crates. Examples
-such as `least_squares_gd`, `least_squares_sgd`, and `coordinate_descent`
-demonstrate consumers and expose missing matrix capabilities, but solvers do not
-belong in the library or its correctness suite. Add a reusable operator or
-logical-column operation when an example reveals a genuine matrix need; do not
-add residual policies, cached sums, update rules, or an entire solver to the
-crate.
+Use focused checks while iterating and select final validation by the change:
 
-## Build, Test, and Development Commands
+- Instruction and prose changes: verify referenced paths, commands, links, and
+  applicable formatting. Rust tests are unnecessary for these changes.
+- Rust changes: run the affected suites, formatting, Clippy, and documentation
+  checks. `bash scripts/test-backends.sh version FEATURE` checks one backend
+  release. Run `task test` for shared behavior or backend feature changes.
+- Python bindings: run `task python:check`; add `task python:package` for changes
+  that affect distributions or installation.
+- Website changes: run `task website:check`. For isolated scripts, focused Node
+  tests and formatting checks suffice.
+- Behavior changes spanning components or changes affecting dependencies,
+  packaging, releases, or CI: run `task ci` before submitting.
 
-- `cargo build --locked` builds the dependency-light core.
-- `cargo build --all-features --locked` checks all supported backends.
-- `task test` runs every backend version with and without parallelism, version
-  pairs, separate-consumer feature unification, cross-backend comparisons, and
-  the all-feature test matrix.
-- `task ci` runs formatting, Clippy, documentation, and all tests—the local
-  equivalent of GitHub CI.
-- `task website:dev` serves the website locally.
-- `task python:check` builds, lints, and tests the Python bindings.
-- `task python:package` checks wheels and isolated source-distribution builds.
-- `task website:reference` refreshes both API references through Diplodocus.
-- `task website:check` installs locked dependencies, checks formatting, builds
-  the website, checks local links and math, and validates Worker packaging.
-- `cargo bench --locked --bench column_sds` runs the column-statistics
-  benchmarks.
-- `cargo run --locked --example coordinate_descent --features faer` runs an
-  example.
+Use `task --list` and [Taskfile.yml](Taskfile.yml) for available checks. Read the
+active toolchains and compiler requirements from `rust-toolchain.toml`, Cargo
+manifests, and CI. Use the MSRV modes in `scripts/test-backends.sh` with the
+toolchains selected by CI when changing compatibility requirements. On NixOS,
+use `scripts/python-tool.py` to select native Python tooling.
 
-The repository's devenv supplies Rust 1.98.1, `go-task`, and the configured
-pre-commit hooks. The core MSRV is Rust 1.84, and sprs 0.11.4 requires Rust
-1.85. Other backend checks retain Rust 1.87, except for nalgebra 0.35 (including
-the `nalgebra` alias), which requires Rust 1.89. The zarrs 0.23 backend
-(including the `zarrs` alias) requires Rust 1.91. The sprs MSRV checks select
-sprs 0.11.4; sprs 0.11.5 and newer require Rust 1.88. Run
-`bash scripts/test-backends.sh msrv` with Rust 1.87 to check the compatible
-feature selections, including tests, examples, and benchmarks. The script
-restores the original lockfile after the checks, including on failure. Run
-`bash scripts/test-backends.sh zarrs-msrv` with Rust 1.91 for zarrs 0.23.
+## Coding and Review
 
-The Python package requires Rust 1.89 for source builds and Python 3.11 or
-newer. Its uv environment lives in `.devenv/python`; tasks set
-`UV_PROJECT_ENVIRONMENT`. Use `scripts/python-tool.py` to prefer native maturin
-and Ruff executables on NixOS. Diplodocus 0.9.0 uses a separate
-`nightly-2026-09-28` documentation toolchain. The website adapter exports
-Git-visible Rust sources to exclude local environments and generated symlinks
-from extraction. Python and Rust have independent versions, one combined release
-PR, and Python follows Rust releases.
+Document public APIs and explain reasons in comments. `Scalar` does not imply
+`AddAssign`; use iterator sums or folds instead of `+=` in generic code.
 
-## Coding Style & Naming Conventions
-
-Use standard `rustfmt` formatting (four-space indentation) and keep
-`cargo clippy --all-features --all-targets --locked -- -D warnings` clean. Name
-modules, functions, and files in `snake_case`; types and traits use
-`UpperCamelCase`. Document public APIs and explain the reason—not the
-mechanics—in comments. Keep feature-specific dependencies and trait
-implementations behind their matching Cargo feature. `Scalar` does not imply
-`AddAssign`; in generic code, accumulate with iterator sums or folds instead of
-`+=`, and keep heavier backend bounds on matrix and operator implementations.
-
-## Testing Guidelines
-
-Use `#[test]` integration tests with descriptive `snake_case` names.
-`tests/common/runner.rs` is a backend-generic suite driven by thin
-`faer_backend.rs` and `nalgebra_backend.rs` adapters. Extend the generic runner
-when behavior should apply to every backend; use a backend-specific file only
-for adapter or representation details. A new backend should provide construction
-and conversion closures, then call `run_backend_suite`.
-
-The test oracle materializes the normalized matrix densely and compares naive
-products with lazy output up to floating-point noise. Preserve oracle parity and
-the adjoint identity; `cross_backend.rs` separately verifies agreement between
-implementations. Seed random generators with `ChaCha8Rng`, and compare floats
-with `approx`. Import shared modules using
-`#[path = "common/runner.rs"] mod common;`; do not introduce `mod.rs` files. Run
-`task test` during development and `task ci` before submitting.
-
-## Commit & Pull Request Guidelines
-
-Recent history generally follows Conventional Commits, such as `feat:`,
-`refactor:`, `docs:`, and `chore(deps):`. Write short, imperative subjects and
-keep each commit focused. Pull requests should explain the motivation and API or
-performance impact, link relevant issues (for example, `Closes #123`), and list
-the commands run. Include benchmarks when changing hot paths and update examples
-or documentation when public behavior changes.
+Use Conventional Commits with short, imperative subjects. Pull requests should
+explain the motivation, API or performance impact, related issues, and validation.
+Benchmark hot-path changes, update documentation when public behavior changes,
+and keep benchmark data and methodology synchronized.
