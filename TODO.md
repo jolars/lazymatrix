@@ -127,6 +127,61 @@ companion packages; the Rust core remains independent of Python and solvers.
   - Keep zero-to-one replacement exclusive to computed normalization.
   - Defer a fallible constructor until a consumer needs recoverable validation.
 
+## Normalization methods
+
+Use [scikit-learn's preprocessing methods](https://scikit-learn.org/stable/modules/preprocessing.html)
+as a coverage reference. Evaluate additions against the library's scope rather
+than assuming full API or numerical parity.
+
+- [ ] Evaluate median centering and quantile-range scaling (`RobustScaler`).
+  - Include the default interquartile range, configurable lower and upper
+    quantiles, and optional standard-normal calibration (`unit_variance`).
+  - Reuse `NormalizationParams` to apply fitted centers and scales. Define
+    exact versus approximate quantiles, scan costs, and workspace requirements
+    for dense, sparse, and chunked storage. Combine sparse duplicates and include
+    implicit zeros without silently densifying or converting CSR to CSC.
+
+- [ ] Extend min-max scaling beyond the default `[0, 1]` range (`MinMaxScaler`).
+  - Evaluate a parameterized `feature_range` recipe that computes explicit
+    centers and scales, including constant-column behavior and reuse on new data.
+  - Evaluate optional clipping for `MinMaxScaler` and `MaxAbsScaler` separately
+    from the affine normalization metadata.
+
+- [ ] Evaluate row normalization (`Normalizer` and `normalize(axis=1)`).
+  - Support L1, L2, and maximum-absolute norms, leaving zero rows unchanged.
+    Column normalization with these norms already exists.
+  - Consider a composable row-scaling operator and define its ordering relative
+    to column normalization. Compute row factors independently for new samples.
+
+- [ ] Evaluate weighted and incremental fitting of normalization parameters.
+  - Cover weighted means and population standard deviations, as supported by
+    `StandardScaler.fit(sample_weight=...)`. Weighted products and Gram matrices
+    do not provide weighted fitting.
+  - Consider mergeable statistics for `partial_fit` equivalents of
+    `StandardScaler`, `MinMaxScaler`, and `MaxAbsScaler`. Streaming a fixed Zarr
+    array is distinct from updating fitted parameters as new batches arrive.
+
+- [ ] Expose the existing Rust normalization choices in Python.
+  - Include minimum centering and range, maximum-absolute, L1, and L2 scaling.
+    Coordinate this with the reusable fitted-parameter task above.
+
+- [ ] Document intentional numerical differences from scikit-learn.
+  - Compare IEEE NaN propagation with skipping missing values during fitting,
+    and exact-zero scale replacement with near-constant feature handling.
+  - Evaluate any compatibility options explicitly against the current numerical
+    invariants before changing behavior.
+
+- [ ] Assess broader transforms before extending the column-normalization scope.
+  - `QuantileTransformer` maps features to uniform or normal distributions.
+  - `PowerTransformer` supports Box-Cox and Yeo-Johnson transformations, with
+    optional standardization afterward.
+  - `KernelCenterer` requires kernel double centering, including fitted
+    statistics for transforming test-versus-training kernel matrices.
+  - PCA whitening mixes features rather than only scaling columns.
+  - Evaluate separate operators, adapters, or downstream implementations for
+    these methods. Specify sparse-storage and bounded-workspace contracts rather
+    than representing them only through column centers and scales.
+
 ## Operator performance
 
 - [x] Investigate the performance regression in stable centered dense products.
@@ -284,6 +339,17 @@ companion packages; the Rust core remains independent of Python and solvers.
   once the shape-aware constructors settle.
 
 ## Surface ownership decisions
+
+- [ ] Evaluate named presets on `Normalization` for common recipes.
+  - Compare named constructors such as `Normalization::standardize()`,
+    associated constants, and marker types such as `Standardization` accepted
+    through `From`/`Into` or a generic constructor.
+  - Assess discoverability, parameterized recipes, and coexistence with explicit
+    `Centering` and `Scaling` choices. `Normalization::new(Standardization)`
+    would require changing the current two-argument constructor because Rust
+    cannot overload by argument count.
+  - Keep convenience APIs at the specification level and reuse the existing
+    fitting and operator machinery.
 
 - [ ] Revisit whole-operator logical reductions only with a concrete consumer.
   - Column sums and squared norms are already available through `LogicalColumn`;
