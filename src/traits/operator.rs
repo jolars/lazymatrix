@@ -23,6 +23,8 @@ pub trait MatVec<V>: MatrixShape + MatrixErrorType {
     fn matvec(&self, x: &V) -> Result<V, Self::Error>;
 
     /// Apply optional normalization, allowing a backend to center before summation.
+    ///
+    /// The default borrows unscaled inputs and clones coefficients only for scaling.
     fn matvec_normalized<F: super::Scalar>(
         &self,
         x: &V,
@@ -32,11 +34,15 @@ pub trait MatVec<V>: MatrixShape + MatrixErrorType {
     where
         V: Clone + super::ElemDivAssign<F> + super::DotSlice<F> + super::SubScalarAssign<F>,
     {
-        let mut coefficients = x.clone();
-        if let Some(scales) = scales {
-            coefficients.elem_div_assign(scales);
-        }
-        let mut out = self.matvec(&coefficients)?;
+        let mut scaled;
+        let coefficients = if let Some(scales) = scales {
+            scaled = x.clone();
+            scaled.elem_div_assign(scales);
+            &scaled
+        } else {
+            x
+        };
+        let mut out = self.matvec(coefficients)?;
         if let Some(centers) = centers {
             out.sub_scalar_assign(coefficients.dot_slice(centers));
         }

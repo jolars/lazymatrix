@@ -1,0 +1,94 @@
+{
+  "phase": "prototype",
+  "date": "2026-10-28",
+  "baseline_commit": "1e1c7d7890c593b40b10c1a91cad61e8d6b3ce58",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "cpu_affinity": [
+    10
+  ],
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "rustflags": null,
+  "profile": "bench (Cargo defaults)",
+  "backend_versions": {
+    "faer": "0.24.4",
+    "nalgebra": "0.35.0",
+    "nalgebra-sparse": "0.12.0",
+    "ndarray": "0.17.2",
+    "sprs": "0.11.6"
+  },
+  "features": [
+    "faer",
+    "nalgebra",
+    "ndarray",
+    "sprs"
+  ],
+  "parallel": false,
+  "matrix_seed": 641,
+  "input_seed": 643,
+  "shapes": [
+    [
+      2000,
+      32
+    ],
+    [
+      10000,
+      128
+    ],
+    [
+      32,
+      16384
+    ]
+  ],
+  "sparse_densities": [
+    0.01,
+    0.1
+  ],
+  "dense_density": 1.0,
+  "normalization": [
+    "raw",
+    "mean centering",
+    "mean centering and population SD scaling"
+  ],
+  "methods": [
+    "current allocating LazyMatrix::matvec",
+    "benchmark-only borrow_unscaled prototype"
+  ],
+  "dense_controls": "Both methods preserve the specialized backend normalization hook.",
+  "scaled_controls": "Both methods preserve the existing allocating normalized hook when scales are present.",
+  "timing_units": "nanoseconds per product or input clone, including returned-vector destruction",
+  "timing_estimator": "Criterion mean with bootstrap 95% confidence intervals",
+  "criterion": {
+    "version": "0.8.2",
+    "samples": 20,
+    "warm_up_seconds": 0.1,
+    "measurement_seconds": 0.4,
+    "resamples": 1000,
+    "confidence_level": 0.95
+  },
+  "runs": [
+    {
+      "baseline": "forward-input-first",
+      "product_method_order": [
+        "current",
+        "borrow_unscaled"
+      ]
+    },
+    {
+      "baseline": "forward-input-reversed",
+      "product_method_order": [
+        "borrow_unscaled",
+        "current"
+      ]
+    }
+  ],
+  "compute_coordination": "Both complete runs share one exclusive compute bench reservation. Each pair uses the same executable and fixture.",
+  "allocation_method": "One warmed untimed call per case and run; count successful allocation and reallocation calls and cumulative requested bytes, excluding setup and deallocation.",
+  "timing_records": 558,
+  "allocation_records": 558,
+  "intervals_wider_than_10_percent_of_mean": {
+    "forward-input-first": 4,
+    "forward-input-reversed": 1
+  },
+  "scope": "Finite owned f64 input vectors; six sparse backend/layout combinations and three dense controls. No library code or public API changes."
+}

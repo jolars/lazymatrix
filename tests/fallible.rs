@@ -2,8 +2,9 @@ use std::cell::Cell;
 use std::fmt;
 
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto,
-    MatrixErrorType, MatrixShape, Normalization, Scaling,
+    Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVec,
+    MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape, Normalization, Scaling,
+    SubScalarAssign,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -72,6 +73,116 @@ impl MatTransposeVec<Vec<f64>> for Source {
         let mut out = vec![0.0; 2];
         self.mat_transpose_vec_into(x, &mut out)?;
         Ok(out)
+    }
+}
+
+#[derive(Default)]
+struct ProductCounts {
+    clones: Cell<usize>,
+    dots: Cell<usize>,
+    corrections: Cell<usize>,
+}
+
+struct TrackedVector<'a> {
+    values: Vec<f64>,
+    counts: &'a ProductCounts,
+}
+
+impl Clone for TrackedVector<'_> {
+    fn clone(&self) -> Self {
+        self.counts.clones.set(self.counts.clones.get() + 1);
+        Self {
+            values: self.values.clone(),
+            counts: self.counts,
+        }
+    }
+}
+
+impl ElemDivAssign<f64> for TrackedVector<'_> {
+    fn elem_div_assign(&mut self, scales: &[f64]) {
+        self.values.elem_div_assign(scales);
+    }
+}
+
+impl DotSlice<f64> for TrackedVector<'_> {
+    fn dot_slice(&self, centers: &[f64]) -> f64 {
+        self.counts.dots.set(self.counts.dots.get() + 1);
+        self.values.dot_slice(centers)
+    }
+}
+
+impl SubScalarAssign<f64> for TrackedVector<'_> {
+    fn sub_scalar_assign(&mut self, value: f64) {
+        self.counts
+            .corrections
+            .set(self.counts.corrections.get() + 1);
+        self.values.sub_scalar_assign(value);
+    }
+}
+
+impl<'a> MatVec<TrackedVector<'a>> for Source {
+    fn matvec(&self, x: &TrackedVector<'a>) -> Result<TrackedVector<'a>, ReadError> {
+        Ok(TrackedVector {
+            values: self.matvec(&x.values)?,
+            counts: x.counts,
+        })
+    }
+}
+
+#[test]
+fn allocating_forward_products_borrow_inputs_without_scaling() {
+    for centers in [None, Some(vec![1.0, 2.0])] {
+        for scales in [
+            None,
+            Some(vec![2.0, 4.0]),
+            Some(vec![1.0, 1.0]),
+            Some(vec![-2.0, 4.0]),
+        ] {
+            let source = Source {
+                fail: Cell::new(false),
+                fused_calls: Cell::new(0),
+            };
+            let counts = ProductCounts::default();
+            let x = TrackedVector {
+                values: vec![2.0, 4.0],
+                counts: &counts,
+            };
+            let lazy = LazyMatrix::from_parts(&source, centers.clone(), scales);
+            let expected = common::dense_matvec(
+                &common::materialize(
+                    &[vec![1.0, 2.0], vec![3.0, 4.0]],
+                    lazy.centers(),
+                    lazy.scales(),
+                ),
+                &x.values,
+            );
+            assert_eq!(lazy.matvec(&x).unwrap().values, expected);
+            assert_eq!(x.values, [2.0, 4.0]);
+            assert_eq!(counts.clones.get(), usize::from(lazy.scales().is_some()));
+            assert_eq!(counts.dots.get(), usize::from(centers.is_some()));
+            assert_eq!(counts.corrections.get(), usize::from(centers.is_some()));
+        }
+    }
+}
+
+#[test]
+fn allocating_forward_errors_skip_centering_with_or_without_scaling() {
+    for scales in [None, Some(vec![2.0, 4.0])] {
+        let source = Source {
+            fail: Cell::new(true),
+            fused_calls: Cell::new(0),
+        };
+        let counts = ProductCounts::default();
+        let x = TrackedVector {
+            values: vec![2.0, 4.0],
+            counts: &counts,
+        };
+        let lazy = LazyMatrix::from_parts(&source, Some(vec![1.0, 2.0]), scales);
+        assert!(matches!(lazy.matvec(&x), Err(ReadError)));
+        assert_eq!(x.values, [2.0, 4.0]);
+        assert_eq!(counts.clones.get(), usize::from(lazy.scales().is_some()));
+        assert_eq!(counts.dots.get(), 0);
+        assert_eq!(counts.corrections.get(), 0);
     }
 }
 

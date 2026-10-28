@@ -165,9 +165,13 @@ companion packages; the Rust core remains independent of Python and solvers.
     justify it. Keep contiguity an explicit capability, preserve strided views,
     and avoid implicit gathers or scalar runtime dispatch.
 
-- [ ] Avoid cloning the forward input when scaling is inactive.
-  - Preserve the direct backend path for raw and center-only products.
-  - Benchmark before adding more elaborate scratch-storage machinery.
+- [x] Avoid cloning the forward input when scaling is inactive.
+  - The default allocating hook borrows raw and center-only inputs and clones
+    coefficients only when scales are present. Backend overrides retain their
+    existing paths, and centering corrections run only after a successful product.
+  - Regression tests cover clone counts, input preservation, and backend failures.
+    The benchmark retains the former cloning path for comparison with the public
+    operator. See [the investigation](benches/forward_input/README.md).
 
 - [ ] Add multiple-right-hand-side operator capabilities.
   - Prototype `MatMat` and `MatTransposeMat` for multiresponse and multinomial
