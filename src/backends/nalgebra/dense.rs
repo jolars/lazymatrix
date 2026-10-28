@@ -389,6 +389,8 @@ where
     C: Dim,
     S: RawStorage<F, R, C> + MaybeSync,
 {
+    crate::quantiles::buffered_stats_methods!(crate::quantiles::dense_columns);
+
     fn col_means(&self) -> Result<Vec<F>, Self::Error> {
         let n = F::from_usize(self.nrows()).unwrap();
         Ok(collect_columns(self.ncols(), |j| {

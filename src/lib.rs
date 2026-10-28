@@ -142,6 +142,26 @@
 //! let y = lazy.matvec(&v).unwrap(); // == ((X − 1cᵀ)S⁻¹) v, sparsity preserved
 //! ```
 //!
+//! Median centering and interquartile-range scaling use the same operator:
+//!
+//! ```
+//! use lazymatrix::{Centering, Normalization, QuantileRange, Scaling};
+//!
+//! let robust = Normalization::new(
+//!     Centering::Median,
+//!     Scaling::QuantileRange(QuantileRange::default()),
+//! );
+//! let custom = Scaling::QuantileRange(QuantileRange::new(0.1, 0.9));
+//! ```
+//!
+//! Quantiles use exact selection and linear interpolation at `(nrows - 1) * q`.
+//! Sparse duplicates are combined, and implicit zeros contribute to their ranks.
+//! Dense and CSC fitting sort one working column at a time. CSR and Zarr fitting
+//! use O(ncols) selection state and a data-dependent number of scans. These
+//! fitting operations remain serial when `parallel` is enabled. Custom
+//! [`ColumnStats`] implementations must provide [`ColumnStats::col_medians`]
+//! and [`ColumnStats::col_quantile_ranges`] alongside the existing reductions.
+//!
 //! With any ndarray version feature, a matrix view borrows the original array:
 //!
 //! ```
@@ -287,7 +307,8 @@
 //!
 //! With `zarrs`, `ZarrMatrix` wraps an opened synchronous array without reading
 //! its chunks. Each product scans chunks serially, and normalization shares work
-//! through [`ColumnStats::normalization_stats`] to need at most two scans. Working
+//! through [`ColumnStats::normalization_stats`]. Normalization without quantiles
+//! needs at most two scans; exact quantile fitting may need many scans. Working
 //! vectors stay in RAM. Memory for data and codecs depends on chunk size, including
 //! the outer shard for sharded storage; no strict byte budget is imposed. The
 //! backing array must remain unchanged throughout normalization and use.
@@ -435,6 +456,14 @@ mod materialize;
 mod matmat;
 mod matrix;
 mod normalization;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
+mod quantiles;
 mod row;
 mod submatrix;
 #[cfg(any(
@@ -457,7 +486,7 @@ pub use eager::EagerMatrix;
 pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
-    Centering, Normalization, NormalizationParams, NormalizationStats, Scaling,
+    Centering, Normalization, NormalizationParams, NormalizationStats, QuantileRange, Scaling,
 };
 pub use row::LazyRow;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};

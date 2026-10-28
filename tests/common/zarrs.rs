@@ -2,7 +2,9 @@ use super::compat;
 use crate::common;
 use compat::zarrs;
 use compat::{float32, float64, store_chunk, store_subset};
-use lazymatrix::{ColumnStats, LazyMatrix, MatVec, Normalization, ZarrMatrix, ZarrMatrixError};
+use lazymatrix::{
+    ColumnStats, LazyMatrix, MatVec, Normalization, QuantileRange, ZarrMatrix, ZarrMatrixError,
+};
 use std::sync::Arc;
 use zarrs::array::{Array, ArrayBuilder};
 use zarrs::storage::store::MemoryStore;
@@ -768,6 +770,65 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
 }
 
 #[test]
+fn quantile_fitting_shares_scans_and_propagates_later_failures() {
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let spec = Normalization::new(
+            Centering::Median,
+            Scaling::QuantileRange(QuantileRange::default()),
+        );
+        let lazy = LazyMatrix::new(&matrix, spec).unwrap();
+        assert_eq!(lazy.centers().unwrap(), [7.0, 8.0, 9.0]);
+        assert_eq!(lazy.scales().unwrap(), [6.0; 3]);
+        assert_scans(&store, &matrix, 3);
+        store.reset();
+        assert_eq!(matrix.col_medians().unwrap(), [7.0, 8.0, 9.0]);
+        assert_scans(&store, &matrix, 2);
+        store.reset();
+        assert_eq!(
+            matrix
+                .col_quantile_ranges(QuantileRange::default())
+                .unwrap(),
+            [6.0; 3]
+        );
+        assert_scans(&store, &matrix, 3);
+        for fail_after in [0, 6, 13] {
+            store.reset();
+            store.fail_after.store(fail_after, Ordering::Relaxed);
+            let error = LazyMatrix::new(&matrix, spec)
+                .err()
+                .expect("fitting must fail");
+            assert!(error.to_string().contains("injected read failure"));
+            assert_eq!(store.keys.lock().unwrap().len(), fail_after + 1);
+        }
+        store.reset();
+        assert_eq!(
+            LazyMatrix::new(&matrix, spec).unwrap().scales().unwrap(),
+            [6.0; 3]
+        );
+        assert_scans(&store, &matrix, 3);
+    }
+}
+
+#[test]
+fn quantile_scans_preserve_fill_values_and_ignore_padding() {
+    let array = ArrayBuilder::new(vec![3, 1], vec![2, 2], float64(), 8.0_f64)
+        .build(Arc::new(MemoryStore::new()), "/quantile-fill")
+        .unwrap();
+    store_chunk(&array, &[0, 0], &[1.0, f64::NAN, 3.0, f64::NAN]).unwrap();
+    let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
+    assert_eq!(matrix.col_medians().unwrap(), [3.0]);
+    assert_eq!(
+        matrix
+            .col_quantile_ranges(QuantileRange::default())
+            .unwrap(),
+        [3.5]
+    );
+    let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Median, Scaling::L2)).unwrap();
+    approx::assert_abs_diff_eq!(lazy.scales().unwrap()[0], 29.0_f64.sqrt(), epsilon = 1e-12);
+}
+
+#[test]
 fn read_errors_stop_the_scan_and_output_can_be_reused() {
     let (matrix, store) = tracked(false);
     let lazy = LazyMatrix::from_parts(&matrix, Some(vec![2.0; 3]), Some(vec![4.0; 3]));
@@ -817,9 +878,9 @@ fn f32_normalization_and_products_match_known_values() {
         .build(Arc::new(MemoryStore::new()), "/f32")
         .unwrap();
     store_subset(&array, &[1.0_f32, 3.0]).unwrap();
-    common::check_fused_f32(&ZarrMatrix::<_, f32>::try_new(array).unwrap(), |v| {
-        v.to_vec()
-    });
+    let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
+    common::check_quantiles_f32(&matrix);
+    common::check_fused_f32(&matrix, |v| v.to_vec());
     let array = ArrayBuilder::new(vec![3, 2], vec![2, 1], float32(), 0.0f32)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();

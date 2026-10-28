@@ -141,6 +141,9 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
+                common::check_quantiles_f32(&matrix);
+                common::check_quantiles_f32(&matrix.as_ref());
+                common::check_quantiles_f32(&matrix.rb_mut());
                 common::batched::check_batched_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
                 common::batched::check_batched_f32(&matrix.as_ref(), |v| {
                     Col::from_fn(v.len(), |i| v[i])
@@ -173,6 +176,14 @@ macro_rules! backend_suite {
                     );
                     common::assert_close(&matrix.col_mins().unwrap(), &[0.0, -1.0], 1e-10);
                     common::assert_close(&matrix.col_ranges().unwrap(), &[4.0, 1.0], 1e-10);
+                    common::assert_close(&matrix.col_medians().unwrap(), &[0.0, 0.0], 1e-10);
+                    common::assert_close(
+                        &matrix
+                            .col_quantile_ranges(lazymatrix::QuantileRange::default())
+                            .unwrap(),
+                        &[2.0, 0.5],
+                        1e-10,
+                    );
                     common::assert_close(&matrix.col_l1().unwrap(), &[4.0, 1.0], 1e-10);
                     common::assert_close(&matrix.col_l2().unwrap(), &[4.0, 1.0], 1e-10);
                     common::assert_close(&matrix.col_maxabs().unwrap(), &[4.0, 1.0], 1e-10);
@@ -222,7 +233,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn eager_conversion_combines_duplicates_and_ignores_spare_capacity() {
-                use lazymatrix::{MatVec, MaterializeDense, MatrixOwned};
+                use lazymatrix::{ColumnStats, MatVec, MaterializeDense, MatrixOwned};
                 let symbolic = faer::sparse::SymbolicSparseColMat::new_unsorted_checked(
                     3,
                     1,
@@ -231,6 +242,14 @@ macro_rules! backend_suite {
                     vec![2, 0, 2, 99],
                 );
                 let matrix = SparseColMat::new(symbolic, vec![0.25, -0.0, 0.75, 99.0]);
+                common::assert_close(&matrix.col_medians().unwrap(), &[0.0], 0.0);
+                common::assert_close(
+                    &matrix
+                        .col_quantile_ranges(lazymatrix::QuantileRange::default())
+                        .unwrap(),
+                    &[0.5],
+                    0.0,
+                );
                 let raw = LazyMatrix::<_, f64>::from_parts(&matrix, None, None)
                     .to_eager::<Mat<f64>>()
                     .unwrap();
@@ -284,6 +303,7 @@ macro_rules! backend_suite {
             #[test]
             fn fused_products_support_f32() {
                 let matrix = Mat::from_fn(2, 1, |i, _| (2 * i + 1) as f32);
+                common::check_quantiles_f32(&matrix);
                 let to_v = |v: &[f32]| Col::from_fn(v.len(), |i| v[i]);
                 common::check_fused_f32(&matrix, to_v);
                 let sparse = SparseColMat::try_new_from_triplets(
@@ -296,6 +316,7 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&sparse, to_v);
+                common::check_quantiles_f32(&sparse);
                 common::run_dense_centered_f32_suite(
                     |dense| Mat::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
                     to_v,

@@ -189,6 +189,8 @@ impl<F> ColumnStats<F> for SparseColMat<usize, F>
 where
     F: Scalar + faer_traits::ComplexField + MaybeSend + MaybeSync,
 {
+    crate::quantiles::buffered_stats_methods!(crate::quantiles::borrowed_columns);
+
     fn col_means(&self) -> Result<Vec<F>, Self::Error> {
         let n = F::from_usize(self.nrows()).unwrap();
         let col_ptr = self.col_ptr();

@@ -133,13 +133,16 @@ Use [scikit-learn's preprocessing methods](https://scikit-learn.org/stable/modul
 as a coverage reference. Evaluate additions against the library's scope rather
 than assuming full API or numerical parity.
 
-- [ ] Evaluate median centering and quantile-range scaling (`RobustScaler`).
-  - Include the default interquartile range, configurable lower and upper
-    quantiles, and optional standard-normal calibration (`unit_variance`).
-  - Reuse `NormalizationParams` to apply fitted centers and scales. Define
-    exact versus approximate quantiles, scan costs, and workspace requirements
-    for dense, sparse, and chunked storage. Combine sparse duplicates and include
-    implicit zeros without silently densifying or converting CSR to CSC.
+- [x] Add median centering and configurable quantile-range scaling.
+  - Use exact linear quantiles, with the interquartile range as the default.
+    Reuse `NormalizationParams` and preserve sparse duplicates and implicit zeros.
+  - Dense and CSC fitting reuse one working column; CSR and Zarr use O(ncols)
+    selection state and exact repeated scans without storage conversion.
+    Document scan costs, workspace, and numerical differences from scikit-learn.
+- [ ] Evaluate optional standard-normal calibration (`unit_variance`) for
+  quantile-range scaling, as provided by `RobustScaler`.
+- [ ] Consider explicitly approximate quantiles if storage-backed consumers
+  need fewer fitting scans. Keep exact quantiles as the default.
 
 - [ ] Extend min-max scaling beyond the default `[0, 1]` range (`MinMaxScaler`).
   - Evaluate a parameterized `feature_range` recipe that computes explicit
@@ -162,7 +165,8 @@ than assuming full API or numerical parity.
     array is distinct from updating fitted parameters as new batches arrive.
 
 - [ ] Expose the existing Rust normalization choices in Python.
-  - Include minimum centering and range, maximum-absolute, L1, and L2 scaling.
+  - Include minimum and median centering and range, quantile-range,
+    maximum-absolute, L1, and L2 scaling.
     Coordinate this with the reusable fitted-parameter task above.
 
 - [ ] Document intentional numerical differences from scikit-learn.

@@ -52,6 +52,15 @@ fn finish_norm<F: Scalar>(sum: F, scale: Scaling, rows: usize) -> F {
 }
 
 impl<A: ZarrArray<F>, F: Scalar> ZarrMatrix<A, F> {
+    fn quantiles(
+        &self,
+        request: crate::quantiles::Request,
+    ) -> Result<crate::NormalizationStats<F>, ZarrMatrixError> {
+        crate::quantiles::stream(self.nrows(), self.ncols(), request, |visit| {
+            self.for_each_value(|_, j, value| visit(j, value, 1))
+        })
+    }
+
     fn reductions(
         &self,
         mean: bool,
@@ -101,6 +110,9 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
         &self,
         spec: Normalization,
     ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        if spec.center == Centering::Median || matches!(spec.scale, Scaling::QuantileRange(_)) {
+            return crate::quantiles::fit(self, spec, |request| self.quantiles(request));
+        }
         if spec == Normalization::default() {
             return Ok((None, None));
         }
@@ -124,6 +136,7 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
             Centering::None => None,
             Centering::Mean => means.clone(),
             Centering::Min => Some(stats.iter().map(Reduction::min).collect()),
+            Centering::Median => unreachable!("quantile fitting is handled before reductions"),
         };
         let scales = match spec.scale {
             Scaling::None => None,
@@ -148,6 +161,18 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
             .iter()
             .map(|s| s.sum / n)
             .collect())
+    }
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+        Ok(self
+            .quantiles(crate::quantiles::Request::median())?
+            .0
+            .unwrap())
+    }
+    fn col_quantile_ranges(&self, range: crate::QuantileRange) -> Result<Vec<F>, Self::Error> {
+        Ok(self
+            .quantiles(crate::quantiles::Request::range(range))?
+            .1
+            .unwrap())
     }
     fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
         self.column_norms(Some(&self.col_means()?), Scaling::Sd)

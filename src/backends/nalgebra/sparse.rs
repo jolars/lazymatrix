@@ -187,6 +187,8 @@ impl<F> ColumnStats<F> for CscMatrix<F>
 where
     F: Scalar + nalgebra::Scalar + MaybeSend + MaybeSync,
 {
+    crate::quantiles::buffered_stats_methods!(crate::quantiles::borrowed_columns);
+
     fn col_means(&self) -> Result<Vec<F>, Self::Error> {
         let n = F::from_usize(self.nrows()).unwrap();
         let (col_offsets, _row_idx, values) = self.csc_data();

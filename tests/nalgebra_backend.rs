@@ -191,11 +191,14 @@ macro_rules! backend_suite {
             #[test]
             fn fused_products_support_f32() {
                 let matrix = DMatrix::from_column_slice(2, 1, &[1.0_f32, 3.0]);
+                common::check_quantiles_f32(&matrix);
                 common::check_fused_f32(&matrix, DVector::from_column_slice);
                 let sparse =
                     CscMatrix::try_from_csc_data(2, 1, vec![0, 2], vec![0, 1], vec![1.0_f32, 3.0])
                         .unwrap();
                 common::check_fused_f32(&sparse, DVector::from_column_slice);
+                common::check_quantiles_f32(&sparse);
+                common::check_quantiles_f32(&CsrMatrix::from(&sparse));
                 common::run_dense_centered_f32_suite(
                     |dense| DMatrix::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
                     DVector::from_column_slice,

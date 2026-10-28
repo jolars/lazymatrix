@@ -78,7 +78,7 @@ pub(crate) use operator::scale_output;
 pub(crate) use operator::{mat_transpose_vec_normalized_into, matvec_normalized_into};
 
 pub use crate::normalization::{
-    Centering, Normalization, NormalizationParams, NormalizationStats, Scaling,
+    Centering, Normalization, NormalizationParams, NormalizationStats, QuantileRange, Scaling,
 };
 pub use blocks::{DenseBlock, ReadBlock};
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};
@@ -91,6 +91,14 @@ pub use operator::{
 };
 pub use rows::SparseRows;
 pub use stats::ColumnStats;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
+pub(crate) use stats::normalization_stats_with_quantiles;
 pub use submatrix::SubmatrixKernel;
 pub use vectors::{
     DotProduct, DotSlice, ElemDivAssign, L2Norm, ScaleAssign, ScaledAddAssign, ScaledSubSlice,

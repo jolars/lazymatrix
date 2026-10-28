@@ -101,6 +101,9 @@ pub trait ZarrArray<F: Scalar>: private::ArrayRead<F> {}
 /// (the outer shard for a sharded array). Choose chunks that fit in RAM: this
 /// adapter does not impose a byte budget, cache chunks, or prefetch data.
 /// The `parallel` feature does not parallelize its scans.
+/// Median and quantile-range fitting use exact repeated scans with O(ncols)
+/// selection state. Their scan counts depend on the values; fitting a median
+/// and a quantile range together shares those scans.
 ///
 /// The backing array must remain unchanged between normalization and products,
 /// and throughout each operation. The adapter provides no snapshot isolation.

@@ -132,6 +132,11 @@ name = "column_sds"
 harness = false
 
 [[bench]]
+name = "quantile_fitting"
+harness = false
+required-features = ["ndarray_all", "sprs_all", "zarrs_all"]
+
+[[bench]]
 name = "sprs_backend"
 harness = false
 required-features = ["sprs_all"]

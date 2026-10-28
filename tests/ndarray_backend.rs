@@ -397,6 +397,9 @@ macro_rules! backend_suite {
 
             #[test]
             fn ndarray_f32_normalization_and_products() {
+                let quantiles = array![[1.0_f32], [3.0]];
+                common::check_quantiles_f32(&quantiles);
+                common::check_quantiles_f32(&quantiles.slice(s![..;-1, ..]));
                 common::run_dense_centered_f32_suite(
                     |dense| Array2::from_shape_fn((dense.len(), dense[0].len()), |(i, j)| dense[i][j]),
                     |v| Array1::from_vec(v.to_vec()),

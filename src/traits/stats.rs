@@ -1,5 +1,5 @@
 use super::{MatrixErrorType, Scalar};
-use crate::{Centering, Normalization, Scaling};
+use crate::{Centering, Normalization, NormalizationStats, QuantileRange, Scaling};
 
 /// Column-wise statistics of a design matrix, returned as plain `Vec<F>` of
 /// length `ncols`.
@@ -30,30 +30,29 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
         &self,
         spec: Normalization,
     ) -> Result<crate::NormalizationStats<F>, Self::Error> {
-        let centers = match spec.center {
-            Centering::None => None,
-            Centering::Mean => Some(self.col_means()?),
-            Centering::Min => Some(self.col_mins()?),
-        };
-        let scales = match spec.scale {
-            Scaling::None => None,
-            Scaling::Sd => Some(self.col_sds()?),
-            Scaling::Range => Some(self.col_ranges()?),
-            Scaling::L1 => Some(match &centers {
-                Some(c) => self.col_l1_centered(c)?,
-                None => self.col_l1()?,
-            }),
-            Scaling::L2 => Some(match &centers {
-                Some(c) => self.col_l2_centered(c)?,
-                None => self.col_l2()?,
-            }),
-            Scaling::MaxAbs => Some(match &centers {
-                Some(c) => self.col_maxabs_centered(c)?,
-                None => self.col_maxabs()?,
-            }),
-        };
-        Ok((centers, scales))
+        normalization_stats_with_quantiles(self, spec, None)
     }
+
+    /// Column medians, using linear interpolation for an even number of rows.
+    ///
+    /// Empty columns and columns containing `NaN` produce `NaN`. Infinities
+    /// retain their order; equal infinite endpoints retain that infinity, and
+    /// interpolation between opposite infinities produces `NaN`.
+    ///
+    /// Dense and CSC backends sort one working column at a time. CSR and Zarr
+    /// backends use exact repeated scans with O(ncols) state; their scan counts
+    /// depend on the values. Sparse duplicates are summed before selection, and
+    /// implicit zeros contribute to the ranks without being materialized.
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error>;
+
+    /// Column quantile ranges, using linear interpolation at `(n - 1) * q`.
+    ///
+    /// This statistic is translation-invariant. Finite ranges are accumulated
+    /// from weighted gaps between order statistics to retain small variation
+    /// around large offsets. Empty columns and stored `NaN` values produce
+    /// `NaN`; nonfinite range subtraction follows IEEE arithmetic. Exact zero
+    /// ranges remain zero here. Complexity and workspace match [`Self::col_medians`].
+    fn col_quantile_ranges(&self, range: QuantileRange) -> Result<Vec<F>, Self::Error>;
 
     /// Column means `c_j = (Σ_i x_ij) / n`.
     fn col_means(&self) -> Result<Vec<F>, Self::Error>;
@@ -101,11 +100,62 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
     fn col_maxabs_centered(&self, centers: &[F]) -> Result<Vec<F>, Self::Error>;
 }
 
+pub(crate) fn normalization_stats_with_quantiles<M, F>(
+    matrix: &M,
+    spec: Normalization,
+    quantiles: Option<NormalizationStats<F>>,
+) -> Result<NormalizationStats<F>, M::Error>
+where
+    M: ColumnStats<F> + ?Sized,
+    F: Scalar,
+{
+    let (medians, ranges) = quantiles.unwrap_or_default();
+    let centers = match spec.center {
+        Centering::None => None,
+        Centering::Mean => Some(matrix.col_means()?),
+        Centering::Min => Some(matrix.col_mins()?),
+        Centering::Median => Some(match medians {
+            Some(values) => values,
+            None => matrix.col_medians()?,
+        }),
+    };
+    let scales = match spec.scale {
+        Scaling::None => None,
+        Scaling::Sd => Some(matrix.col_sds()?),
+        Scaling::Range => Some(matrix.col_ranges()?),
+        Scaling::QuantileRange(range) => Some(match ranges {
+            Some(values) => values,
+            None => matrix.col_quantile_ranges(range)?,
+        }),
+        Scaling::L1 => Some(match &centers {
+            Some(c) => matrix.col_l1_centered(c)?,
+            None => matrix.col_l1()?,
+        }),
+        Scaling::L2 => Some(match &centers {
+            Some(c) => matrix.col_l2_centered(c)?,
+            None => matrix.col_l2()?,
+        }),
+        Scaling::MaxAbs => Some(match &centers {
+            Some(c) => matrix.col_maxabs_centered(c)?,
+            None => matrix.col_maxabs()?,
+        }),
+    };
+    Ok((centers, scales))
+}
+
 impl<M, F> ColumnStats<F> for &M
 where
     M: ColumnStats<F> + ?Sized,
     F: Scalar,
 {
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_medians()
+    }
+
+    fn col_quantile_ranges(&self, range: QuantileRange) -> Result<Vec<F>, Self::Error> {
+        (**self).col_quantile_ranges(range)
+    }
+
     fn normalization_stats(
         &self,
         spec: Normalization,
@@ -159,6 +209,14 @@ where
     M: ColumnStats<F> + ?Sized,
     F: Scalar,
 {
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+        (**self).col_medians()
+    }
+
+    fn col_quantile_ranges(&self, range: QuantileRange) -> Result<Vec<F>, Self::Error> {
+        (**self).col_quantile_ranges(range)
+    }
+
     fn normalization_stats(
         &self,
         spec: Normalization,

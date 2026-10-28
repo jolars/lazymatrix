@@ -7,6 +7,29 @@ use crate::backends::support::{
 };
 use crate::{ColumnStats, Scalar};
 
+fn quantiles<F: Scalar, I: SpIndex, Iptr: SpIndex>(
+    matrix: CsMatViewI<'_, F, I, Iptr>,
+    request: crate::quantiles::Request,
+) -> crate::NormalizationStats<F> {
+    if matrix.is_csc() {
+        crate::quantiles::columns(matrix.rows(), matrix.cols(), request, |j, entries| {
+            entries.extend(
+                matrix
+                    .outer_view(j)
+                    .unwrap()
+                    .iter()
+                    .map(|(i, &value)| (i, value)),
+            );
+        })
+    } else {
+        crate::quantiles::sparse_rows(matrix.rows(), matrix.cols(), request, |i, visit| {
+            for (j, &value) in matrix.outer_view(i).unwrap().iter() {
+                visit(j, value);
+            }
+        })
+    }
+}
+
 // CSR accumulates all columns in one scan; CSC reduces independent borrowed
 // slices and can parallelize without allocating a converted sparse matrix.
 fn reduce_columns<F, I, Iptr, T>(
@@ -54,6 +77,27 @@ where
     IS: Deref<Target = [I]>,
     DS: Deref<Target = [F]>,
 {
+    fn normalization_stats(
+        &self,
+        spec: crate::Normalization,
+    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        crate::quantiles::fit(self, spec, |request| Ok(quantiles(self.view(), request)))
+    }
+
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+        Ok(quantiles(self.view(), crate::quantiles::Request::median())
+            .0
+            .unwrap())
+    }
+
+    fn col_quantile_ranges(&self, range: crate::QuantileRange) -> Result<Vec<F>, Self::Error> {
+        Ok(
+            quantiles(self.view(), crate::quantiles::Request::range(range))
+                .1
+                .unwrap(),
+        )
+    }
+
     fn col_means(&self) -> Result<Vec<F>, Self::Error> {
         let n = F::from_usize(self.rows()).unwrap();
         Ok(reduce_columns(

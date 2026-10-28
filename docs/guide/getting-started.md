@@ -58,6 +58,34 @@ For repeated operations, reusable-output traits and workspace methods can reduce
 allocation. See the [API documentation](https://docs.rs/lazymatrix) for the
 capabilities supported by each backend.
 
+## Fit robust normalization
+
+Subtract column medians and divide by the interquartile range:
+
+```rust
+use lazymatrix::QuantileRange;
+
+let robust = LazyMatrix::new(
+    x.view(),
+    Normalization::new(
+        Centering::Median,
+        Scaling::QuantileRange(QuantileRange::default()),
+    ),
+).unwrap();
+```
+
+Use `QuantileRange::new(0.1, 0.9)` for the 10th-to-90th percentile range. Bounds
+are probabilities satisfying `0 <= lower < upper <= 1`; invalid bounds panic.
+Median centering and quantile-range scaling can also be used independently or
+combined with the existing options. Unlike standard-normal calibration, a raw
+quantile range does not target unit variance.
+
+Fitting uses exact quantiles with linear interpolation at `(nrows - 1) * q`.
+Dense and CSC backends sort one working column at a time. CSR and Zarr use
+O(ncols) selection state and repeated scans whose count depends on the values.
+They preserve implicit zeros and sparse storage. See [how it works](/guide/how-it-works#quantile-fitting)
+for memory, numerical behavior, and fitting costs.
+
 ## Materialize explicitly
 
 Choose an eager representation when dense storage and repeated operations suit

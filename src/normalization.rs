@@ -15,6 +15,52 @@ pub enum Centering {
     Mean,
     /// Subtract the column minimum.
     Min,
+    /// Subtract the column median.
+    Median,
+}
+
+/// Validated probabilities defining a column's quantile range.
+///
+/// Bounds are probabilities in `[0, 1]`, rather than percentages. The default
+/// is the interquartile range, with bounds `0.25` and `0.75`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct QuantileRange {
+    lower: f64,
+    upper: f64,
+}
+
+// Private, validated bounds cannot contain NaN, so equality is an equivalence relation.
+impl Eq for QuantileRange {}
+
+impl QuantileRange {
+    /// Construct a range with `0 <= lower < upper <= 1`.
+    ///
+    /// # Panics
+    /// Panics if either bound is nonfinite or the bounds are out of order or
+    /// outside `[0, 1]`.
+    pub fn new(lower: f64, upper: f64) -> Self {
+        assert!(
+            lower.is_finite() && upper.is_finite() && 0.0 <= lower && lower < upper && upper <= 1.0,
+            "quantile bounds must satisfy 0 <= lower < upper <= 1"
+        );
+        Self { lower, upper }
+    }
+
+    /// Lower quantile probability.
+    pub fn lower(self) -> f64 {
+        self.lower
+    }
+
+    /// Upper quantile probability.
+    pub fn upper(self) -> f64 {
+        self.upper
+    }
+}
+
+impl Default for QuantileRange {
+    fn default() -> Self {
+        Self::new(0.25, 0.75)
+    }
 }
 
 /// How to scale each column.
@@ -33,13 +79,16 @@ pub enum Scaling {
     L2,
     /// Divide by the range, `max - min`.
     Range,
+    /// Divide by the upper quantile minus the lower quantile.
+    ///
+    /// Quantiles use linear interpolation at position `(n - 1) * q`.
+    QuantileRange(QuantileRange),
 }
 
 /// A full normalization specification: an independent [`Centering`] and
 /// [`Scaling`] choice.
 ///
-/// When both are active, scales are computed from the **centered** columns
-/// Non-translation-invariant scales are computed from centered columns (see
+/// Non-translation-invariant scales are computed from **centered** columns (see
 /// [`ColumnStats::col_l1_centered`](crate::traits::ColumnStats::col_l1_centered),
 /// [`ColumnStats::col_l2_centered`](crate::traits::ColumnStats::col_l2_centered),
 /// and
@@ -102,5 +151,29 @@ impl<F: crate::Scalar> NormalizationParams<F> {
     /// Recover the fitted centers and scales without copying.
     pub fn into_parts(self) -> NormalizationStats<F> {
         (self.centers, self.scales)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::QuantileRange;
+
+    #[test]
+    fn quantile_range_validates_bounds_and_defaults_to_iqr() {
+        let range = QuantileRange::default();
+        assert_eq!((range.lower(), range.upper()), (0.25, 0.75));
+        assert_eq!(QuantileRange::new(-0.0, 1.0), QuantileRange::new(0.0, 1.0));
+        for (lower, upper) in [
+            (-0.1, 0.75),
+            (0.25, 1.1),
+            (0.5, 0.5),
+            (0.75, 0.25),
+            (f64::NAN, 0.75),
+            (0.25, f64::NAN),
+            (f64::NEG_INFINITY, 0.75),
+            (0.25, f64::INFINITY),
+        ] {
+            assert!(std::panic::catch_unwind(|| QuantileRange::new(lower, upper)).is_err());
+        }
     }
 }

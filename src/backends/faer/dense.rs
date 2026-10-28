@@ -419,6 +419,8 @@ macro_rules! impl_dense_stats {
         where
             F: Scalar + MaybeSend + MaybeSync,
         {
+            crate::quantiles::buffered_stats_methods!(crate::quantiles::dense_columns);
+
             fn col_means(&self) -> Result<Vec<F>, Self::Error> {
                 Ok(means(self.nrows(), self.ncols(), |i, j| self[(i, j)]))
             }

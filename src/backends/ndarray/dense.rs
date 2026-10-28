@@ -309,6 +309,8 @@ where
     F: Scalar + MaybeSend + MaybeSync,
     S: Data<Elem = F> + MaybeSync,
 {
+    crate::quantiles::buffered_stats_methods!(crate::quantiles::dense_columns);
+
     fn col_means(&self) -> Result<Vec<F>, Self::Error> {
         let n = F::from_usize(self.nrows()).unwrap();
         Ok(collect_columns(self.ncols(), |j| {

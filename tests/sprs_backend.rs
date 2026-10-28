@@ -24,6 +24,19 @@ fn build(tm: &TestMatrix) -> CsMat<f64> {
 }
 
 #[test]
+fn quantiles_support_f32_storage_orientations_and_index_widths() {
+    let matrix = CsMat::new_csc((2, 1), vec![0, 2], vec![0, 1], vec![1.0_f32, 3.0]);
+    common::check_quantiles_f32(&matrix);
+    common::check_quantiles_f32(&matrix.view());
+    common::check_quantiles_f32(&matrix.to_csr());
+    common::check_quantiles_f32(&SprsCsc::try_new(matrix.view()).unwrap());
+    common::check_quantiles_f32(&SprsCsr::try_new(matrix.to_csr()).unwrap());
+    let matrix = CsMatI::<f32, u32, u64>::new((2, 1), vec![0, 1, 2], vec![0, 0], vec![1.0, 3.0]);
+    common::check_quantiles_f32(&matrix);
+    common::check_quantiles_f32(&matrix.to_csc());
+}
+
+#[test]
 fn sprs_backend_suite() {
     common::batched::run_batched_suite(build);
     common::batched::run_batched_suite(|tm| build(tm).to_csr());

@@ -11,8 +11,8 @@ use lazymatrix::VectorView;
 use lazymatrix::{
     Centering, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm, LazyMatrix,
     LazySparseColumn, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape,
-    Normalization, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice, Scaling,
-    SparseColumns, SparseRows, SubScalarAssign, SumEntries,
+    Normalization, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
+    Scaling, SparseColumns, SparseRows, SubScalarAssign, SumEntries,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -24,6 +24,27 @@ pub struct TestMatrix {
     pub ncols: usize,
     pub dense: Vec<Vec<f64>>,               // n×p, row-major
     pub triplets: Vec<(usize, usize, f64)>, // stored nonzeros (row, col, val)
+}
+
+pub fn matrix_from_dense(dense: Vec<Vec<f64>>) -> TestMatrix {
+    let nrows = dense.len();
+    let ncols = dense.first().map_or(0, Vec::len);
+    let triplets = dense
+        .iter()
+        .enumerate()
+        .flat_map(|(i, row)| {
+            row.iter()
+                .enumerate()
+                .filter(|&(_, &value)| value != 0.0)
+                .map(move |(j, &value)| (i, j, value))
+        })
+        .collect();
+    TestMatrix {
+        nrows,
+        ncols,
+        dense,
+        triplets,
+    }
 }
 
 /// A backend-independent destination for coefficient-space products.
@@ -105,7 +126,12 @@ where
             let expected: f64 = (0..n).map(|i| tm.dense[i][j] * weights[i]).sum();
             approx::assert_abs_diff_eq!(sum, expected, epsilon = 1e-10);
         }
-        for center in [Centering::None, Centering::Mean, Centering::Min] {
+        for center in [
+            Centering::None,
+            Centering::Mean,
+            Centering::Min,
+            Centering::Median,
+        ] {
             for scale in [
                 Scaling::None,
                 Scaling::Sd,
@@ -113,6 +139,7 @@ where
                 Scaling::L2,
                 Scaling::MaxAbs,
                 Scaling::Range,
+                Scaling::QuantileRange(QuantileRange::default()),
             ] {
                 let lazy = LazyMatrix::new(&matrix, Normalization::new(center, scale)).unwrap();
                 lazy.weighted_gram_into(&weights, &mut out).unwrap();
@@ -1013,6 +1040,7 @@ pub fn run_backend_suite<M, V>(
     new_matches_oracle(&build, &to_v, &from_v);
     column_stats_fixed(&build);
     column_stats_respect_sparse_storage(&build);
+    quantile_statistics(&build);
     normalization_statistic_dispatch(&build);
     column_sds_large_offset(&build);
     zero_scale_guard(&build, &to_v, &from_v);
@@ -2226,7 +2254,12 @@ fn new_matches_oracle<M, V>(
     let v = to_v(&random_vec(15, tm.ncols));
     let u = to_v(&random_vec(16, tm.nrows));
 
-    let centerings = [Centering::None, Centering::Mean, Centering::Min];
+    let centerings = [
+        Centering::None,
+        Centering::Mean,
+        Centering::Min,
+        Centering::Median,
+    ];
     let scalings = [
         Scaling::None,
         Scaling::Sd,
@@ -2234,6 +2267,8 @@ fn new_matches_oracle<M, V>(
         Scaling::L2,
         Scaling::MaxAbs,
         Scaling::Range,
+        Scaling::QuantileRange(QuantileRange::default()),
+        Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
     ];
     for center in centerings {
         for scale in scalings {
@@ -2245,8 +2280,180 @@ fn new_matches_oracle<M, V>(
             assert_close(&got, &dense_matvec(&xtilde, &from_v(&v)), EPS);
             let got_t = from_v(&lazy.mat_transpose_vec(&u).unwrap());
             assert_close(&got_t, &dense_tmatvec(&xtilde, &from_v(&u)), EPS);
+            approx::assert_abs_diff_eq!(
+                dot(&got, &from_v(&u)),
+                dot(&from_v(&v), &got_t),
+                epsilon = 1e-9
+            );
+
+            if center == Centering::Median || matches!(scale, Scaling::QuantileRange(_)) {
+                let prediction = random_matrix(141, 7, tm.ncols, 0.6);
+                let reused = LazyMatrix::from_normalization(
+                    build(&prediction),
+                    lazy.normalization().clone(),
+                );
+                let dense = materialize(&prediction.dense, lazy.centers(), lazy.scales());
+                assert_close(
+                    &from_v(&reused.matvec(&v).unwrap()),
+                    &dense_matvec(&dense, &from_v(&v)),
+                    EPS,
+                );
+            }
         }
     }
+}
+
+fn sorted_quantile(values: &[f64], q: f64) -> f64 {
+    if values.is_empty() || values.iter().any(|x| x.is_nan()) {
+        return f64::NAN;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let rank = q * (sorted.len() - 1) as f64;
+    let lo = rank.floor() as usize;
+    let hi = rank.ceil() as usize;
+    if lo == hi || sorted[lo] == sorted[hi] {
+        sorted[lo]
+    } else {
+        sorted[lo] * (1.0 - (rank - lo as f64)) + sorted[hi] * (rank - lo as f64)
+    }
+}
+
+fn assert_quantile_values(actual: &[f64], expected: &[f64], epsilon: f64) {
+    assert_eq!(actual.len(), expected.len());
+    for (&actual, &expected) in actual.iter().zip(expected) {
+        if expected.is_nan() {
+            assert!(actual.is_nan());
+        } else if expected.is_infinite() {
+            assert_eq!(actual, expected);
+        } else {
+            approx::assert_abs_diff_eq!(actual, expected, epsilon = epsilon);
+        }
+    }
+}
+
+fn quantile_statistics<M>(build: &impl Fn(&TestMatrix) -> M)
+where
+    M: ColumnStats<f64> + MatrixShape,
+{
+    for (nrows, ncols, density) in [
+        (0, 3, 0.0),
+        (5, 0, 0.0),
+        (1, 4, 0.5),
+        (2, 4, 0.7),
+        (5, 4, 0.3),
+        (8, 4, 1.0),
+        (13, 3, 0.0),
+    ] {
+        let tm = random_matrix(370, nrows, ncols, density);
+        let matrix = build(&tm);
+        let medians: Vec<_> = (0..ncols)
+            .map(|j| sorted_quantile(&(0..nrows).map(|i| tm.dense[i][j]).collect::<Vec<_>>(), 0.5))
+            .collect();
+        assert_quantile_values(&matrix.col_medians().unwrap(), &medians, EPS);
+        for range in [
+            QuantileRange::default(),
+            QuantileRange::new(0.0, 1.0),
+            QuantileRange::new(0.0, 0.1),
+            QuantileRange::new(0.1, 0.9),
+        ] {
+            let ranges: Vec<_> = (0..ncols)
+                .map(|j| {
+                    let values: Vec<_> = (0..nrows).map(|i| tm.dense[i][j]).collect();
+                    sorted_quantile(&values, range.upper())
+                        - sorted_quantile(&values, range.lower())
+                })
+                .collect();
+            assert_quantile_values(&matrix.col_quantile_ranges(range).unwrap(), &ranges, EPS);
+            let normalized = LazyMatrix::new(
+                &matrix,
+                Normalization::new(Centering::Median, Scaling::QuantileRange(range)),
+            )
+            .unwrap();
+            assert_quantile_values(normalized.centers().unwrap(), &medians, EPS);
+            let guarded: Vec<_> = ranges
+                .iter()
+                .map(|&x| if x == 0.0 { 1.0 } else { x })
+                .collect();
+            assert_quantile_values(normalized.scales().unwrap(), &guarded, EPS);
+        }
+    }
+
+    let tm = matrix_from_dense(vec![
+        vec![1.0, -2.0, 2.0],
+        vec![-2.0, 1.0, 3.0],
+        vec![4.0, 1.0, -2.0],
+    ]);
+    let matrix = build(&tm);
+    let normalized = LazyMatrix::new(
+        &matrix,
+        Normalization::new(
+            Centering::Median,
+            Scaling::QuantileRange(QuantileRange::default()),
+        ),
+    )
+    .unwrap();
+    assert_close(normalized.centers().unwrap(), &[1.0, 1.0, 2.0], EPS);
+    assert_close(normalized.scales().unwrap(), &[3.0, 1.5, 2.5], EPS);
+    let dense = materialize(&tm.dense, normalized.centers(), normalized.scales());
+    for (actual, expected) in dense.iter().zip([
+        vec![0.0, -2.0, 0.0],
+        vec![-1.0, 0.0, 0.4],
+        vec![1.0, 0.0, -1.6],
+    ]) {
+        assert_close(actual, &expected, EPS);
+    }
+
+    for (values, median, range) in [
+        (
+            vec![1e16, 1e16 + 2.0, 1e16 + 4.0, 1e16 + 6.0],
+            1e16 + 4.0,
+            3.0,
+        ),
+        (vec![-f64::MAX, f64::MAX], 0.0, f64::MAX),
+        (vec![f64::NAN, 1.0], f64::NAN, f64::NAN),
+        (vec![f64::INFINITY, f64::INFINITY], f64::INFINITY, f64::NAN),
+        (
+            vec![f64::NEG_INFINITY, 0.0, f64::INFINITY],
+            0.0,
+            f64::INFINITY,
+        ),
+        (vec![-f64::from_bits(1), 0.0, f64::from_bits(1)], 0.0, 0.0),
+    ] {
+        let tm = matrix_from_dense(values.into_iter().map(|x| vec![x]).collect());
+        let matrix = build(&tm);
+        assert_quantile_values(&matrix.col_medians().unwrap(), &[median], 0.0);
+        assert_quantile_values(
+            &matrix
+                .col_quantile_ranges(QuantileRange::default())
+                .unwrap(),
+            &[range],
+            0.0,
+        );
+    }
+}
+
+pub fn check_quantiles_f32<M: ColumnStats<f32>>(matrix: &M) {
+    assert_eq!(matrix.col_medians().unwrap(), [2.0]);
+    assert_eq!(
+        matrix
+            .col_quantile_ranges(QuantileRange::default())
+            .unwrap(),
+        [1.0]
+    );
+    assert_eq!(
+        matrix
+            .col_quantile_ranges(QuantileRange::new(0.0, 1.0))
+            .unwrap(),
+        [2.0]
+    );
+    let stats = matrix
+        .normalization_stats(Normalization::new(
+            Centering::Median,
+            Scaling::QuantileRange(QuantileRange::default()),
+        ))
+        .unwrap();
+    assert_eq!(stats, (Some(vec![2.0]), Some(vec![1.0])));
 }
 
 /// (5): `ColumnStats` against hand-computed values on a fixed tiny matrix,
@@ -2374,6 +2581,14 @@ where
     assert_close(centered_l1.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
     assert_close(centered_l1.scales().unwrap(), &[10.0 / 3.0, 1.0, 1.0], EPS);
 
+    let median_l1 = LazyMatrix::new(
+        build(&tm),
+        Normalization::new(Centering::Median, Scaling::L1),
+    )
+    .unwrap();
+    assert_close(median_l1.centers().unwrap(), &[1.0, 0.0, 5.0], EPS);
+    assert_close(median_l1.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
+
     let min_range = LazyMatrix::new(
         build(&tm),
         Normalization::new(Centering::Min, Scaling::Range),
@@ -2456,13 +2671,19 @@ fn intercept_products<M, V>(
     ] {
         let tm = random_matrix(831, n, p, density);
         let matrix = build(&tm);
-        for center in [Centering::None, Centering::Mean, Centering::Min] {
+        for center in [
+            Centering::None,
+            Centering::Mean,
+            Centering::Min,
+            Centering::Median,
+        ] {
             for scale in [
                 Scaling::None,
                 Scaling::Sd,
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::Range,
+                Scaling::QuantileRange(QuantileRange::default()),
                 Scaling::MaxAbs,
             ] {
                 // Empty statistics can be nonfinite; finite explicit parameters
@@ -2676,7 +2897,12 @@ where
     for (rows, cols, density) in [(7, 4, 0.4), (3, 2, 0.0), (0, 3, 0.0), (3, 0, 0.0)] {
         let tm = random_matrix(4821, rows, cols, density);
         let source = build(&tm);
-        for center in [Centering::None, Centering::Mean, Centering::Min] {
+        for center in [
+            Centering::None,
+            Centering::Mean,
+            Centering::Min,
+            Centering::Median,
+        ] {
             for scale in [
                 Scaling::None,
                 Scaling::Sd,
@@ -2684,6 +2910,7 @@ where
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::MaxAbs,
+                Scaling::QuantileRange(QuantileRange::default()),
             ] {
                 let lazy = LazyMatrix::new(&source, Normalization::new(center, scale)).unwrap();
                 let expected: Vec<_> = materialize(&tm.dense, lazy.centers(), lazy.scales())

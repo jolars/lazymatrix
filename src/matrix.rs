@@ -221,7 +221,7 @@ where
     /// to `spec`.
     ///
     /// When both centering and scaling are requested, scales are computed from
-    /// the *centered* columns. Standard deviation and range are
+    /// the *centered* columns. Standard deviation, range, and quantile range are
     /// centering-invariant; `L1`, `L2`, and `MaxAbs` use sparse closed-form
     /// centered variants.
     ///

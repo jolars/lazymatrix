@@ -196,7 +196,11 @@ macro_rules! failing_stats {
 }
 
 impl ColumnStats<f64> for Source {
+    fn col_quantile_ranges(&self, _: lazymatrix::QuantileRange) -> Result<Vec<f64>, ReadError> {
+        Err(ReadError)
+    }
     failing_stats!(
+        col_medians,
         col_means,
         col_sds,
         col_mins,
@@ -263,7 +267,11 @@ impl MatrixErrorType for DefaultStats {
     type Error = ReadError;
 }
 impl ColumnStats<f64> for DefaultStats {
+    fn col_quantile_ranges(&self, _: lazymatrix::QuantileRange) -> Result<Vec<f64>, ReadError> {
+        Err(ReadError)
+    }
     failing_stats!(
+        col_medians,
         col_means,
         col_sds,
         col_mins,
@@ -283,7 +291,12 @@ fn default_normalization_hook_propagates_statistic_errors() {
         DefaultStats.normalization_stats(Normalization::default()),
         Ok((None, None))
     );
-    for center in [Centering::None, Centering::Mean, Centering::Min] {
+    for center in [
+        Centering::None,
+        Centering::Mean,
+        Centering::Min,
+        Centering::Median,
+    ] {
         for scale in [
             Scaling::None,
             Scaling::Sd,
@@ -291,6 +304,7 @@ fn default_normalization_hook_propagates_statistic_errors() {
             Scaling::L2,
             Scaling::MaxAbs,
             Scaling::Range,
+            Scaling::QuantileRange(lazymatrix::QuantileRange::default()),
         ] {
             let spec = Normalization::new(center, scale);
             if spec != Normalization::default() {

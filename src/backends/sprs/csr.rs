@@ -177,6 +177,12 @@ impl<M: MatTransposeVecScaledInto<X, Y, F>, X, Y, F> MatTransposeVecScaledInto<X
 }
 
 impl<M: ColumnStats<F>, F: Scalar> ColumnStats<F> for SprsCsr<M> {
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+        self.inner.col_medians()
+    }
+    fn col_quantile_ranges(&self, range: crate::QuantileRange) -> Result<Vec<F>, Self::Error> {
+        self.inner.col_quantile_ranges(range)
+    }
     fn normalization_stats(
         &self,
         spec: crate::Normalization,

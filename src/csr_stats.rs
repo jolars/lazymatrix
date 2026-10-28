@@ -66,6 +66,18 @@ pub(crate) fn means<F: Scalar, M: SparseRows<F> + ?Sized>(matrix: &M) -> Vec<F> 
     )
 }
 
+pub(crate) fn quantiles<F: Scalar, M: SparseRows<F> + ?Sized>(
+    matrix: &M,
+    request: crate::quantiles::Request,
+) -> crate::NormalizationStats<F> {
+    crate::quantiles::sparse_rows(matrix.nrows(), matrix.ncols(), request, |i, visit| {
+        let (columns, values) = matrix.sparse_row(i);
+        for (&j, &value) in columns.iter().zip(values) {
+            visit(j, value);
+        }
+    })
+}
+
 pub(crate) fn sds<F: Scalar, M: SparseRows<F> + ?Sized>(matrix: &M) -> Vec<F> {
     let centers = means(matrix);
     let n = F::from_usize(matrix.nrows()).unwrap();
@@ -181,6 +193,31 @@ pub(crate) fn norms<F: Scalar, M: SparseRows<F> + ?Sized>(
 macro_rules! impl_column_stats {
     ($matrix:ty) => {
         impl<F: crate::Scalar> crate::ColumnStats<F> for $matrix {
+            fn normalization_stats(
+                &self,
+                spec: crate::Normalization,
+            ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+                crate::quantiles::fit(self, spec, |request| {
+                    Ok(crate::csr_stats::quantiles(self, request))
+                })
+            }
+            fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+                Ok(
+                    crate::csr_stats::quantiles(self, crate::quantiles::Request::median())
+                        .0
+                        .unwrap(),
+                )
+            }
+            fn col_quantile_ranges(
+                &self,
+                range: crate::QuantileRange,
+            ) -> Result<Vec<F>, Self::Error> {
+                Ok(
+                    crate::csr_stats::quantiles(self, crate::quantiles::Request::range(range))
+                        .1
+                        .unwrap(),
+                )
+            }
             fn col_means(&self) -> Result<Vec<F>, Self::Error> {
                 Ok(crate::csr_stats::means(self))
             }

@@ -53,6 +53,44 @@ retain their IEEE behavior.
 matrix backend. Reuse those parameters for prediction data or after converting
 to an eager representation.
 
+## Quantile fitting
+
+Median centering and quantile-range scaling use exact order statistics. The
+quantile at probability `q` interpolates the neighboring sorted values at
+position `(nrows - 1) * q`, matching NumPy's default linear method for finite
+data. The default range is `q = 0.25` to `q = 0.75`. Centers and scales remain
+ordinary fitted parameters and can be reused on new matrices.
+
+Dense fitting sorts a copied column. CSC fitting combines duplicate raw entries
+at each cell and sorts the stored logical values, representing implicit zeros
+by their count. Both reuse a working column and run serially, including with the
+`parallel` feature. Sorting costs O(nrows log nrows) time per dense column and
+O(nnz log nnz) per CSC column, with O(nrows) and O(nnz) scratch, respectively.
+Combining unsorted duplicates can require additional sorting workspace.
+
+CSR and Zarr fitting maintain O(ncols) selection state. Each pass counts values
+around pivots and narrows the bounds to observed neighbors until every requested
+rank is known. A median and a quantile range share passes when fitted together.
+CSR scans rows, combines duplicate cells, and accounts for implicit zeros without
+converting storage. Zarr reads chunks serially, including fill values and
+excluding edge padding. Chunk and codec memory, including outer shards, remains
+additional to the selection state.
+
+The number of fitting passes depends on the values. Widely separated exponents
+can require many passes, so exact quantiles may be expensive on storage-backed
+inputs. Existing normalization choices without quantiles retain their fitting
+paths and, for Zarr, the bound of two scans. [Quantile fitting measurements](https://github.com/jolars/lazymatrix/tree/main/benches/quantile_fitting)
+record time, peak additional allocation, and storage scans.
+
+Ranges use weighted gaps between order statistics to preserve small variation
+around large offsets. Empty columns and columns containing NaN produce NaN;
+missing values are not skipped. Infinities retain their order. Equal infinite
+interpolation endpoints retain that infinity, while interpolation between
+opposing infinities produces NaN. Subtraction of nonfinite quantiles follows
+IEEE arithmetic. Only exact zero fitted scales become one, including when a
+nonconstant column has zero IQR. These policies differ from scikit-learn's
+missing-value and near-constant handling.
+
 ## Choose lazy or eager
 
 | Consideration                 | Lazy                                   | Eager                                            |

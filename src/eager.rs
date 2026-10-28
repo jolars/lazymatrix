@@ -289,6 +289,12 @@ where
     M: ColumnStats<F>,
     F: Scalar,
 {
+    fn col_medians(&self) -> Result<Vec<F>, Self::Error> {
+        self.data.col_medians()
+    }
+    fn col_quantile_ranges(&self, range: crate::QuantileRange) -> Result<Vec<F>, Self::Error> {
+        self.data.col_quantile_ranges(range)
+    }
     fn normalization_stats(
         &self,
         spec: Normalization,

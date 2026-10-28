@@ -1,0 +1,16 @@
+case,backend,rows,columns,iterations,median_us,peak_fit_bytes,storage_scans
+sparse,sorted_reference,4096,16,9,161.708,33024,0
+sparse,dense,4096,16,9,145.436,33096,0
+sparse,csc,4096,16,9,55.165,13416,0
+sparse,csr,4096,16,9,951.798,9032,0
+sparse,zarr,4096,16,9,4079.256,41488,11
+dense,sorted_reference,4096,16,9,951.457,33024,0
+dense,dense,4096,16,9,623.795,33096,0
+dense,csc,4096,16,9,1140.787,65864,0
+dense,csr,4096,16,9,13556.343,9096,0
+dense,zarr,4096,16,9,12158.759,41488,16
+wide_exponents,sorted_reference,256,4,9,1.483,2112,0
+wide_exponents,dense,256,4,9,0.992,2184,0
+wide_exponents,csc,256,4,9,1.884,4232,0
+wide_exponents,csr,256,4,9,1337.831,2364,0
+wide_exponents,zarr,256,4,9,1168.059,10480,194
