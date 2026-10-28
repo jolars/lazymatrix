@@ -133,25 +133,27 @@
 //! # Example
 //!
 //! ```ignore
-//! use lazymatrix::{LazyMatrix, MatVec, Normalization, Centering, Scaling};
+//! use lazymatrix::{LazyMatrix, MatVec, Normalization};
 //!
 //! // `x` is some backend matrix implementing `MatVec`, `MatTransposeVec`,
 //! // `ColumnStats`, `MatrixShape`; `v` a backend vector.
-//! let spec = Normalization::new(Centering::Mean, Scaling::Sd);
+//! let spec = Normalization::standardize();
 //! let lazy = LazyMatrix::new(x, spec).unwrap();
 //! let y = lazy.matvec(&v).unwrap(); // == ((X − 1cᵀ)S⁻¹) v, sparsity preserved
 //! ```
 //!
-//! Median centering and interquartile-range scaling use the same operator:
+//! Named presets also provide min-max scaling and robust normalization.
+//! Custom combinations remain available through [`Normalization::new`]:
 //!
 //! ```
 //! use lazymatrix::{Centering, Normalization, QuantileRange, Scaling};
 //!
-//! let robust = Normalization::new(
+//! let min_max = Normalization::min_max();
+//! let robust = Normalization::robust();
+//! let custom = Normalization::new(
 //!     Centering::Median,
-//!     Scaling::QuantileRange(QuantileRange::default()),
+//!     Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
 //! );
-//! let custom = Scaling::QuantileRange(QuantileRange::new(0.1, 0.9));
 //! ```
 //!
 //! Quantiles use exact selection and linear interpolation at `(nrows - 1) * q`.
@@ -171,14 +173,11 @@
 //! # use ndarray_0_15 as ndarray;
 //! # #[cfg(all(feature = "ndarray_v0_16", not(feature = "ndarray_v0_17")))]
 //! # use ndarray_0_16 as ndarray;
-//! use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
+//! use lazymatrix::{LazyMatrix, MatVec, Normalization};
 //! use ndarray::array;
 //!
 //! let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-//! let lazy = LazyMatrix::new(
-//!     x.view(),
-//!     Normalization::new(Centering::Mean, Scaling::Sd),
-//! ).unwrap();
+//! let lazy = LazyMatrix::new(x.view(), Normalization::standardize()).unwrap();
 //! let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
 //! assert_eq!(y.len(), 3);
 //! # }

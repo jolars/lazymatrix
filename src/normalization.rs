@@ -88,6 +88,10 @@ pub enum Scaling {
 /// A full normalization specification: an independent [`Centering`] and
 /// [`Scaling`] choice.
 ///
+/// Use [`Self::standardize`], [`Self::min_max`], or [`Self::robust`] for common
+/// recipes, or [`Self::new`] for a custom combination. The default performs
+/// no centering or scaling.
+///
 /// Non-translation-invariant scales are computed from **centered** columns (see
 /// [`ColumnStats::col_l1_centered`](crate::traits::ColumnStats::col_l1_centered),
 /// [`ColumnStats::col_l2_centered`](crate::traits::ColumnStats::col_l2_centered),
@@ -101,8 +105,39 @@ pub struct Normalization {
 
 impl Normalization {
     /// Build a specification from its two axes.
-    pub fn new(center: Centering, scale: Scaling) -> Self {
+    pub const fn new(center: Centering, scale: Scaling) -> Self {
         Self { center, scale }
+    }
+
+    /// Subtract each column's mean and divide by its population standard deviation.
+    ///
+    /// The variance uses `nrows` as its divisor. Fitting with
+    /// [`crate::LazyMatrix::new`] replaces exact zero standard deviations with
+    /// one, so constant columns become zero.
+    pub const fn standardize() -> Self {
+        Self::new(Centering::Mean, Scaling::Sd)
+    }
+
+    /// Subtract each column's minimum and divide by its range.
+    ///
+    /// Finite, nonconstant columns span `[0, 1]` on the fitting data. Fitting
+    /// replaces exact zero ranges with one, so constant columns become zero.
+    /// Reusing the fitted parameters does not clip new observations to `[0, 1]`.
+    pub const fn min_max() -> Self {
+        Self::new(Centering::Min, Scaling::Range)
+    }
+
+    /// Subtract each column's median and divide by its interquartile range.
+    ///
+    /// The range uses the 25th and 75th percentiles with linear interpolation
+    /// at `(nrows - 1) * q`. It has no standard-normal calibration and does not
+    /// target unit variance. Fitting replaces exact zero ranges with one.
+    /// Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds.
+    pub fn robust() -> Self {
+        Self::new(
+            Centering::Median,
+            Scaling::QuantileRange(QuantileRange::default()),
+        )
     }
 }
 

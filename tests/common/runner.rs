@@ -2385,14 +2385,7 @@ where
         vec![4.0, 1.0, -2.0],
     ]);
     let matrix = build(&tm);
-    let normalized = LazyMatrix::new(
-        &matrix,
-        Normalization::new(
-            Centering::Median,
-            Scaling::QuantileRange(QuantileRange::default()),
-        ),
-    )
-    .unwrap();
+    let normalized = LazyMatrix::new(&matrix, Normalization::robust()).unwrap();
     assert_close(normalized.centers().unwrap(), &[1.0, 1.0, 2.0], EPS);
     assert_close(normalized.scales().unwrap(), &[3.0, 1.5, 2.5], EPS);
     let dense = materialize(&tm.dense, normalized.centers(), normalized.scales());
@@ -2589,11 +2582,15 @@ where
     assert_close(median_l1.centers().unwrap(), &[1.0, 0.0, 5.0], EPS);
     assert_close(median_l1.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
 
-    let min_range = LazyMatrix::new(
-        build(&tm),
-        Normalization::new(Centering::Min, Scaling::Range),
-    )
-    .unwrap();
+    let standardized = LazyMatrix::new(build(&tm), Normalization::standardize()).unwrap();
+    assert_close(standardized.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
+    assert_close(
+        standardized.scales().unwrap(),
+        &[14.0_f64.sqrt() / 3.0, 1.0, 1.0],
+        EPS,
+    );
+
+    let min_range = LazyMatrix::new(build(&tm), Normalization::min_max()).unwrap();
     assert_close(min_range.centers().unwrap(), &[0.0, 0.0, 5.0], EPS);
     assert_close(min_range.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
 }
@@ -2631,9 +2628,10 @@ fn zero_scale_guard<M, V>(
         ],
     };
     for spec in [
-        Normalization::new(Centering::Mean, Scaling::Sd),
+        Normalization::standardize(),
         Normalization::new(Centering::Mean, Scaling::L1),
-        Normalization::new(Centering::Min, Scaling::Range),
+        Normalization::min_max(),
+        Normalization::robust(),
     ] {
         let lazy = LazyMatrix::new(build(&tm), spec).unwrap();
         let scales = lazy.scales().unwrap();

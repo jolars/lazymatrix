@@ -344,16 +344,13 @@ than assuming full API or numerical parity.
 
 ## Surface ownership decisions
 
-- [ ] Evaluate named presets on `Normalization` for common recipes.
-  - Compare named constructors such as `Normalization::standardize()`,
-    associated constants, and marker types such as `Standardization` accepted
-    through `From`/`Into` or a generic constructor.
-  - Assess discoverability, parameterized recipes, and coexistence with explicit
-    `Centering` and `Scaling` choices. `Normalization::new(Standardization)`
-    would require changing the current two-argument constructor because Rust
-    cannot overload by argument count.
-  - Keep convenience APIs at the specification level and reuse the existing
-    fitting and operator machinery.
+- [x] Add named presets on `Normalization` for common recipes.
+  - `standardize()` selects mean centering and population SD scaling,
+    `min_max()` selects minimum centering and range scaling, and `robust()`
+    selects median centering and interquartile-range scaling.
+  - Keep `Normalization::new(center, scale)` for custom combinations and retain
+    no normalization as the default. Presets reuse the existing fitting and
+    operator machinery.
 
 - [ ] Revisit whole-operator logical reductions only with a concrete consumer.
   - Column sums and squared norms are already available through `LogicalColumn`;

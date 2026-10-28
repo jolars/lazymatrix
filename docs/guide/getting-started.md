@@ -37,22 +37,31 @@ Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust
 ## Fit normalization and apply a product
 
 ```rust
-use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
+use lazymatrix::{LazyMatrix, MatVec, Normalization};
 use ndarray::array;
 
 let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-let lazy = LazyMatrix::new(
-    x.view(),
-    Normalization::new(Centering::Mean, Scaling::Sd),
-).unwrap();
+let lazy = LazyMatrix::new(x.view(), Normalization::standardize()).unwrap();
 
 let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
 ```
 
-Centering and scaling are independently optional. Constant columns get a scale
-of one when fitting would otherwise produce exactly zero. Construction and
-products return `Result`, so storage backends can report read errors. Dimension
-mismatches panic.
+Choose a named recipe or use `Normalization::new(center, scale)` for a custom
+combination:
+
+| Preset          | Centering | Scaling                       |
+| --------------- | --------- | ----------------------------- |
+| `standardize()` | Mean      | Population standard deviation |
+| `min_max()`     | Minimum   | Range                         |
+| `robust()`      | Median    | Interquartile range           |
+
+Standardization uses `nrows` as the variance divisor. Min-max scaling maps finite,
+nonconstant columns to `[0, 1]` on the fitting data; reusing fitted parameters
+does not clip new observations to that range. Centering and scaling are
+independently optional, and `Normalization::default()` performs neither.
+Computed scales become one when they would otherwise be exactly zero.
+Construction and products return `Result`, so storage backends can report read
+errors. Dimension mismatches panic.
 
 For repeated operations, reusable-output traits and workspace methods can reduce
 allocation. See the [API documentation](https://docs.rs/lazymatrix) for the
@@ -63,19 +72,22 @@ capabilities supported by each backend.
 Subtract column medians and divide by the interquartile range:
 
 ```rust
-use lazymatrix::QuantileRange;
-
-let robust = LazyMatrix::new(
-    x.view(),
-    Normalization::new(
-        Centering::Median,
-        Scaling::QuantileRange(QuantileRange::default()),
-    ),
-).unwrap();
+let robust = LazyMatrix::new(x.view(), Normalization::robust()).unwrap();
 ```
 
-Use `QuantileRange::new(0.1, 0.9)` for the 10th-to-90th percentile range. Bounds
-are probabilities satisfying `0 <= lower < upper <= 1`; invalid bounds panic.
+For the 10th-to-90th percentile range, specify custom quantile bounds:
+
+```rust
+use lazymatrix::{Centering, QuantileRange, Scaling};
+
+let custom = Normalization::new(
+    Centering::Median,
+    Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+);
+let robust = LazyMatrix::new(x.view(), custom).unwrap();
+```
+
+Bounds are probabilities satisfying `0 <= lower < upper <= 1`; invalid bounds panic.
 Median centering and quantile-range scaling can also be used independently or
 combined with the existing options. Unlike standard-normal calibration, a raw
 quantile range does not target unit variance.
