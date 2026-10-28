@@ -138,21 +138,8 @@ companion packages; the Rust core remains independent of Python and solvers.
     the fused zero-coefficient contracts.
   - Rerun product and consumer benchmarks before choosing an optimization.
     Preserve the stable default and avoid a full normalized design copy.
-  - Results: [centered dense product investigation](benches/dense_products/README.md).
-
-- [ ] Make workspace reuse compose through `WithIntercept<LazyMatrix<M>>`.
-  - The current intercept workspace reuses only the wrapper's buffer. Its inner
-    normalized operator still allocates coefficient scratch, as measured in
-    `benches/fused_consumer.md`.
-  - Prototype a way to pass or retain both workspaces without moving solver
-    state into the matrix crate. Preserve separate allocating convenience paths.
-  - Extend the consumer allocation checks to the nested wrapper, including
-    scaled forward and transpose products, zero `alpha` and `beta`, and backend
-    failures after partial output writes. Normalization and intercept
-    corrections must run only after the inner product succeeds.
-  - A benchmark-only composed-workspace prototype removes the nested scratch
-    allocations, but no reliable speedup has been established. Defer a public
-    API until a concrete consumer needs it. See [the comparison](benches/fused_consumer.md).
+  - Results: [centered dense product
+    investigation](benches/dense_products/README.md).
 
 - [ ] Evaluate native-vector borrowing in Shrinkage's proximal consumer.
   - `VectorOwned`, `VectorView`, and `VectorViewMut` already cover buffer
@@ -168,10 +155,12 @@ companion packages; the Rust core remains independent of Python and solvers.
 - [x] Avoid cloning the forward input when scaling is inactive.
   - The default allocating hook borrows raw and center-only inputs and clones
     coefficients only when scales are present. Backend overrides retain their
-    existing paths, and centering corrections run only after a successful product.
-  - Regression tests cover clone counts, input preservation, and backend failures.
-    The benchmark retains the former cloning path for comparison with the public
-    operator. See [the investigation](benches/forward_input/README.md).
+    existing paths, and centering corrections run only after a successful
+    product.
+  - Regression tests cover clone counts, input preservation, and backend
+    failures. The benchmark retains the former cloning path for comparison with
+    the public operator. See [the
+    investigation](benches/forward_input/README.md).
 
 - [ ] Add multiple-right-hand-side operator capabilities.
   - Prototype `MatMat` and `MatTransposeMat` for multiresponse and multinomial
