@@ -7,8 +7,8 @@ re-exports. The main implementation is divided as follows:
 
 - `src/normalization.rs` defines `Centering`, `Scaling`, `Normalization`, and
   reusable fitted `NormalizationParams`.
-- `src/matrix.rs` implements `LazyMatrix`, construction, column and row access, and
-  operator behavior.
+- `src/matrix.rs` implements `LazyMatrix`, construction, column and row access,
+  and operator behavior.
 - `src/eager.rs` implements `EagerMatrix`, which retains fitted parameters as
   metadata and forwards operations to already normalized dense storage.
   `src/materialize.rs` and `src/traits/materialize.rs` provide explicit dense
@@ -67,18 +67,18 @@ Integration tests are in `tests/`. The backend suites reuse
 between implementations. Runnable demonstrations belong in `examples/`, and
 Criterion benchmarks belong in `benches/`. See `TODO.md` for planned API work.
 
-`docs/` contains the VitePress landing page, guide, and benchmark comparisons
-at `https://lazymatrix.org`. Diplodocus embeds Python and Rust API references in
+`docs/` contains the VitePress landing page, guide, and benchmark comparisons at
+`https://lazymatrix.org`. Diplodocus embeds Python and Rust API references in
 the site; docs.rs remains available. `python/` contains the independently
 versioned Python package, with a private PyO3 extension under `python/rust/`.
-Keep Python dependencies and FFI out of the core crate. Keep benchmark
-data and methodology synchronized; the site build reads the checked-in CSV and
-metadata in `benches/least_squares/` and generates responsive SVG plots without
-running benchmarks. The main page compares complete gradient descent fits and
-individual products at three selectable matrix sizes. The earlier size and shape
-sweep remains in `benches/normalization_tradeoffs/`. Historical consumer profiles
-remain in `benches/normalization_allocations/`. GitHub Actions
-checks pull requests and deploys pushes to `main` to Cloudflare Workers.
+Keep Python dependencies and FFI out of the core crate. Keep benchmark data and
+methodology synchronized; the site build reads the checked-in CSV and metadata
+in `benches/least_squares/` and generates responsive SVG plots without running
+benchmarks. The main page compares complete gradient descent fits and individual
+products at three selectable matrix sizes. The earlier size and shape sweep
+remains in `benches/normalization_tradeoffs/`. Historical consumer profiles
+remain in `benches/normalization_allocations/`. GitHub Actions checks pull
+requests and deploys pushes to `main` to Cloudflare Workers.
 
 ## Development Status
 
@@ -137,14 +137,15 @@ columns and nonfinite arithmetic may use two working columns, but never a full
 dense design matrix. `MatrixWrite` keeps dense coefficient output independent of
 the input backend.
 
-The zarrs 0.22 and 0.23 backends support synchronous two-dimensional floating-point
-arrays. Version 0.22 requires Rust 1.87, and version 0.23 requires Rust 1.91.
-Read chunks serially, preserve configured fill values, and exclude edge padding.
-Keep working vectors in RAM. Lazy products and statistics
+The zarrs 0.22 and 0.23 backends support synchronous two-dimensional
+floating-point arrays. Version 0.22 requires Rust 1.87, and version 0.23
+requires Rust 1.91. Read chunks serially, preserve configured fill values, and
+exclude edge padding. Keep working vectors in RAM. Lazy products and statistics
 never materialize the full array. Explicit eager conversion streams chunks into
-caller-selected dense storage. Chunk buffers and codec workspaces depend on storage chunk size,
-including outer shards. Borrowing capabilities must not hide decoding or I/O.
-Tests use counting and failing stores; larger-than-RAM benchmarks remain manual.
+caller-selected dense storage. Chunk buffers and codec workspaces depend on
+storage chunk size, including outer shards. Borrowing capabilities must not hide
+decoding or I/O. Tests use counting and failing stores; larger-than-RAM
+benchmarks remain manual.
 
 ## Column Access & Capability Boundaries
 
@@ -177,9 +178,9 @@ capacity and sprs's adjusted outer ranges for sliced views. `LazyMatrix::row`
 requires `SparseRows` and returns a `LazyRow` borrowing raw storage and the full
 optional center and scale slices. Its logical length is the column count, even
 when no entries are stored. The background varies by column; expose it and the
-stored scaled corrections without allocating a dense row. Preserve storage
-order and duplicates, and sum duplicate raw values before direct normalization.
-Faer and nalgebra CSR matrices and faer views provide native products and column
+stored scaled corrections without allocating a dense row. Preserve storage order
+and duplicates, and sum duplicate raw values before direct normalization. Faer
+and nalgebra CSR matrices and faer views provide native products and column
 statistics. CSR statistics scan rows serially with O(ncols) workspace, combine
 duplicates at each cell, and include implicit zeros. Do not convert CSR to CSC
 for these operations.
@@ -191,7 +192,8 @@ such as `least_squares_gd`, `least_squares_sgd`, and `coordinate_descent`
 demonstrate consumers and expose missing matrix capabilities, but solvers do not
 belong in the library or its correctness suite. Add a reusable operator or
 logical-column operation when an example reveals a genuine matrix need; do not
-add residual policies, cached sums, update rules, or an entire solver to the crate.
+add residual policies, cached sums, update rules, or an entire solver to the
+crate.
 
 ## Build, Test, and Development Commands
 
@@ -214,23 +216,24 @@ add residual policies, cached sums, update rules, or an entire solver to the cra
   example.
 
 The repository's devenv supplies Rust 1.98.1, `go-task`, and the configured
-pre-commit hooks. The core MSRV is Rust 1.84, and sprs 0.11.4 requires Rust 1.85.
-Other backend checks retain Rust 1.87, except for nalgebra 0.35 (including the
-`nalgebra` alias), which requires Rust 1.89. The zarrs 0.23 backend (including the
-`zarrs` alias) requires Rust 1.91. The sprs MSRV checks select sprs 0.11.4;
-sprs 0.11.5 and newer require Rust 1.88. Run
+pre-commit hooks. The core MSRV is Rust 1.84, and sprs 0.11.4 requires Rust
+1.85. Other backend checks retain Rust 1.87, except for nalgebra 0.35 (including
+the `nalgebra` alias), which requires Rust 1.89. The zarrs 0.23 backend
+(including the `zarrs` alias) requires Rust 1.91. The sprs MSRV checks select
+sprs 0.11.4; sprs 0.11.5 and newer require Rust 1.88. Run
 `bash scripts/test-backends.sh msrv` with Rust 1.87 to check the compatible
-feature selections, including tests, examples, and benchmarks. The script restores
-the original lockfile after the checks, including on failure. Run
+feature selections, including tests, examples, and benchmarks. The script
+restores the original lockfile after the checks, including on failure. Run
 `bash scripts/test-backends.sh zarrs-msrv` with Rust 1.91 for zarrs 0.23.
 
-The Python package requires Rust 1.89 for source builds and Python 3.11 or newer.
-Its uv environment lives in `.devenv/python`; tasks set `UV_PROJECT_ENVIRONMENT`.
-Use `scripts/python-tool.py` to prefer native maturin and Ruff executables on
-NixOS. Diplodocus 0.9.0 uses a separate `nightly-2026-09-28` documentation
-toolchain. The website adapter exports Git-visible Rust sources to exclude local
-environments and generated symlinks from extraction. Python and Rust have
-independent versions, one combined release PR, and Python follows Rust releases.
+The Python package requires Rust 1.89 for source builds and Python 3.11 or
+newer. Its uv environment lives in `.devenv/python`; tasks set
+`UV_PROJECT_ENVIRONMENT`. Use `scripts/python-tool.py` to prefer native maturin
+and Ruff executables on NixOS. Diplodocus 0.9.0 uses a separate
+`nightly-2026-09-28` documentation toolchain. The website adapter exports
+Git-visible Rust sources to exclude local environments and generated symlinks
+from extraction. Python and Rust have independent versions, one combined release
+PR, and Python follows Rust releases.
 
 ## Coding Style & Naming Conventions
 
@@ -245,9 +248,8 @@ implementations behind their matching Cargo feature. `Scalar` does not imply
 
 ## Testing Guidelines
 
-Prefer test-driven changes: add a failing regression or behavior test before the
-implementation. Use `#[test]` integration tests with descriptive `snake_case`
-names. `tests/common/runner.rs` is a backend-generic suite driven by thin
+Use `#[test]` integration tests with descriptive `snake_case` names.
+`tests/common/runner.rs` is a backend-generic suite driven by thin
 `faer_backend.rs` and `nalgebra_backend.rs` adapters. Extend the generic runner
 when behavior should apply to every backend; use a backend-specific file only
 for adapter or representation details. A new backend should provide construction
