@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0](https://github.com/jolars/lazymatrix/compare/v0.8.1...v0.9.0) (2026-10-29)
+
+### Breaking changes
+
+- support sample standard deviation ([`1398bf4`](https://github.com/jolars/lazymatrix/commit/1398bf442d1a95c85a47fc22d506b155ba796bd9))
+
+### Features
+
+- add native PyTorch normalization layer ([`b1cff22`](https://github.com/jolars/lazymatrix/commit/b1cff2276dfc7a8a2fa3caee6df1bab7ceafeba3))
+- add borrowed transpose operator views ([`3655898`](https://github.com/jolars/lazymatrix/commit/36558989d5402491a12f3e12d13458f6d782db3e))
+- support sample standard deviation ([`1398bf4`](https://github.com/jolars/lazymatrix/commit/1398bf442d1a95c85a47fc22d506b155ba796bd9))
+- add named normalization presets ([`98826eb`](https://github.com/jolars/lazymatrix/commit/98826ebaa862c2227c81353115d52d7ba36e02cb))
+- add median and quantile-range normalization ([`d862c8a`](https://github.com/jolars/lazymatrix/commit/d862c8a8873378ebe0b707520f2e7989964fff4c))
+- add Zarr and weighted submatrix operations ([`646bed8`](https://github.com/jolars/lazymatrix/commit/646bed89bc8520969f506b5dfa85f51ec4b3ff22))
+- add batched matrix products ([`82ea2b5`](https://github.com/jolars/lazymatrix/commit/82ea2b5facf3ae9b1cd63e6c901513a96d451a5f))
+- add borrowed contiguous submatrices ([`0f34c0e`](https://github.com/jolars/lazymatrix/commit/0f34c0ea8e4291355a8d296f66d1dcfe296d3922))
+
+### Performance Improvements
+
+- borrow unscaled forward inputs ([`ac6938c`](https://github.com/jolars/lazymatrix/commit/ac6938c1b88b12fdd56aced4136743f35bee17f8))
+- optimize stable centered dense products ([`5f1b76a`](https://github.com/jolars/lazymatrix/commit/5f1b76a8546063419e0eea54cd93cdee517639db))
+
 ## [0.8.1](https://github.com/jolars/lazymatrix/compare/v0.8.0...v0.8.1) (2026-10-26)
 
 ### Bug Fixes
