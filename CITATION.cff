@@ -1,14 +1,14 @@
 cff-version: 1.2.0
-message: "If you use LazyMatrix in your research, please cite it using this metadata."
+message: If you use this software, please cite the release you used. Use the concept
+  DOI to cite the project as a whole.
 type: software
-title: "LazyMatrix: Lazy representations of normalized matrices"
+title: 'LazyMatrix: Lazy representations of normalized matrices'
 authors:
   - family-names: Larsson
     given-names: Johan
     affiliation: University of Copenhagen
-version: v0.1.0
-date-released: "2026-10-26"
-doi: 10.5281/zenodo.23666452
+    orcid: https://orcid.org/0000-0002-4029-5945
+doi: 10.5281/zenodo.23666450
 url: https://lazymatrix.org
 repository-code: https://github.com/jolars/lazymatrix
 license:

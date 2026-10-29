@@ -3,7 +3,8 @@
 [![CI](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lazymatrix.svg)](https://crates.io/crates/lazymatrix)
 [![PyPI](https://badge.fury.io/py/lazymatrix.svg)](https://badge.fury.io/py/lazymatrix)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23666452.svg)](https://doi.org/10.5281/zenodo.23666452)
+[![Software
+DOI](https://img.shields.io/badge/Software_DOI-10.5281%2Fzenodo.23666450-blue)](https://doi.org/10.5281/zenodo.23666450)
 
 LazyMatrix is a Rust library for column normalization of design matrices. It
 applies centering and scaling through matrix operations, preserving sparse
@@ -140,43 +141,10 @@ reference](https://lazymatrix.org/reference/python/) for details.
 
 ## Citation
 
-If you use LazyMatrix in your research, please cite the [Zenodo
-archive](https://doi.org/10.5281/zenodo.23666452):
-
-> Larsson, Johan. (2026). LazyMatrix: Lazy representations of normalized
-> matrices (v0.1.0) \[Software\]. Zenodo.
-> https://doi.org/10.5281/zenodo.23666452
-
-### BibLaTeX
-
-```bibtex
-@software{lazymatrix,
-  author    = {Larsson, Johan},
-  title     = {{LazyMatrix}: Lazy representations of normalized matrices},
-  date      = {2026-10-26},
-  version   = {v0.1.0},
-  publisher = {Zenodo},
-  doi       = {10.5281/zenodo.23666452},
-  url       = {https://doi.org/10.5281/zenodo.23666452}
-}
-```
-
-### BibTeX
-
-For styles that do not support `@software`, use `@misc`:
-
-```bibtex
-@misc{lazymatrix,
-  author       = {Larsson, Johan},
-  title        = {{LazyMatrix}: Lazy representations of normalized matrices},
-  year         = {2026},
-  month        = oct,
-  howpublished = {Zenodo},
-  note         = {Software, version v0.1.0},
-  doi          = {10.5281/zenodo.23666452},
-  url          = {https://doi.org/10.5281/zenodo.23666452}
-}
-```
+If you use LazyMatrix in your research, please cite the release you used. Select
+that release in the [Zenodo archive](https://doi.org/10.5281/zenodo.23666450)
+and export its citation. To cite LazyMatrix generally, use the concept DOI
+`10.5281/zenodo.23666450`.
 
 Machine-readable metadata is available in [CITATION.cff](CITATION.cff).
 
