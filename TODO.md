@@ -129,24 +129,29 @@ companion packages; the Rust core remains independent of Python and solvers.
 
 ## Normalization methods
 
-Use [scikit-learn's preprocessing methods](https://scikit-learn.org/stable/modules/preprocessing.html)
-as a coverage reference. Evaluate additions against the library's scope rather
-than assuming full API or numerical parity.
+Use [scikit-learn's preprocessing
+methods](https://scikit-learn.org/stable/modules/preprocessing.html) as a
+coverage reference. Evaluate additions against the library's scope rather than
+assuming full API or numerical parity.
 
 - [x] Add median centering and configurable quantile-range scaling.
   - Use exact linear quantiles, with the interquartile range as the default.
-    Reuse `NormalizationParams` and preserve sparse duplicates and implicit zeros.
+    Reuse `NormalizationParams` and preserve sparse duplicates and implicit
+    zeros.
   - Dense and CSC fitting reuse one working column; CSR and Zarr use O(ncols)
     selection state and exact repeated scans without storage conversion.
     Document scan costs, workspace, and numerical differences from scikit-learn.
+
 - [ ] Evaluate optional standard-normal calibration (`unit_variance`) for
   quantile-range scaling, as provided by `RobustScaler`.
-- [ ] Consider explicitly approximate quantiles if storage-backed consumers
-  need fewer fitting scans. Keep exact quantiles as the default.
+
+- [ ] Consider explicitly approximate quantiles if storage-backed consumers need
+  fewer fitting scans. Keep exact quantiles as the default.
 
 - [ ] Extend min-max scaling beyond the default `[0, 1]` range (`MinMaxScaler`).
   - Evaluate a parameterized `feature_range` recipe that computes explicit
-    centers and scales, including constant-column behavior and reuse on new data.
+    centers and scales, including constant-column behavior and reuse on new
+    data.
   - Evaluate optional clipping for `MinMaxScaler` and `MaxAbsScaler` separately
     from the affine normalization metadata.
 
@@ -166,8 +171,8 @@ than assuming full API or numerical parity.
 
 - [ ] Expose the existing Rust normalization choices in Python.
   - Include minimum and median centering and range, quantile-range,
-    maximum-absolute, L1, and L2 scaling.
-    Coordinate this with the reusable fitted-parameter task above.
+    maximum-absolute, L1, and L2 scaling. Coordinate this with the reusable
+    fitted-parameter task above.
 
 - [ ] Document intentional numerical differences from scikit-learn.
   - Compare IEEE NaN propagation with skipping missing values during fitting,
@@ -227,11 +232,11 @@ than assuming full API or numerical parity.
     `MatrixRead` borrows dense inputs, and callers select allocating output
     through `MatrixOwned`. Products remain independent of response and solver
     types and never materialize a normalized design.
-  - The multiresponse least-squares example demonstrates batched predictions
-    and gradients. [Measurements](benches/batched_products/README.md) compare
-    vector and batch products, allocations, storage reads, and consumer updates.
-    Dense and Zarr consumers benefit on the measured fixture; sparse batching
-    can be slower despite fewer allocations.
+  - The multiresponse least-squares example demonstrates batched predictions and
+    gradients. [Measurements](benches/batched_products/README.md) compare vector
+    and batch products, allocations, storage reads, and consumer updates. Dense
+    and Zarr consumers benefit on the measured fixture; sparse batching can be
+    slower despite fewer allocations.
   - Batched submatrix products, fused `alpha`/`beta` forms, and explicit
     workspace methods remain follow-up work.
 
@@ -239,8 +244,9 @@ than assuming full API or numerical parity.
 
 - [x] Evaluate a borrowed transpose operator view with a concrete consumer.
   - `Transpose::new(&operator)` swaps dimensions and vector, reusable-output,
-    fused, and batched products without copying or changing fitted normalization.
-    The view exposes no sparse row or column borrowing capabilities.
+    fused, and batched products without copying or changing fitted
+    normalization. The view exposes no sparse row or column borrowing
+    capabilities.
   - The [ridge regression example](examples/ridge_primal_dual.rs) reuses one
     normal-equation solver for primal and dual systems, choosing the smaller
     system without materializing a Gram matrix.
@@ -319,9 +325,9 @@ than assuming full API or numerical parity.
   - Raw selection followed by normalization remains a distinct operation with
     different statistical semantics.
 - [x] Extend submatrices to bounded Zarr reads and weighted operations.
-  - Zarr selections stream forward and transpose products, eager conversion,
-    and weighted column sums through intersecting chunks without refitting.
-    Empty ranges and zero-alpha products skip storage reads.
+  - Zarr selections stream forward and transpose products, eager conversion, and
+    weighted column sums through intersecting chunks without refitting. Empty
+    ranges and zero-alpha products skip storage reads.
   - Weighted Gram products normalize entries in bounded panels across all
     backend releases, combining sparse duplicates before multiplication. Weights
     use local row indices; signed and nonfinite values retain IEEE behavior.
@@ -372,7 +378,4 @@ than assuming full API or numerical parity.
 
 - [x] RustyStats: <https://github.com/PricingFrontier/rustystats>
 - [x] anofox-regression: <https://github.com/sipemu/anofox-regression>
-- [ ] Greeners: <https://github.com/sheep-farm/Greeners>
-- [ ] Polars for Data Science
-  <https://github.com/abstractqqq/polars_ds_extension>
-- [ ] lmutils <https://github.com/GMELab/lmutils.r>
+- [x] Greeners: <https://github.com/sheep-farm/Greeners>
