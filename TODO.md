@@ -29,7 +29,7 @@ companion packages; the Rust core remains independent of Python and solvers.
   conversion. Python and Rust use independent versions in one release PR,
   with both API references generated inside VitePress through Diplodocus.
 
-- [ ] Expose reusable fitted `NormalizationParams` through the Python binding.
+- [x] Expose reusable fitted `NormalizationParams` through the Python binding.
   - Export and reconstruct centers and scales with column-count validation,
     preserving constant-column and nonfinite-value semantics. Specify a portable
     representation for reuse in framework buffers and checkpoints.
@@ -181,7 +181,7 @@ assuming full API or numerical parity.
     `StandardScaler`, `MinMaxScaler`, and `MaxAbsScaler`. Streaming a fixed Zarr
     array is distinct from updating fitted parameters as new batches arrive.
 
-- [ ] Expose the existing Rust normalization choices in Python.
+- [x] Expose the existing Rust normalization choices in Python.
   - Include minimum and median centering and range, quantile-range,
     maximum-absolute, L1, and L2 scaling. Coordinate this with the reusable
     fitted-parameter task above.

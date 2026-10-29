@@ -3,8 +3,8 @@
 use std::convert::Infallible;
 
 use lazymatrix::{
-    Centering, LazyMatrix, MatTransposeVec, MatVec, Normalization, NormalizationParams, Scaling,
-    SprsCsc,
+    Centering, ColumnStats, LazyMatrix, MatTransposeVec, MatVec, MatrixShape, Normalization,
+    NormalizationParams, QuantileRange, Scaling, SprsCsc,
 };
 use ndarray::{Array1, Array2, Axis};
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -24,19 +24,118 @@ fn infallible<T>(result: Result<T, Infallible>) -> T {
     }
 }
 
-fn specification((center, scale): (bool, bool), df: usize) -> Normalization {
-    Normalization::new(
-        if center {
-            Centering::Mean
-        } else {
-            Centering::None
-        },
-        if scale {
-            Scaling::Sd { df }
-        } else {
-            Scaling::None
-        },
-    )
+type Specification = (String, String, usize, (f64, f64));
+
+fn normalized<M>(
+    raw: M,
+    specification: Option<Specification>,
+    parameters: Option<&Params>,
+) -> PyResult<LazyMatrix<M>>
+where
+    M: MatrixShape + ColumnStats<f64, Error = Infallible>,
+{
+    match (specification, parameters) {
+        (None, Some(params)) => {
+            if raw.ncols() != params.inner.ncols() {
+                return Err(PyValueError::new_err(
+                    "normalization column count must equal ncols",
+                ));
+            }
+            Ok(LazyMatrix::from_normalization(raw, params.inner.clone()))
+        }
+        (Some((center, scale, df, (lower, upper))), None) => {
+            let center = match center.as_str() {
+                "none" => Centering::None,
+                "mean" => Centering::Mean,
+                "min" => Centering::Min,
+                "median" => Centering::Median,
+                _ => return Err(PyValueError::new_err("unknown centering method")),
+            };
+            if !(lower.is_finite()
+                && upper.is_finite()
+                && 0.0 <= lower
+                && lower < upper
+                && upper <= 1.0)
+            {
+                return Err(PyValueError::new_err(
+                    "quantile bounds must satisfy 0 <= lower < upper <= 1",
+                ));
+            }
+            let scale = match scale.as_str() {
+                "none" => Scaling::None,
+                "sd" => Scaling::Sd { df },
+                "range" => Scaling::Range,
+                "quantile_range" => Scaling::QuantileRange(QuantileRange::new(lower, upper)),
+                "maxabs" => Scaling::MaxAbs,
+                "l1" => Scaling::L1,
+                "l2" => Scaling::L2,
+                _ => return Err(PyValueError::new_err("unknown scaling method")),
+            };
+            Ok(infallible(LazyMatrix::new(
+                raw,
+                Normalization::new(center, scale),
+            )))
+        }
+        _ => Err(PyValueError::new_err(
+            "supply either a specification or fitted parameters",
+        )),
+    }
+}
+
+#[pyclass(frozen, module = "lazymatrix._core")]
+struct Params {
+    inner: NormalizationParams,
+}
+
+#[pymethods]
+impl Params {
+    #[new]
+    fn new(
+        ncols: usize,
+        centers: Option<PyReadonlyArray1<'_, f64>>,
+        scales: Option<PyReadonlyArray1<'_, f64>>,
+    ) -> PyResult<Self> {
+        let copy =
+            |array: PyReadonlyArray1<'_, f64>| array.as_array().iter().copied().collect::<Vec<_>>();
+        let centers = centers.map(copy);
+        let scales = scales.map(copy);
+        for (name, values) in [("centers", &centers), ("scales", &scales)] {
+            if values.as_ref().is_some_and(|values| values.len() != ncols) {
+                return Err(PyValueError::new_err(format!(
+                    "{name} must have length ncols"
+                )));
+            }
+        }
+        if let Some(values) = &scales
+            && let Some(index) = values.iter().position(|&value| value == 0.0)
+        {
+            return Err(PyValueError::new_err(format!(
+                "scale at column {index} must be nonzero"
+            )));
+        }
+        Ok(Self {
+            inner: NormalizationParams::from_parts(ncols, centers, scales),
+        })
+    }
+
+    #[getter]
+    fn ncols(&self) -> usize {
+        self.inner.ncols()
+    }
+
+    #[getter]
+    fn centers<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyArray1<f64>>> {
+        self.inner
+            .centers()
+            .map(|values| values.to_vec().into_pyarray(py))
+    }
+
+    #[getter]
+    fn scales<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyArray1<f64>>> {
+        self.inner
+            .scales()
+            .map(|values| values.to_vec().into_pyarray(py))
+    }
 }
 
 fn validate_rows(nrows: usize) -> PyResult<()> {
@@ -130,17 +229,16 @@ impl Matrix {
     fn from_dense(
         py: Python<'_>,
         values: PyReadonlyArray2<'_, f64>,
-        normalization: (bool, bool),
-        df: usize,
+        specification: Option<Specification>,
+        parameters: Option<&Params>,
     ) -> PyResult<Self> {
         let raw = values.as_array().to_owned();
         validate_rows(raw.nrows())?;
-        Ok(py.detach(move || Self {
-            storage: Storage::Dense(infallible(LazyMatrix::new(
-                raw,
-                specification(normalization, df),
-            ))),
-        }))
+        py.detach(move || {
+            Ok(Self {
+                storage: Storage::Dense(normalized(raw, specification, parameters)?),
+            })
+        })
     }
 
     #[staticmethod]
@@ -150,8 +248,8 @@ impl Matrix {
         values: PyReadonlyArray1<'_, f64>,
         indices: PyReadonlyArray1<'_, i64>,
         indptr: PyReadonlyArray1<'_, i64>,
-        normalization: (bool, bool),
-        df: usize,
+        specification: Option<Specification>,
+        parameters: Option<&Params>,
     ) -> PyResult<Self> {
         validate_rows(shape.0)?;
         let checked_indices = |array: PyReadonlyArray1<'_, i64>| -> PyResult<Vec<usize>> {
@@ -172,12 +270,22 @@ impl Matrix {
         let values = values.as_array().iter().copied().collect();
         let raw = CsMat::try_new_csc(shape, indptr, indices, values)
             .map_err(|(_, _, _, error)| PyValueError::new_err(error.to_string()))?;
-        Ok(py.detach(move || Self {
-            storage: Storage::Sparse(infallible(LazyMatrix::new(
-                SprsCsc::try_new(raw).unwrap(),
-                specification(normalization, df),
-            ))),
-        }))
+        py.detach(move || {
+            Ok(Self {
+                storage: Storage::Sparse(normalized(
+                    SprsCsc::try_new(raw).unwrap(),
+                    specification,
+                    parameters,
+                )?),
+            })
+        })
+    }
+
+    #[getter]
+    fn normalization(&self) -> Params {
+        Params {
+            inner: self.storage.normalization().clone(),
+        }
     }
 
     #[getter]
@@ -276,5 +384,6 @@ impl Matrix {
 
 #[pymodule]
 fn _core(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<Params>()?;
     module.add_class::<Matrix>()
 }

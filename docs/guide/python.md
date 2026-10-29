@@ -76,10 +76,110 @@ Implicit conversion with `np.asarray(Z)` raises an error. Existing estimators
 that require a concrete NumPy array or SciPy sparse matrix need an explicit
 conversion or their own operator integration.
 
-The initial Python API fits each input independently. Reusing training
-normalization on new observations is planned; calling `standardize` on validation
-data computes new statistics. The PyTorch layer below can already reuse supplied
-training parameters on new raw tensors.
+## Choose normalization methods
+
+`LazyMatrix` exposes all Rust column normalization choices. Centering and
+scaling are independent:
+
+| Option   | Values                     | Meaning                                     |
+| -------- | -------------------------- | ------------------------------------------- |
+| `center` | `False` or `"none"`        | No centering                                |
+| `center` | `True` or `"mean"`         | Column mean                                 |
+| `center` | `"min"`, `"median"`        | Column minimum or median                    |
+| `scale`  | `False` or `"none"`        | No scaling                                  |
+| `scale`  | `True` or `"sd"`           | Standard deviation using `nrows - df`       |
+| `scale`  | `"range"`                  | Maximum minus minimum                       |
+| `scale`  | `"quantile_range"`         | Upper minus lower linear quantile           |
+| `scale`  | `"maxabs"`, `"l1"`, `"l2"` | Maximum absolute value, L1 norm, or L2 norm |
+
+```python
+from lazymatrix import LazyMatrix
+
+min_max = LazyMatrix(X, center="min", scale="range")
+robust = LazyMatrix(X, center="median", scale="quantile_range")
+custom_robust = LazyMatrix(
+    X, center="median", scale="quantile_range", quantile_range=(0.1, 0.9)
+)
+unit_columns = LazyMatrix(X, center=False, scale="l2")
+```
+
+When centering is active, maximum-absolute, L1, and L2 scales use the **centered**
+columns, including implicit sparse zeros. Standard deviation, range, and
+quantile range are invariant to centering. `df` affects only standard deviations.
+These operations normalize columns; they do not normalize rows.
+
+Quantile bounds are probabilities satisfying `0 <= lower < upper <= 1` and
+default to `(0.25, 0.75)`, the interquartile range. Quantiles use exact linear
+interpolation at `(nrows - 1) * q`, including implicit zeros and summed duplicate
+cells. Fitting in Python uses the Rust dense or CSC backend with O(nrows) working
+storage for one column, without constructing a full normalized matrix. The
+Python binding converts CSR to canonical CSC as described above. Quantile fitting
+does not calibrate scales to standard-normal variance. All methods replace only
+exact zero scales with one and propagate NaNs; they do not skip missing values
+or detect near-constant columns using a tolerance.
+
+## Reuse fitted parameters
+
+Fit once on training data and reuse the fitted centers and scales unchanged:
+
+```python
+from lazymatrix import NormalizationParams
+
+params = robust.normalization
+X_validation = sparse.csr_matrix([[4.0, 1.0], [0.0, -2.0]])
+validation = params.transform(X_validation)
+# Equivalent: LazyMatrix.from_normalization(X_validation, params)
+
+restored = NormalizationParams(
+    params.ncols, centers=params.centers, scales=params.scales
+)
+prediction = restored.transform(X_validation) @ np.ones(params.ncols)
+```
+
+`params.ncols` records the required feature count even when both components are
+inactive. The input's column count must match, and its feature order must match
+the training data. Parameter vectors must be one-dimensional with exactly
+`ncols` entries. Invalid dimensions and explicit positive or negative zero scales
+raise `ValueError`. Negative, tiny nonzero, and nonfinite values are preserved
+in float64. Parameters and transformed matrices own copies, and array properties
+return independent copies. Transposes export the original columns' parameters.
+
+A constant feature gets a fitted scale of one. With mean, minimum, or median
+centering it becomes zero on training data, but new values still subtract the
+training center. Reusing range normalization does not clip new observations to
+`[0, 1]`. Calling `LazyMatrix` or `standardize` again fits new statistics instead
+of reusing training parameters. No method updates fitted statistics online.
+
+The portable representation is an integer `ncols` and optional one-dimensional
+float64 `centers` and `scales` arrays in feature order. Missing arrays mean the
+component is inactive. The same fields reconstruct Rust's
+`NormalizationParams::from_parts(ncols, centers, scales)` and supply PyTorch
+buffers. Keep application-specific scale exponents in consumer code and pass the
+resulting explicit scales to `NormalizationParams`.
+
+Use a NumPy checkpoint to retain IEEE values without pickling or nonstandard
+JSON numbers:
+
+```python
+checkpoint = {"ncols": params.ncols}
+for name in ("centers", "scales"):
+    values = getattr(params, name)
+    if values is not None:
+        checkpoint[name] = values
+np.savez("normalization.npz", **checkpoint)
+
+with np.load("normalization.npz", allow_pickle=False) as saved:
+    restored = NormalizationParams(
+        int(saved["ncols"]),
+        centers=saved.get("centers"),
+        scales=saved.get("scales"),
+    )
+```
+
+Preserve inactive components as missing arrays, including when moving parameters
+between languages. Replacing `None` with a zero center or unit scale can change
+IEEE arithmetic with nonfinite values. Keep feature names or other application
+metadata alongside the checkpoint if needed to verify feature order.
 
 ## Use a PyTorch first layer
 

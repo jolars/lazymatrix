@@ -30,6 +30,20 @@ values and results use float64. Normalization uses population standard deviation
 by default; pass `df=1` for sample standard deviations. The variance divisor is
 `nrows - df`; scales are `NaN` when `nrows <= df`. Exact zero scales become one.
 
+Use `LazyMatrix(X, center="min", scale="range")` for min-max normalization or
+`LazyMatrix(X, center="median", scale="quantile_range")` for median and
+interquartile-range normalization. Custom quantile bounds use probabilities,
+such as `quantile_range=(0.1, 0.9)`. Maximum-absolute (`"maxabs"`), L1 (`"l1"`),
+and L2 (`"l2"`) scales use centered columns when centering is enabled.
+`center=False` or `scale=False` disables the corresponding component.
+
+Reuse training normalization without refitting with
+`Z.normalization.transform(X_validation)`. Export or reconstruct parameters with
+`NormalizationParams(ncols, centers=centers, scales=scales)`. Each optional vector
+has one float64 value per feature. Explicit zero scales raise `ValueError`;
+negative and nonfinite values are preserved. See the Python guide for portable
+NumPy checkpoints and feature-order requirements.
+
 For neural first layers, install `pip install "lazymatrix[torch]"` and use
 `lazymatrix.torch.NormalizedLinear`. It accepts supplied centers and scales,
 including `Z.centers` and `Z.scales`, and performs lazy normalization entirely

@@ -1,14 +1,14 @@
 """Public matrix interface backed by owned Rust storage."""
 
 import operator
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from numpy.typing import NDArray
 from scipy import sparse
 from scipy.sparse.linalg import LinearOperator
 
-from ._core import Matrix
+from ._core import Matrix, Params
 
 
 def _real_array(value: Any) -> NDArray[np.float64]:
@@ -16,6 +16,88 @@ def _real_array(value: Any) -> NDArray[np.float64]:
     if array.dtype.kind not in "biuf":
         raise TypeError("expected real numeric values")
     return np.asarray(array, dtype=np.float64)
+
+
+Centering = bool | Literal["none", "mean", "min", "median"]
+Scaling = bool | Literal["none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"]
+Specification = tuple[str, str, int, tuple[float, float]]
+
+
+def _method(value: Any, name: str, default: str, choices: tuple[str, ...]) -> str:
+    if isinstance(value, bool):
+        return default if value else "none"
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a boolean or method name")
+    if value not in choices:
+        raise ValueError(f"unknown {name} method {value!r}; choose from {choices}")
+    return value
+
+
+class NormalizationParams:
+    """Reusable float64 column centers and scales, independent of raw storage.
+
+    Parameters
+    ----------
+    ncols : int
+        Nonnegative number of columns, retained even when both components are None.
+    centers : array-like or None, default=None
+        One real value per column. Copied without changing nonfinite values.
+    scales : array-like or None, default=None
+        One real, nonzero value per column. Negative and nonfinite values are
+        preserved. Positive and negative zero raise ValueError with the column
+        index, including values that round to zero in float64.
+
+    Notes
+    -----
+    Obtain fitted parameters with ``Z.normalization``. Reconstruct Rust's
+    ``NormalizationParams::from_parts(ncols, centers, scales)`` using the same
+    values and None components. Arrays returned by properties are independent
+    copies. Parameters never update when transformed data changes.
+
+    A portable checkpoint consists of an integer ncols and optional one-dimensional
+    float64 centers and scales arrays in feature order. For example, save ncols
+    and only active arrays with numpy.savez, and load with allow_pickle=False.
+    Omitted arrays mean None; do not replace them with zeros or ones because
+    inactive components have different IEEE semantics. This preserves NaN and
+    infinity without nonstandard JSON values.
+    """
+
+    __slots__ = ("_params",)
+
+    def __init__(self, ncols: int, *, centers: Any = None, scales: Any = None) -> None:
+        ncols = operator.index(ncols)
+        if ncols < 0:
+            raise ValueError("ncols must be nonnegative")
+        arrays = []
+        for name, value in (("centers", centers), ("scales", scales)):
+            array = None if value is None else _real_array(value)
+            if array is not None and array.ndim != 1:
+                raise ValueError(f"{name} must be one-dimensional")
+            arrays.append(array)
+        self._params = Params(ncols, *arrays)
+
+    @property
+    def ncols(self) -> int:
+        """The number of columns expected by these parameters."""
+        return self._params.ncols
+
+    @property
+    def centers(self) -> NDArray[np.float64] | None:
+        """An independent copy of column centers, or None when inactive."""
+        return self._params.centers
+
+    @property
+    def scales(self) -> NDArray[np.float64] | None:
+        """An independent copy of column scales, or None when inactive."""
+        return self._params.scales
+
+    def transform(self, X: Any) -> "LazyMatrix":
+        """Wrap new raw data using these parameters without fitting statistics.
+
+        X must have ncols columns. Input ownership, supported storage, and lazy
+        operations follow LazyMatrix. A column-count mismatch raises ValueError.
+        """
+        return LazyMatrix.from_normalization(X, self)
 
 
 class LazyMatrix:
@@ -27,16 +109,21 @@ class LazyMatrix:
         Two-dimensional real numeric input. Sparse input must use CSR or CSC
         storage. Values are copied to float64 storage, and sparse copies are
         converted to canonical CSC. Later changes to X do not affect this object.
-    center : bool, default=True
-        Subtract each column's mean during matrix operations.
-    scale : bool, default=True
-        Divide each column by its standard deviation. Exact zero
-        scales are replaced with one.
+    center : bool or {"none", "mean", "min", "median"}, default=True
+        Column center to subtract. True selects the mean; False disables centering.
+    scale : bool or {"none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"}, default=True
+        Column scale to divide by. True selects standard deviation; False disables
+        scaling. Norms and maximum absolute values use centered columns when
+        centering is active. Exact zero scales become one.
     df : int, default=0
         Nonnegative degrees of freedom subtracted from the number of rows in
         the variance divisor. Use zero for population standard deviations or
         one for sample standard deviations. Columns with at most df rows have
-        NaN scales. Ignored when scale is False.
+        NaN scales. Used only for standard-deviation scaling.
+    quantile_range : tuple of float, default=(0.25, 0.75)
+        Lower and upper probabilities satisfying 0 <= lower < upper <= 1.
+        Quantile-range scaling uses exact linear quantiles at (nrows - 1) * q,
+        without standard-normal calibration. Bounds are validated for all methods.
 
     Notes
     -----
@@ -64,13 +151,50 @@ class LazyMatrix:
     __array_priority__ = 1000
 
     def __init__(
-        self, X: Any, *, center: bool = True, scale: bool = True, df: int = 0
+        self,
+        X: Any,
+        *,
+        center: Centering = True,
+        scale: Scaling = True,
+        df: int = 0,
+        quantile_range: tuple[float, float] = (0.25, 0.75),
     ) -> None:
-        if not isinstance(center, bool) or not isinstance(scale, bool):
-            raise TypeError("center and scale must be booleans")
+        center = _method(center, "centering", "mean", ("none", "mean", "min", "median"))
+        scale = _method(
+            scale,
+            "scaling",
+            "sd",
+            ("none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"),
+        )
         df = operator.index(df)
         if df < 0:
             raise ValueError("df must be nonnegative")
+        bounds = _real_array(quantile_range)
+        if bounds.shape != (2,):
+            raise ValueError("quantile_range must contain two probabilities")
+        lower, upper = map(float, bounds)
+        if not (np.isfinite(bounds).all() and 0 <= lower < upper <= 1):
+            raise ValueError("quantile bounds must satisfy 0 <= lower < upper <= 1")
+        self._initialize(X, (center, scale, df, (lower, upper)), None)
+
+    @classmethod
+    def from_normalization(
+        cls, X: Any, parameters: NormalizationParams
+    ) -> "LazyMatrix":
+        """Copy raw input and apply fitted parameters without recomputing them.
+
+        The input must have parameters.ncols columns. Invalid parameter types
+        raise TypeError, and column-count mismatches raise ValueError.
+        """
+        if not isinstance(parameters, NormalizationParams):
+            raise TypeError("parameters must be NormalizationParams")
+        result = cls.__new__(cls)
+        result._initialize(X, None, parameters._params)
+        return result
+
+    def _initialize(
+        self, X: Any, specification: Specification | None, parameters: Params | None
+    ) -> None:
         if sparse.issparse(X):
             if X.format not in ("csr", "csc"):
                 raise TypeError("sparse input must use CSR or CSC storage")
@@ -88,8 +212,8 @@ class LazyMatrix:
                 raw.data,
                 np.asarray(raw.indices, dtype=np.int64),
                 np.asarray(raw.indptr, dtype=np.int64),
-                (center, scale),
-                df,
+                specification,
+                parameters,
             )
         else:
             if not isinstance(X, np.ndarray):
@@ -97,9 +221,16 @@ class LazyMatrix:
             raw = _real_array(X)
             if raw.ndim != 2:
                 raise ValueError("input must be two-dimensional")
-            self._matrix = Matrix.from_dense(raw, (center, scale), df)
+            self._matrix = Matrix.from_dense(raw, specification, parameters)
         self._transposed = False
         self._transpose: LazyMatrix | None = None
+
+    @property
+    def normalization(self) -> NormalizationParams:
+        """A copy of the original columns' fitted parameters, including on T."""
+        result = object.__new__(NormalizationParams)
+        result._params = self._matrix.normalization
+        return result
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -119,7 +250,7 @@ class LazyMatrix:
 
     @property
     def centers(self) -> NDArray[np.float64] | None:
-        """A copy of the original columns' fitted means, or None.
+        """A copy of the original columns' fitted centers, or None.
 
         Transposing the matrix retains these original column parameters.
         """
@@ -265,8 +396,9 @@ def standardize(
 
     Notes
     -----
-    This first release fits each input independently. Reusing fitted
-    normalization on new observations is not yet exposed by the Python API.
+    This function fits each input independently. Reuse training parameters with
+    ``Z.normalization.transform(new_X)``. For other centering and scaling methods,
+    construct LazyMatrix directly.
 
     Examples
     --------
@@ -277,4 +409,6 @@ def standardize(
     >>> Z @ np.ones(2)
     array([-2.,  2.])
     """
+    if not isinstance(center, bool) or not isinstance(scale, bool):
+        raise TypeError("center and scale must be booleans")
     return LazyMatrix(X, center=center, scale=scale, df=df)

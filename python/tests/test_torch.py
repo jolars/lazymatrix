@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 import pytest
-from lazymatrix import standardize
+from lazymatrix import LazyMatrix, NormalizationParams, standardize
 from scipy import sparse
 
 if os.environ.get("LAZYMATRIX_REQUIRE_TORCH") == "1":
@@ -137,11 +137,23 @@ def test_predictions_gradients_and_training(device, dtype, layout, center, scale
 
 
 @pytest.mark.parametrize("layout", LAYOUTS)
-def test_existing_fitted_parameters_are_reused_on_new_data(layout):
+@pytest.mark.parametrize(
+    "method", [None, "range", "quantile_range", "maxabs", "l1", "l2"]
+)
+def test_existing_fitted_parameters_are_reused_on_new_data(layout, method):
     raw = input_tensor(torch.float64, "cpu")
-    fitted = standardize(sparse.csr_matrix(raw.numpy()), df=1)
+    source = sparse.csr_matrix(raw.numpy())
+    fitted = (
+        standardize(source, df=1)
+        if method is None
+        else LazyMatrix(source, center="median", scale=method)
+    )
+    params = fitted.normalization
+    restored = NormalizationParams(
+        params.ncols, centers=params.centers, scales=params.scales
+    )
     layer = NormalizedLinear(
-        5, 2, centers=fitted.centers, scales=fitted.scales, dtype=torch.float64
+        5, 2, centers=restored.centers, scales=restored.scales, dtype=torch.float64
     )
     reference = reference_layer(layer)
     for values in (raw, raw * 2 + 1):
