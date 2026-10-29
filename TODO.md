@@ -13,12 +13,13 @@ and using them in neural first layers. Keep FFI and framework adapters in
 companion packages; the Rust core remains independent of Python and solvers.
 
 - [x] Include a native PyTorch first layer using supplied centers and scales.
-  - `lazymatrix.torch.NormalizedLinear` preserves trainable weights in normalized
-    coordinates, retains fixed normalization as checkpoint buffers, and applies
-    a dense centering correction without materializing the normalized input.
+  - `lazymatrix.torch.NormalizedLinear` preserves trainable weights in
+    normalized coordinates, retains fixed normalization as checkpoint buffers,
+    and applies a dense centering correction without materializing the
+    normalized input.
   - Dense and fixed sparse COO/CSR features support float32 and float64 on CPU
-    and CUDA. Predictions, parameter gradients, and optimizer updates are checked
-    against explicit dense normalization. CUDA cases run when available.
+    and CUDA. Predictions, parameter gradients, and optimizer updates are
+    checked against explicit dense normalization. CUDA cases run when available.
   - The optional Python extra keeps Rust out of the training loop. The
     `benches/torch_adapter` comparison measures peak memory and throughput;
     performance depends on layout, density, and device. TensorFlow remains
@@ -216,17 +217,6 @@ assuming full API or numerical parity.
     Preserve the stable default and avoid a full normalized design copy.
   - Results: [centered dense product
     investigation](benches/dense_products/README.md).
-
-- [ ] Evaluate native-vector borrowing in Shrinkage's proximal consumer.
-  - `VectorOwned`, `VectorView`, and `VectorViewMut` already cover buffer
-    construction and indexed access. Check whether adopting them lets Shrinkage
-    remove its separate `ProximalVector` backend implementations.
-  - Shrinkage currently copies between native product vectors and slice buffers
-    used by predictor datafits and complete proximal terms. Measure these copies
-    separately from normalization allocations.
-  - Evaluate borrowed contiguous slice access only if consumer measurements
-    justify it. Keep contiguity an explicit capability, preserve strided views,
-    and avoid implicit gathers or scalar runtime dispatch.
 
 - [x] Avoid cloning the forward input when scaling is inactive.
   - The default allocating hook borrows raw and center-only inputs and clones
