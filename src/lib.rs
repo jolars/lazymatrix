@@ -39,6 +39,17 @@
 //! normalization semantics. Internal scratch is permitted. Batched submatrix,
 //! fused coefficient, and explicit workspace APIs remain future work.
 //!
+//! # Transpose views
+//!
+//! [`Transpose::new`] borrows any operator as its transpose, swapping dimensions
+//! and forward and transpose products. Vector, fused, reusable-output, and
+//! batched capabilities delegate independently to the corresponding original
+//! products. Transposing a fitted [`LazyMatrix`] preserves its normalization;
+//! it does not refit columns of the transposed data. The view allocates no
+//! matrix storage and grants no column or row borrowing capabilities. The
+//! `ridge_primal_dual` example uses one normal-equation solver for both
+//! `Aᵀ A + lambda I` and `A Aᵀ + lambda I`, choosing the smaller system.
+//!
 //! # Submatrices
 //!
 //! [`LazyMatrix::submatrix`] borrows contiguous row and column ranges of the
@@ -474,6 +485,7 @@ mod submatrix;
 mod submatrix_kernels;
 mod submatrix_weighted;
 pub mod traits;
+mod transpose;
 mod weighted_sums;
 
 #[cfg(feature = "sprs_all")]
@@ -499,3 +511,4 @@ pub use traits::{
     VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto,
     WeightedGramKernel,
 };
+pub use transpose::Transpose;

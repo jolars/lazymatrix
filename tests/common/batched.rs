@@ -1,7 +1,9 @@
-use super::{MaterializeOutput, TestMatrix, assert_close, materialize, random_matrix};
+use super::{
+    MaterializeOutput, TestMatrix, assert_close, dense_transpose, materialize, random_matrix,
+};
 use lazymatrix::{
     Centering, ColumnStats, LazyMatrix, MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto,
-    MatrixOwned, MatrixRead, MatrixShape, Normalization, Scaling, WithIntercept,
+    MatrixOwned, MatrixRead, MatrixShape, Normalization, Scaling, Transpose, WithIntercept,
 };
 
 impl<F: lazymatrix::Scalar> MatrixRead<F> for MaterializeOutput<F> {
@@ -11,6 +13,17 @@ impl<F: lazymatrix::Scalar> MatrixRead<F> for MaterializeOutput<F> {
 }
 
 pub fn check_batched<M>(matrix: &M, dense: &[Vec<f64>])
+where
+    M: MatMatInto<f64> + MatTransposeMatInto<f64>,
+{
+    check_batched_products(matrix, dense);
+    check_batched_products(
+        &Transpose::new(matrix),
+        &dense_transpose(dense, matrix.ncols()),
+    );
+}
+
+fn check_batched_products<M>(matrix: &M, dense: &[Vec<f64>])
 where
     M: MatMatInto<f64> + MatTransposeMatInto<f64>,
 {
@@ -196,6 +209,9 @@ where
             }
             let actual: MaterializeOutput<f32> = lazy.matmat(&rhs).unwrap();
             let transpose: MaterializeOutput<f32> = lazy.mat_transpose_mat(&u).unwrap();
+            let view = Transpose::new(&lazy);
+            let view_forward: MaterializeOutput<f32> = view.matmat(&u).unwrap();
+            let view_transpose: MaterializeOutput<f32> = view.mat_transpose_mat(&rhs).unwrap();
             for (k, &value) in coefficients.iter().enumerate() {
                 let expected = lazy
                     .matvec(&to_vector(&vec![value; matrix.ncols()]))
@@ -205,9 +221,11 @@ where
                     .unwrap();
                 for i in 0..matrix.nrows() {
                     equal(actual.get(i, k), VectorView::get(&expected, i));
+                    equal(view_transpose.get(i, k), VectorView::get(&expected, i));
                 }
                 for j in 0..matrix.ncols() {
                     equal(transpose.get(j, k), VectorView::get(&expected_t, j));
+                    equal(view_forward.get(j, k), VectorView::get(&expected_t, j));
                 }
             }
         }

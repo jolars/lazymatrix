@@ -92,6 +92,20 @@ macro_rules! backend_suite {
                 for i in 0..6 { for j in 0..4 {
                     assert_eq!(storage[(i, j)], if i % 2 == 0 && j % 2 == 0 { expected[(i/2, j/2)] } else { 99. });
                 } }
+                let view = lazymatrix::Transpose::new(&centered);
+                storage.fill(99.);
+                lazymatrix::MatTransposeMatInto::mat_transpose_mat_into(&view, &input, &mut storage.slice_mut(s![..;2, ..;2])).unwrap();
+                for i in 0..6 { for j in 0..4 {
+                    assert_eq!(storage[(i, j)], if i % 2 == 0 && j % 2 == 0 { expected[(i/2, j/2)] } else { 99. });
+                } }
+                let rhs = Array2::from_shape_fn((6, 4), |(i, j)| (i + j) as f64);
+                let input = rhs.slice(s![..;-2, ..;2]);
+                let expected: Array2<f64> = lazymatrix::MatTransposeMat::mat_transpose_mat(&centered, &input).unwrap();
+                let mut storage = Array2::from_elem((4, 4), 99.);
+                lazymatrix::MatMatInto::matmat_into(&view, &input, &mut storage.slice_mut(s![..;-2, ..;2])).unwrap();
+                for i in 0..4 { for j in 0..4 {
+                    assert_eq!(storage[(i, j)], if i % 2 == 1 && j % 2 == 0 { expected[((3-i)/2, j/2)] } else { 99. });
+                } }
                 common::batched::check_batched_f32(&Array2::from_elem((2, 1), 1e38_f32), |v| Array1::from_vec(v.to_vec()));
             }
 
@@ -345,6 +359,24 @@ macro_rules! backend_suite {
                             1e-12,
                         );
                         assert_eq!(transpose_output.slice(s![..;2]).to_vec(), vec![-99.0; 2]);
+
+                        let transposed = lazymatrix::Transpose::new(&lazy);
+                        transpose_output.slice_mut(s![1..;2]).fill(f64::NAN);
+                        transposed.matvec_into(&rows, &mut transpose_output.slice_mut(s![1..;2])).unwrap();
+                        assert_close(
+                            &transpose_output.slice(s![1..;2]).to_vec(),
+                            &dense_tmatvec(&normalized, &rows.to_vec()),
+                            1e-12,
+                        );
+                        assert_eq!(transpose_output.slice(s![..;2]).to_vec(), vec![-99.0; 2]);
+                        output.slice_mut(s![..;-2]).fill(f64::NAN);
+                        transposed.mat_transpose_vec_into(&owned_input, &mut output.slice_mut(s![..;-2])).unwrap();
+                        assert_close(
+                            &output.slice(s![..;-2]).to_vec(),
+                            &dense_matvec(&normalized, &input.to_vec()),
+                            1e-12,
+                        );
+                        assert_eq!(output.slice(s![..;2]).to_vec(), vec![-99.0; 3]);
 
                         let column = lazy.column(1);
                         let expected_dot: f64 = (0..3)

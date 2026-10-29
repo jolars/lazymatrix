@@ -7,6 +7,10 @@
 mod batched;
 
 #[cfg(test)]
+#[path = "../../transpose.rs"]
+mod transpose;
+
+#[cfg(test)]
 mod tests {
     use std::{cell::Cell, convert::Infallible};
 

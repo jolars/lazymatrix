@@ -12,7 +12,7 @@ use lazymatrix::{
     Centering, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm, LazyMatrix,
     LazySparseColumn, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape,
     Normalization, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
-    Scaling, SparseColumns, SparseRows, SubScalarAssign, SumEntries,
+    Scaling, SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -387,6 +387,12 @@ pub fn dense_tmatvec(m: &[Vec<f64>], u: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+pub fn dense_transpose(m: &[Vec<f64>], ncols: usize) -> Vec<Vec<f64>> {
+    (0..ncols)
+        .map(|j| m.iter().map(|row| row[j]).collect())
+        .collect()
+}
+
 pub fn dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
@@ -680,6 +686,9 @@ pub fn check_dense_centered_products<M, V, F>(
     let lazy = LazyMatrix::from_parts(matrix, Some(centers), scales);
     assert_values(&lazy.matvec(&x).unwrap(), &forward);
     assert_values(&lazy.mat_transpose_vec(&u).unwrap(), &transpose);
+    let transposed = Transpose::new(&lazy);
+    assert_values(&transposed.matvec(&u).unwrap(), &transpose);
+    assert_values(&transposed.mat_transpose_vec(&x).unwrap(), &forward);
     let mut out = to_v(&vec![F::nan(); matrix.nrows()]);
     lazy.matvec_into(&x, &mut out).unwrap();
     assert_values(&out, &forward);
@@ -936,6 +945,20 @@ pub fn check_fused_operator<O, V>(
     O: lazymatrix::MatVecScaledInto<V, V, f64> + lazymatrix::MatTransposeVecScaledInto<V, V, f64>,
     V: lazymatrix::VectorViewMut<f64>,
 {
+    check_fused_products(op, dense, cols, to_v);
+    check_fused_products(
+        &Transpose::new(op),
+        &dense_transpose(dense, cols),
+        op.nrows(),
+        to_v,
+    );
+}
+
+fn check_fused_products<O, V>(op: &O, dense: &[Vec<f64>], cols: usize, to_v: &impl Fn(&[f64]) -> V)
+where
+    O: lazymatrix::MatVecScaledInto<V, V, f64> + lazymatrix::MatTransposeVecScaledInto<V, V, f64>,
+    V: lazymatrix::VectorViewMut<f64>,
+{
     let rows = op.nrows();
     let coefficients = random_vec(220, cols);
     let input = random_vec(221, rows);
@@ -1034,6 +1057,7 @@ pub fn run_backend_suite<M, V>(
     vector_algebra(&to_v, &from_v);
     oracle_parity(&build, &to_v, &from_v);
     reusable_output_parity(&build, &to_v, &from_v);
+    transpose_products(&build, &to_v, &from_v);
     adjoint_identity(&build, &to_v, &from_v);
     from_parts_passthrough(&build, &to_v, &from_v);
     explicit_scales_reject_zero(&build);
@@ -1048,6 +1072,92 @@ pub fn run_backend_suite<M, V>(
     zero_scale_guard(&build, &to_v, &from_v);
     empty_and_nonfinite_stats(&build);
     shape_is_inferred(&build);
+}
+
+fn transpose_products<M, V>(
+    build: &impl Fn(&TestMatrix) -> M,
+    to_v: &impl Fn(&[f64]) -> V,
+    from_v: &impl Fn(&V) -> Vec<f64>,
+) where
+    M: MatVec<V> + MatVecInto<V> + MatTransposeVec<V> + MatTransposeVecInto<V>,
+    V: Clone
+        + lazymatrix::VectorOwned<f64, Owned = V>
+        + lazymatrix::VectorViewMut<f64>
+        + ElemDivAssign<f64>
+        + DotSlice<f64>
+        + SubScalarAssign<f64>
+        + SumEntries<f64>
+        + ScaledSubSlice<f64>,
+{
+    for (n, p) in [(9, 5), (3, 7), (0, 3), (5, 0), (0, 0)] {
+        let tm = random_matrix(0x7A, n, p, 0.4);
+        let matrix = build(&tm);
+        check_transpose_products(&matrix, &tm.dense, to_v, from_v);
+        for centering in [false, true] {
+            for scaling in [false, true] {
+                let centers = centering.then(|| vec![0.75; p]);
+                let scales = scaling.then(|| {
+                    (0..p)
+                        .map(|j| if j % 2 == 0 { 2.0 } else { -3.0 })
+                        .collect()
+                });
+                let lazy = LazyMatrix::from_parts(&matrix, centers, scales);
+                let normalized = materialize(&tm.dense, lazy.centers(), lazy.scales());
+                check_transpose_products(&lazy, &normalized, to_v, from_v);
+                check_transpose_products(
+                    &lazymatrix::WithIntercept::new(&lazy),
+                    &with_intercept(&normalized),
+                    to_v,
+                    from_v,
+                );
+            }
+        }
+    }
+}
+
+pub fn check_transpose_products<M, V>(
+    operator: &M,
+    dense: &[Vec<f64>],
+    to_v: &impl Fn(&[f64]) -> V,
+    from_v: &impl Fn(&V) -> Vec<f64>,
+) where
+    M: MatVec<V> + MatVecInto<V> + MatTransposeVec<V> + MatTransposeVecInto<V>,
+{
+    let view = Transpose::new(operator);
+    let (n, p) = (operator.nrows(), operator.ncols());
+    assert_eq!((view.nrows(), view.ncols()), (p, n));
+    assert!(std::ptr::eq(view.as_inner(), operator));
+    let input = random_vec(0x7B, n);
+    let coefficients = random_vec(0x7C, p);
+    let u = to_v(&input);
+    let v = to_v(&coefficients);
+    let want = dense_matvec(&dense_transpose(dense, p), &input);
+    let want_t = dense_matvec(dense, &coefficients);
+    assert_close(&from_v(&view.matvec(&u).unwrap()), &want, 1e-9);
+    assert_close(&from_v(&view.mat_transpose_vec(&v).unwrap()), &want_t, 1e-9);
+    let mut out = to_v(&vec![f64::NAN; p]);
+    let mut out_t = to_v(&vec![f64::NAN; n]);
+    view.matvec_into(&u, &mut out).unwrap();
+    view.mat_transpose_vec_into(&v, &mut out_t).unwrap();
+    assert_close(&from_v(&out), &want, 1e-9);
+    assert_close(&from_v(&out_t), &want_t, 1e-9);
+    approx::assert_abs_diff_eq!(
+        dot(&from_v(&out), &coefficients),
+        dot(&input, &from_v(&out_t)),
+        epsilon = 1e-9,
+    );
+    let double = Transpose::new(&view);
+    assert_eq!((double.nrows(), double.ncols()), (n, p));
+    assert_eq!(
+        from_v(&double.matvec(&v).unwrap()),
+        from_v(&operator.matvec(&v).unwrap()),
+    );
+    assert_eq!(
+        from_v(&double.mat_transpose_vec(&u).unwrap()),
+        from_v(&operator.mat_transpose_vec(&u).unwrap()),
+    );
+    assert_eq!(from_v(&u), input);
+    assert_eq!(from_v(&v), coefficients);
 }
 
 fn reusable_output_parity<M, V>(
@@ -3113,6 +3223,7 @@ pub fn run_eager_product_suite<M, D, V>(
     .unwrap();
     let eager = lazy.to_eager::<D>().unwrap();
     let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
+    check_transpose_products(&eager, &dense, &to_v, &from_v);
     let coefficients = random_vec(129, 4);
     let rows = random_vec(130, 7);
     let x = to_v(&coefficients);
@@ -3295,6 +3406,9 @@ where
                         .collect();
                     let ax = view.matvec(&x).unwrap();
                     let atu = view.mat_transpose_vec(&u).unwrap();
+                    let transposed = Transpose::new(&view);
+                    assert_close(&transposed.matvec(&u).unwrap(), &transpose, EPS);
+                    assert_close(&transposed.mat_transpose_vec(&x).unwrap(), &forward, EPS);
                     assert_close(&ax, &forward, EPS);
                     assert_close(&atu, &transpose, EPS);
                     let left: f64 = ax.iter().zip(&u).map(|(a, b)| a * b).sum();

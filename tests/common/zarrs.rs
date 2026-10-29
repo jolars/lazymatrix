@@ -40,12 +40,15 @@ fn zarrs_backend_suite() {
 fn batched_products_scan_once_and_discard_failed_normalization() {
     use lazymatrix::{
         MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatrixOwned, MatrixRead,
-        MatrixShape,
+        MatrixShape, Transpose,
     };
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);
         let (n, p) = (matrix.nrows(), matrix.ncols());
         let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; p]), Some(vec![2.; p]));
+        store.reset();
+        let view = Transpose::new(&lazy);
+        assert_scans(&store, &matrix, 0);
         for k in [0, 1, 4, 17, 33] {
             let mut rhs = common::MaterializeOutput::zeros(p, k);
             rhs.values.fill(2.);
@@ -56,6 +59,14 @@ fn batched_products_scan_once_and_discard_failed_normalization() {
             assert_scans(&store, &matrix, usize::from(k != 0));
             store.reset();
             let transpose: common::MaterializeOutput = lazy.mat_transpose_mat(&u).unwrap();
+            assert_scans(&store, &matrix, usize::from(k != 0));
+            store.reset();
+            let view_forward: common::MaterializeOutput = view.matmat(&u).unwrap();
+            assert_eq!(view_forward.values, transpose.values);
+            assert_scans(&store, &matrix, usize::from(k != 0));
+            store.reset();
+            let view_transpose: common::MaterializeOutput = view.mat_transpose_mat(&rhs).unwrap();
+            assert_eq!(view_transpose.values, out.values);
             assert_scans(&store, &matrix, usize::from(k != 0));
             for i in 0..n {
                 for r in 0..k {

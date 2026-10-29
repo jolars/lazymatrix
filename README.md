@@ -62,7 +62,8 @@ variations around large column offsets. They use the same numerical policy for
 allocating and reusable products without creating a normalized design copy.
 
 The [examples](examples/) cover gradient descent, stochastic gradient descent,
-coordinate descent, weighted Gram matrices, and file-backed input. Run one from
+coordinate descent, ridge regression through primal or dual systems, weighted
+Gram matrices, and file-backed input. Run one from
 a checkout with:
 
 ```sh
@@ -77,6 +78,8 @@ cargo run --locked --example coordinate_descent --features faer
 - Forward and transpose matrix–vector products, reusable output buffers, and
   weighted Gram matrices.
 - Batched forward and transpose products with caller-selected dense outputs.
+- Borrowed transpose operator views through `Transpose::new(&operator)`,
+  preserving fitted normalization across vector and batched products.
 - Borrowed logical columns and sparse column and row views for supported
   storage.
 - Borrowed contiguous submatrices that retain fitted normalization parameters,

@@ -237,11 +237,13 @@ than assuming full API or numerical parity.
 
 ## Operator algebra
 
-- [ ] Evaluate a borrowed transpose operator view with a concrete consumer.
-  - A transpose view should swap `MatVec` and `MatTransposeVec` without copying
-    or changing the normalization represented by the original operator.
-  - Do not imply that transposed sparse storage has acquired the opposite
-    orientation-specific borrowing capability.
+- [x] Evaluate a borrowed transpose operator view with a concrete consumer.
+  - `Transpose::new(&operator)` swaps dimensions and vector, reusable-output,
+    fused, and batched products without copying or changing fitted normalization.
+    The view exposes no sparse row or column borrowing capabilities.
+  - The [ridge regression example](examples/ridge_primal_dual.rs) reuses one
+    normal-equation solver for primal and dual systems, choosing the smaller
+    system without materializing a Gram matrix.
 
 - [ ] Evaluate lightweight scaled, sum, and composition operator wrappers.
   - Candidate forms are `Scaled<A>`, `Sum<A, B>`, and `Composition<A, B>`;

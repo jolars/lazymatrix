@@ -5,6 +5,7 @@ mod backend_aliases;
 fn normalization_does_not_correct_partial_outputs_after_errors() {
     use lazymatrix::{
         LazyMatrix, MatTransposeVecScaledInto, MatVecScaledInto, MatrixErrorType, MatrixShape,
+        Transpose,
     };
 
     struct Failing;
@@ -65,6 +66,18 @@ fn normalization_does_not_correct_partial_outputs_after_errors() {
         .is_err()
     );
     assert_eq!(out, vec![11.0]);
+    let view = Transpose::new(&lazy);
+    assert!(
+        view.matvec_scaled_into(2.0, &vec![1.0, 1.0], 1.0, &mut out)
+            .is_err()
+    );
+    assert_eq!(out, vec![11.0]);
+    let mut out = vec![11.0, 13.0];
+    assert!(
+        view.mat_transpose_vec_scaled_into(2.0, &vec![2.0], 1.0, &mut out)
+            .is_err()
+    );
+    assert_eq!(out, vec![5.0, 13.0]);
 }
 
 #[cfg(feature = "ndarray_all")]

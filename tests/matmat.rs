@@ -3,7 +3,7 @@ use std::fmt;
 
 use lazymatrix::{
     DenseBlock, LazyMatrix, MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto,
-    MatrixErrorType, MatrixOwned, MatrixRead, MatrixShape, MatrixWrite, WithIntercept,
+    MatrixErrorType, MatrixOwned, MatrixRead, MatrixShape, MatrixWrite, Transpose, WithIntercept,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -164,6 +164,24 @@ fn allocating_and_reusable_products_apply_fitted_parameters_once() {
 
 #[test]
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+fn normalization_of_a_transpose_uses_its_own_columns() {
+    let source = source();
+    let lazy = LazyMatrix::from_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
+    let outer = LazyMatrix::from_parts(
+        Transpose::new(&lazy),
+        Some(vec![1., 2., 3.]),
+        Some(vec![2., -1., 4.]),
+    );
+    let forward: Dense = outer.matmat(&Dense::new(3, 1, &[2., -1., 4.])).unwrap();
+    assert_eq!(forward, Dense::new(2, 1, &[-4., -2.5]));
+    let transpose: Dense = outer
+        .mat_transpose_mat(&Dense::new(2, 1, &[3., -2.]))
+        .unwrap();
+    assert_eq!(transpose, Dense::new(3, 1, &[-1., 2.5, -0.625]));
+}
+
+#[test]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn intercept_uses_borrowed_predictor_rows_and_a_leading_output_row() {
     let source = source();
     let lazy = LazyMatrix::from_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
@@ -193,6 +211,13 @@ fn failed_products_skip_normalization_and_intercept_corrections() {
         Err(ReadError)
     );
     assert_eq!(transpose.values, [7., 999., 999., 999.]);
+    let view = Transpose::new(&lazy);
+    assert_eq!(view.matmat_into(&u, &mut transpose), Err(ReadError));
+    assert_eq!(transpose.values, [7., 999., 999., 999.]);
+    assert_eq!(view.mat_transpose_mat_into(&rhs, &mut out), Err(ReadError));
+    assert_eq!(out.values, [5., 999., 999., 999., 999., 999.]);
+    assert_eq!(view.matmat::<_, Dense>(&u), Err(ReadError));
+    assert_eq!(view.mat_transpose_mat::<_, Dense>(&rhs), Err(ReadError));
     let augmented = WithIntercept::new(lazy);
     let rhs = DenseBlock::new(&[10., 10., 2., 2., 4., 4.], 3, 2);
     assert_eq!(augmented.matmat_into(&rhs, &mut out), Err(ReadError));
@@ -221,6 +246,12 @@ fn validation_precedes_writes_and_empty_batches_skip_backend_calls() {
     assert_eq!((out.rows, out.cols), (3, 0));
     let out: Dense = lazy.mat_transpose_mat(&Dense::zeros(3, 0)).unwrap();
     assert_eq!((out.rows, out.cols), (2, 0));
+    assert_eq!(source.calls.get(), 0);
+    let view = Transpose::new(&lazy);
+    let out: Dense = view.matmat(&Dense::zeros(3, 0)).unwrap();
+    assert_eq!((out.rows, out.cols), (2, 0));
+    let out: Dense = view.mat_transpose_mat(&Dense::zeros(2, 0)).unwrap();
+    assert_eq!((out.rows, out.cols), (3, 0));
     assert_eq!(source.calls.get(), 0);
     let mut out = Dense::new(3, 1, &[99.; 3]);
     assert!(

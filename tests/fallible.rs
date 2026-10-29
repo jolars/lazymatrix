@@ -4,7 +4,7 @@ use std::fmt;
 use lazymatrix::{
     Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVec,
     MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape, Normalization, Scaling,
-    SubScalarAssign,
+    SubScalarAssign, Transpose,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -255,7 +255,18 @@ fn product_errors_propagate_before_normalization_and_retry_overwrites() {
     assert_eq!(out, [17.0, 99.0]);
     assert_eq!(lazy.matvec(&x), Err(ReadError));
     assert_eq!(lazy.mat_transpose_vec(&x), Err(ReadError));
+    let view = Transpose::new(&lazy);
+    assert_eq!(view.matvec_into(&x, &mut out), Err(ReadError));
+    assert_eq!(out, [17.0, 99.0]);
+    assert_eq!(view.mat_transpose_vec_into(&x, &mut out), Err(ReadError));
+    assert_eq!(out, [17.0, 99.0]);
+    assert_eq!(view.matvec(&x), Err(ReadError));
+    assert_eq!(view.mat_transpose_vec(&x), Err(ReadError));
     source.fail.set(false);
+    view.matvec_into(&x, &mut out).unwrap();
+    assert_eq!(out, [4.0, 2.0]);
+    view.mat_transpose_vec_into(&x, &mut out).unwrap();
+    assert_eq!(out, [0.0, 4.0]);
     lazy.matvec_into(&x, &mut out).unwrap();
     assert_eq!(out, [0.0, 4.0]);
     lazy.mat_transpose_vec_into(&x, &mut out).unwrap();
