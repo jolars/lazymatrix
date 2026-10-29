@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "lazymatrix"
 version = "0.1.1"
-description = "Lazy column normalization for NumPy and SciPy matrices"
+description = "Lazy column normalization for NumPy, SciPy, and PyTorch"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT OR Apache-2.0"
@@ -24,6 +24,9 @@ Homepage = "https://lazymatrix.org"
 Documentation = "https://lazymatrix.org/guide/python"
 Repository = "https://github.com/jolars/lazymatrix"
 Changelog = "https://github.com/jolars/lazymatrix/blob/main/python/CHANGELOG.md"
+
+[project.optional-dependencies]
+torch = ["torch>=2.9"]
 
 [dependency-groups]
 dev = ["maturin>=1.15,<2", "pytest>=8", "ruff>=0.12", "twine>=6"]

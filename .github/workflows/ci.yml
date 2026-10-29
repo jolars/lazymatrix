@@ -182,14 +182,46 @@ jobs:
         working-directory: python
       - run: cargo fmt --manifest-path python/rust/Cargo.toml -- --check
       - run: cargo clippy --manifest-path python/rust/Cargo.toml --all-targets --locked -- -D warnings
-      - run: python scripts/python-tool.py ruff check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py
-      - run: python scripts/python-tool.py ruff format --check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py
+      - run: python scripts/python-tool.py ruff check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py benches/torch_adapter
+      - run: python scripts/python-tool.py ruff format --check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py benches/torch_adapter
       - run: python scripts/python-tool.py python -m pytest python/tests
       - name: Test minimum NumPy and SciPy versions
         if: matrix.python == '3.11'
         run: |
           uv pip install --python .devenv/python/bin/python numpy==1.26.4 scipy==1.12.0
           python scripts/python-tool.py python -m pytest python/tests
+
+  python-torch:
+    name: PyTorch (${{ matrix.python }}, ${{ matrix.torch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+        torch: ["minimum", "locked"]
+    env:
+      LAZYMATRIX_REQUIRE_TORCH: "1"
+      TORCH_RELEASE: ${{ matrix.torch }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: python/rust
+      - run: uv sync --project python --locked --no-install-project
+      - run: python ../scripts/python-tool.py maturin develop --release --locked
+        working-directory: python
+      - name: Install CPU PyTorch
+        run: |
+          torch_version=$(python -c 'import os, tomllib; from pathlib import Path; lock = tomllib.loads(Path("python/uv.lock").read_text()); print("2.9.0" if os.environ["TORCH_RELEASE"] == "minimum" else next(item["version"] for item in lock["package"] if item["name"] == "torch"))')
+          uv pip install --python .devenv/python/bin/python --torch-backend=cpu "torch==$torch_version"
+      - run: python scripts/python-tool.py python -m pytest python/tests
+
+      - name: Smoke-test the PyTorch benchmark
+        if: matrix.python == '3.14' && matrix.torch == 'locked'
+        run: python scripts/python-tool.py python benches/torch_adapter/benchmark.py --smoke
 
   python-package:
     name: Python distributions
@@ -235,6 +267,7 @@ jobs:
         msrv,
         zarrs-msrv,
         python,
+        python-torch,
         python-package,
         release-config,
       ]

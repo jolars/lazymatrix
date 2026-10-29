@@ -12,19 +12,17 @@ already exist. The blockers below concern exposing those capabilities to Python
 and using them in neural first layers. Keep FFI and framework adapters in
 companion packages; the Rust core remains independent of Python and solvers.
 
-- [ ] Prototype a PyTorch adapter using supplied centers and scales before
-  requiring Rust bindings or Rust execution in the training loop.
-  - Compute `(X - 1c^T) S^-1 W + b` through sparse multiplication and a dense
-    centering correction without materializing the normalized input.
-  - Keep `W` trainable in normalized coordinates and derive `S^-1 W` during each
-    forward pass. Training independent raw-scale weights would change the
-    optimization dynamics despite equivalent initial predictions.
-  - Store fixed normalization parameters as buffers and verify predictions and
-    parameter gradients against an explicitly normalized dense reference.
-    Establish supported sparse layouts, dtypes, devices, and bias behavior.
-  - Measure peak memory and throughput before claiming a performance benefit. A
-    native framework forward pass does not require Rust autograd or GPU kernels.
-    TensorFlow support can follow the first working consumer.
+- [x] Include a native PyTorch first layer using supplied centers and scales.
+  - `lazymatrix.torch.NormalizedLinear` preserves trainable weights in normalized
+    coordinates, retains fixed normalization as checkpoint buffers, and applies
+    a dense centering correction without materializing the normalized input.
+  - Dense and fixed sparse COO/CSR features support float32 and float64 on CPU
+    and CUDA. Predictions, parameter gradients, and optimizer updates are checked
+    against explicit dense normalization. CUDA cases run when available.
+  - The optional Python extra keeps Rust out of the training loop. The
+    `benches/torch_adapter` comparison measures peak memory and throughput;
+    performance depends on layout, density, and device. TensorFlow remains
+    separate work.
 
 - [x] Add an owned float64 Python binding for dense and CSR/CSC input, products,
   transpose, column access, a SciPy operator adapter, and explicit dense

@@ -78,7 +78,102 @@ conversion or their own operator integration.
 
 The initial Python API fits each input independently. Reusing training
 normalization on new observations is planned; calling `standardize` on validation
-data computes new statistics.
+data computes new statistics. The PyTorch layer below can already reuse supplied
+training parameters on new raw tensors.
+
+## Use a PyTorch first layer
+
+Install the optional adapter with:
+
+```sh
+pip install "lazymatrix[torch]"
+```
+
+PyTorch 2.9 or newer is required. Install a compatible PyTorch build using
+[PyTorch's installation instructions](https://pytorch.org/get-started/locally/)
+when you need a particular CUDA version. The ordinary LazyMatrix installation
+does not require or import PyTorch. The extra is available on platforms
+supported by PyTorch.
+
+`NormalizedLinear` applies fixed column normalization as part of a trainable
+first layer. Fit statistics on training data once, then pass raw training,
+validation, and prediction tensors through the same layer:
+
+```python
+import torch
+from lazymatrix.torch import NormalizedLinear
+
+# X and Z are the raw training matrix and its fitted normalization from above.
+raw = X.tocsr()
+training = torch.sparse_csr_tensor(
+    torch.tensor(raw.indptr, dtype=torch.int64),
+    torch.tensor(raw.indices, dtype=torch.int64),
+    torch.tensor(raw.data, dtype=torch.float32),
+    size=raw.shape,
+)
+layer = NormalizedLinear(
+    X.shape[1], 8, centers=Z.centers, scales=Z.scales, dtype=torch.float32
+)
+model = torch.nn.Sequential(layer, torch.nn.ReLU(), torch.nn.Linear(8, 1))
+prediction = model(training)
+prediction.square().mean().backward()
+```
+
+The layer accepts dense tensors with shape `(*, in_features)` and
+two-dimensional sparse COO or CSR tensors. Convert other sparse layouts
+explicitly before calling it. COO duplicates are summed; CSR tensors must
+satisfy PyTorch's storage invariants, including sorted, distinct column indices
+within each row. When constructing tensors from SciPy, call `sum_duplicates()`
+and `sort_indices()` first if the input is not canonical.
+
+Inputs and the layer must share their dtype and device. Float32 and float64
+are supported on CPU and CUDA. For example, move both `model` and `training`
+with `.to("cuda")` before training on a GPU. Sparse features are fixed data:
+sparse tensors with `requires_grad=True` are rejected. Dense-input, weight,
+and bias gradients are supported. Mixed precision, autocast, and other devices
+are outside the supported contract.
+
+Weights use the same shape and initialization as `torch.nn.Linear` and remain
+in normalized coordinates during optimization. Every forward pass derives
+`A = weight / scales` and computes `X @ A.T - A @ centers + bias`. This avoids
+constructing a normalized design matrix and keeps all training operations in
+PyTorch. Pass `centers=None` or `scales=None` to disable either component.
+`bias=False` disables the learned intercept while retaining the centering
+correction.
+
+Centers and scales are copied and detached into persistent buffers using the
+layer's dtype and device. The default dtype follows PyTorch rather than the
+supplied statistics. Explicit zero scales, including values that round to zero
+in the selected dtype, raise `ValueError`. Negative scales and nonfinite
+parameters are preserved. The layer never fits statistics or updates them in
+training mode.
+
+Save and restore the normalization together with the trained parameters:
+
+```python
+torch.save(layer.state_dict(), "first-layer.pt")
+state = torch.load("first-layer.pt", weights_only=True, map_location="cpu")
+restored = NormalizedLinear(
+    X.shape[1],
+    8,
+    centers=state.get("centers"),
+    scales=state.get("scales"),
+    dtype=state["weight"].dtype,
+)
+restored.load_state_dict(state)
+```
+
+Reconstruct the same feature counts and bias setting. Supplying the saved
+buffers enables the same normalization components without refitting or retaining
+the original training matrix. Calling `reset_parameters()` resets weights and
+bias while preserving the fitted normalization.
+
+Factoring normalization changes floating-point evaluation order. Large offsets
+can lose centered variation, and nonfinite values and sparse implicit zeros can
+produce different IEEE results from explicit dense normalization. Sparse storage
+does not guarantee faster training; the
+[PyTorch benchmark](https://github.com/jolars/lazymatrix/tree/main/benches/torch_adapter)
+measures forward/backward throughput and peak memory against a dense first layer.
 
 See the [Python API reference](/reference/python/) for public classes and methods.
 
@@ -88,13 +183,17 @@ From the repository root:
 
 ```sh
 task python:check
+task python:torch:check
 task python:package
 ```
 
 The first command builds an editable extension and runs formatting, linting, and
-correctness checks. The second builds a wheel and source distribution, installs
-the wheel in an isolated environment, rebuilds from the source distribution,
-and tests both installations. The environment lives in `.devenv/python`.
+correctness checks, including the optional PyTorch adapter. The second runs just
+the adapter checks. CUDA tests run when hardware is available and report skips
+otherwise. The third builds a wheel and source distribution, installs the wheel
+in an isolated environment, rebuilds from the source distribution, and tests both
+installations with and without the PyTorch extra. Distribution checks use CPU
+PyTorch wheels. The development environment lives in `.devenv/python`.
 
 Python and Rust use independent versions and share one Versionary release PR.
 Rust releases also release Python bindings. Python-only releases leave the Rust

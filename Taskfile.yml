@@ -64,14 +64,36 @@ tasks:
     cmds:
       - python ../scripts/python-tool.py maturin develop --release --locked
 
+  python:torch:install:
+    desc: Install the locked optional PyTorch dependencies.
+    cmds:
+      - uv sync --project python --locked --no-install-project --inexact --extra torch
+
+  python:torch:build:
+    desc: Build the Python extension and install the optional PyTorch dependencies.
+    cmds:
+      - task: python:build
+      - task: python:torch:install
+
+  python:torch:check:
+    desc: Build and test the PyTorch adapter, including CUDA when available.
+    env:
+      LAZYMATRIX_REQUIRE_TORCH: "1"
+    cmds:
+      - task: python:torch:build
+      - python scripts/python-tool.py python -m pytest python/tests/test_torch.py python/tests/test_optional_torch.py
+
   python:check:
-    desc: Build, lint, and test the Python bindings.
+    desc: Build, lint, and test the Python bindings and PyTorch adapter.
+    env:
+      LAZYMATRIX_REQUIRE_TORCH: "1"
     cmds:
       - task: python:build
       - cargo fmt --manifest-path python/rust/Cargo.toml -- --check
       - cargo clippy --manifest-path python/rust/Cargo.toml --all-targets --locked -- -D warnings
-      - python scripts/python-tool.py ruff check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py
-      - python scripts/python-tool.py ruff format --check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py
+      - python scripts/python-tool.py ruff check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py benches/torch_adapter
+      - python scripts/python-tool.py ruff format --check --config python/pyproject.toml python scripts/python-tool.py scripts/check-python-dist.py benches/torch_adapter
+      - task: python:torch:install
       - python scripts/python-tool.py python -m pytest python/tests
 
   python:package:
@@ -87,7 +109,7 @@ tasks:
     desc: Extract Python and Rust API references for VitePress.
     cmds:
       - task: website:install
-      - task: python:build
+      - task: python:torch:build
       - cargo fetch --locked
       - pnpm --dir docs reference
 
@@ -105,14 +127,14 @@ tasks:
 
   website:dev:
     desc: Serve the website locally with live reload.
-    deps: [website:install, python:build]
+    deps: [website:install, python:torch:build]
     dir: docs
     cmds:
       - pnpm dev
 
   website:check:
     desc: Check formatting, build the website, and validate Worker packaging.
-    deps: [website:install, python:build]
+    deps: [website:install, python:torch:build]
     dir: docs
     cmds:
       - pnpm format:check
@@ -122,7 +144,7 @@ tasks:
 
   website:deploy:
     desc: Deploy the website to Cloudflare Workers.
-    deps: [python:build]
+    deps: [python:torch:build]
     dir: docs
     cmds:
       - pnpm build

@@ -30,7 +30,17 @@ values and results use float64. Normalization uses population standard deviation
 by default; pass `df=1` for sample standard deviations. The variance divisor is
 `nrows - df`; scales are `NaN` when `nrows <= df`. Exact zero scales become one.
 
+For neural first layers, install `pip install "lazymatrix[torch]"` and use
+`lazymatrix.torch.NormalizedLinear`. It accepts supplied centers and scales,
+including `Z.centers` and `Z.scales`, and performs lazy normalization entirely
+in PyTorch. Weights remain trainable in normalized coordinates. The layer
+supports dense, sparse COO, and sparse CSR tensors in float32 or float64 on
+CPU and CUDA. Sparse inputs must not require gradients. PyTorch 2.9 or newer
+is required and is imported only when the adapter is used. See the
+[PyTorch guide](https://lazymatrix.org/guide/python#use-a-pytorch-first-layer).
+
 From the repository root, use `task python:check` to build and test the package.
+This includes the PyTorch adapter and runs CUDA cases when hardware is available.
 Python and Rust have independent versions and share one release PR.
 
 PyPI trusted publishing must name `jolars/lazymatrix`, `publish-python.yml`, and
