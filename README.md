@@ -3,8 +3,7 @@
 [![CI](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/jolars/lazymatrix/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/lazymatrix.svg)](https://crates.io/crates/lazymatrix)
 [![PyPI](https://badge.fury.io/py/lazymatrix.svg)](https://badge.fury.io/py/lazymatrix)
-[![Software
-DOI](https://img.shields.io/badge/Software_DOI-10.5281%2Fzenodo.23666450-blue)](https://doi.org/10.5281/zenodo.23666450)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23666450-blue)](https://doi.org/10.5281/zenodo.23666450)
 
 LazyMatrix is a Rust library for column normalization of design matrices. It
 applies centering and scaling through matrix operations, preserving sparse
