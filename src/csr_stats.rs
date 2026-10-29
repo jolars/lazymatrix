@@ -78,9 +78,9 @@ pub(crate) fn quantiles<F: Scalar, M: SparseRows<F> + ?Sized>(
     })
 }
 
-pub(crate) fn sds<F: Scalar, M: SparseRows<F> + ?Sized>(matrix: &M) -> Vec<F> {
+pub(crate) fn sds<F: Scalar, M: SparseRows<F> + ?Sized>(matrix: &M, df: usize) -> Vec<F> {
     let centers = means(matrix);
-    let n = F::from_usize(matrix.nrows()).unwrap();
+    let n = crate::normalization::sd_divisor::<F>(matrix.nrows(), df);
     reduce(
         matrix,
         |_| F::zero(),
@@ -221,8 +221,8 @@ macro_rules! impl_column_stats {
             fn col_means(&self) -> Result<Vec<F>, Self::Error> {
                 Ok(crate::csr_stats::means(self))
             }
-            fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-                Ok(crate::csr_stats::sds(self))
+            fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+                Ok(crate::csr_stats::sds(self, df))
             }
             fn col_mins(&self) -> Result<Vec<F>, Self::Error> {
                 Ok(crate::csr_stats::mins(self))

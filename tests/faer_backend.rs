@@ -141,9 +141,9 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
-                common::check_quantiles_f32(&matrix);
-                common::check_quantiles_f32(&matrix.as_ref());
-                common::check_quantiles_f32(&matrix.rb_mut());
+                common::check_column_stats_f32(&matrix);
+                common::check_column_stats_f32(&matrix.as_ref());
+                common::check_column_stats_f32(&matrix.rb_mut());
                 common::batched::check_batched_f32(&matrix, |v| Col::from_fn(v.len(), |i| v[i]));
                 common::batched::check_batched_f32(&matrix.as_ref(), |v| {
                     Col::from_fn(v.len(), |i| v[i])
@@ -188,8 +188,13 @@ macro_rules! backend_suite {
                     common::assert_close(&matrix.col_l2().unwrap(), &[4.0, 1.0], 1e-10);
                     common::assert_close(&matrix.col_maxabs().unwrap(), &[4.0, 1.0], 1e-10);
                     common::assert_close(
-                        &matrix.col_sds().unwrap(),
+                        &matrix.col_sds(0).unwrap(),
                         &[(32.0_f64 / 9.0).sqrt(), (2.0_f64 / 9.0).sqrt()],
+                        1e-10,
+                    );
+                    common::assert_close(
+                        &matrix.col_sds(1).unwrap(),
+                        &[(16.0_f64 / 3.0).sqrt(), (1.0_f64 / 3.0).sqrt()],
                         1e-10,
                     );
                     common::assert_close(
@@ -303,7 +308,7 @@ macro_rules! backend_suite {
             #[test]
             fn fused_products_support_f32() {
                 let matrix = Mat::from_fn(2, 1, |i, _| (2 * i + 1) as f32);
-                common::check_quantiles_f32(&matrix);
+                common::check_column_stats_f32(&matrix);
                 let to_v = |v: &[f32]| Col::from_fn(v.len(), |i| v[i]);
                 common::check_fused_f32(&matrix, to_v);
                 let sparse = SparseColMat::try_new_from_triplets(
@@ -316,7 +321,7 @@ macro_rules! backend_suite {
                 )
                 .unwrap();
                 common::check_fused_f32(&sparse, to_v);
-                common::check_quantiles_f32(&sparse);
+                common::check_column_stats_f32(&sparse);
                 common::run_dense_centered_f32_suite(
                     |dense| Mat::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
                     to_v,

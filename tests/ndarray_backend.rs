@@ -242,7 +242,8 @@ macro_rules! backend_suite {
                 for center in [Centering::None, Centering::Mean, Centering::Min] {
                     for scale in [
                         Scaling::None,
-                        Scaling::Sd,
+                        Scaling::Sd { df: 0 },
+                        Scaling::Sd { df: 1 },
                         Scaling::L1,
                         Scaling::L2,
                         Scaling::MaxAbs,
@@ -398,14 +399,14 @@ macro_rules! backend_suite {
             #[test]
             fn ndarray_f32_normalization_and_products() {
                 let quantiles = array![[1.0_f32], [3.0]];
-                common::check_quantiles_f32(&quantiles);
-                common::check_quantiles_f32(&quantiles.slice(s![..;-1, ..]));
+                common::check_column_stats_f32(&quantiles);
+                common::check_column_stats_f32(&quantiles.slice(s![..;-1, ..]));
                 common::run_dense_centered_f32_suite(
                     |dense| Array2::from_shape_fn((dense.len(), dense[0].len()), |(i, j)| dense[i][j]),
                     |v| Array1::from_vec(v.to_vec()),
                 );
                 let matrix = array![[1.0_f32, 3.0], [3.0, 3.0]];
-                let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+                let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd { df: 0 })).unwrap();
                 assert_eq!(lazy.centers(), Some([2.0, 3.0].as_slice()));
                 assert_eq!(lazy.scales(), Some([1.0, 1.0].as_slice()));
                 assert_eq!(
@@ -442,7 +443,7 @@ macro_rules! backend_suite {
                     matrix.col_means().unwrap(),
                     vec![f64::INFINITY, f64::NEG_INFINITY]
                 );
-                assert!(matrix.col_sds().unwrap().iter().all(|x| x.is_nan()));
+                assert!(matrix.col_sds(0).unwrap().iter().all(|x| x.is_nan()));
                 assert_eq!(matrix.col_maxabs().unwrap(), vec![f64::INFINITY; 2]);
                 assert_eq!(matrix.col_ranges().unwrap(), vec![f64::INFINITY; 2]);
             }

@@ -88,7 +88,8 @@ where
             for centering in [Centering::None, Centering::Mean, Centering::Min] {
                 for scaling in [
                     Scaling::None,
-                    Scaling::Sd,
+                    Scaling::Sd { df: 0 },
+                    Scaling::Sd { df: 1 },
                     Scaling::L1,
                     Scaling::L2,
                     Scaling::MaxAbs,

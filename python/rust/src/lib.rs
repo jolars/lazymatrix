@@ -24,14 +24,18 @@ fn infallible<T>(result: Result<T, Infallible>) -> T {
     }
 }
 
-fn specification((center, scale): (bool, bool)) -> Normalization {
+fn specification((center, scale): (bool, bool), df: usize) -> Normalization {
     Normalization::new(
         if center {
             Centering::Mean
         } else {
             Centering::None
         },
-        if scale { Scaling::Sd } else { Scaling::None },
+        if scale {
+            Scaling::Sd { df }
+        } else {
+            Scaling::None
+        },
     )
 }
 
@@ -127,13 +131,14 @@ impl Matrix {
         py: Python<'_>,
         values: PyReadonlyArray2<'_, f64>,
         normalization: (bool, bool),
+        df: usize,
     ) -> PyResult<Self> {
         let raw = values.as_array().to_owned();
         validate_rows(raw.nrows())?;
         Ok(py.detach(move || Self {
             storage: Storage::Dense(infallible(LazyMatrix::new(
                 raw,
-                specification(normalization),
+                specification(normalization, df),
             ))),
         }))
     }
@@ -146,6 +151,7 @@ impl Matrix {
         indices: PyReadonlyArray1<'_, i64>,
         indptr: PyReadonlyArray1<'_, i64>,
         normalization: (bool, bool),
+        df: usize,
     ) -> PyResult<Self> {
         validate_rows(shape.0)?;
         let checked_indices = |array: PyReadonlyArray1<'_, i64>| -> PyResult<Vec<usize>> {
@@ -169,7 +175,7 @@ impl Matrix {
         Ok(py.detach(move || Self {
             storage: Storage::Sparse(infallible(LazyMatrix::new(
                 SprsCsc::try_new(raw).unwrap(),
-                specification(normalization),
+                specification(normalization, df),
             ))),
         }))
     }

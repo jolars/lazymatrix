@@ -65,7 +65,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         file.metadata()?.len()
     );
     let start = Instant::now();
-    let lazy = LazyMatrix::new(view, Normalization::new(Centering::Mean, Scaling::Sd))?;
+    let lazy = LazyMatrix::new(
+        view,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )?;
     println!("Normalization: {:?}", start.elapsed());
     let v = Array1::ones(ncols);
     let mut y = Array1::zeros(nrows);

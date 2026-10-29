@@ -17,14 +17,14 @@ pub const NORMALIZATIONS: [(&str, Normalization); 2] = [
         "standardized",
         Normalization {
             center: Centering::Mean,
-            scale: Scaling::Sd,
+            scale: Scaling::Sd { df: 0 },
         },
     ),
     (
         "scaled",
         Normalization {
             center: Centering::None,
-            scale: Scaling::Sd,
+            scale: Scaling::Sd { df: 0 },
         },
     ),
 ];

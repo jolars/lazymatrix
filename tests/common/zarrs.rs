@@ -739,7 +739,8 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
         for center in [Centering::None, Centering::Mean, Centering::Min] {
             for scale in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::Range,
                 Scaling::L1,
                 Scaling::L2,
@@ -749,7 +750,7 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
                 let lazy = LazyMatrix::new(&matrix, Normalization::new(center, scale)).unwrap();
                 let scans = if center == Centering::None && scale == Scaling::None {
                     0
-                } else if scale == Scaling::Sd
+                } else if matches!(scale, Scaling::Sd { .. })
                     || (center != Centering::None
                         && matches!(scale, Scaling::L1 | Scaling::L2 | Scaling::MaxAbs))
                 {
@@ -857,7 +858,11 @@ fn read_errors_stop_the_scan_and_output_can_be_reused() {
         store.reset();
         store.fail_after.store(fail_after, Ordering::Relaxed);
         assert!(
-            LazyMatrix::new(&matrix, Normalization::new(Centering::Mean, Scaling::Sd)).is_err()
+            LazyMatrix::new(
+                &matrix,
+                Normalization::new(Centering::Mean, Scaling::Sd { df: 0 })
+            )
+            .is_err()
         );
         assert_eq!(store.keys.lock().unwrap().len(), fail_after + 1);
     }
@@ -879,14 +884,18 @@ fn f32_normalization_and_products_match_known_values() {
         .unwrap();
     store_subset(&array, &[1.0_f32, 3.0]).unwrap();
     let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
-    common::check_quantiles_f32(&matrix);
+    common::check_column_stats_f32(&matrix);
     common::check_fused_f32(&matrix, |v| v.to_vec());
     let array = ArrayBuilder::new(vec![3, 2], vec![2, 1], float32(), 0.0f32)
         .build(Arc::new(MemoryStore::new()), "/matrix")
         .unwrap();
     store_subset(&array, &[1.0f32, 2.0, 2.0, 4.0, 3.0, 6.0]).unwrap();
     let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
-    let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+    let lazy = LazyMatrix::new(
+        matrix,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )
+    .unwrap();
     assert_eq!(lazy.centers().unwrap(), [2.0, 4.0]);
     let root = (1.5f32).sqrt();
     let forward = lazy.matvec(&vec![1.0, 2.0]).unwrap();
@@ -987,7 +996,8 @@ macro_rules! ndarray_suite {
                 for center in [Centering::None, Centering::Mean, Centering::Min] {
                     for scale in [
                         Scaling::None,
-                        Scaling::Sd,
+                        Scaling::Sd { df: 0 },
+                        Scaling::Sd { df: 1 },
                         Scaling::Range,
                         Scaling::L1,
                         Scaling::L2,
@@ -1105,8 +1115,11 @@ fn eager_conversion_reads_one_scan_and_retries_after_storage_failure() {
     use lazymatrix::{Centering, MatrixOwned, Scaling};
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);
-        let lazy =
-            LazyMatrix::new(&matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+        let lazy = LazyMatrix::new(
+            &matrix,
+            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        )
+        .unwrap();
         assert_scans(&store, &matrix, 2);
         store.reset();
         let eager = lazy.to_eager::<common::MaterializeOutput>().unwrap();

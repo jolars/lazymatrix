@@ -130,9 +130,9 @@ impl<F> Scalar for F where
 {
 }
 
-/// Computes a population standard deviation from stored values and implicit zeros.
+/// Computes a standard deviation from stored values and implicit zeros.
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
-pub(crate) fn sparse_column_sd<F: Scalar>(values: &[F], nrows: usize) -> F {
+pub(crate) fn sparse_column_sd<F: Scalar>(values: &[F], nrows: usize, df: usize) -> F {
     let n = F::from_usize(nrows).unwrap();
     let mean = values.iter().copied().sum::<F>() / n;
     let stored_squared_deviations = values
@@ -143,7 +143,8 @@ pub(crate) fn sparse_column_sd<F: Scalar>(values: &[F], nrows: usize) -> F {
         })
         .sum::<F>();
     let implicit_count = F::from_usize(nrows - values.len()).unwrap();
-    let variance = (stored_squared_deviations + implicit_count * mean * mean) / n;
+    let variance = (stored_squared_deviations + implicit_count * mean * mean)
+        / crate::normalization::sd_divisor::<F>(nrows, df);
     variance.sqrt()
 }
 

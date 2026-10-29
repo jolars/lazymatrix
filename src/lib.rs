@@ -330,7 +330,7 @@
 //! let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], float64(), 1.0f64)
 //!     .build(Arc::new(MemoryStore::new()), "/matrix")?;
 //! let matrix = ZarrMatrix::<_, f64>::try_new(array)?;
-//! let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd))?;
+//! let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }))?;
 //! assert_eq!(lazy.matvec(&vec![1.0, 2.0])?, vec![0.0; 3]);
 //! # }
 //! # Ok::<(), Box<dyn std::error::Error>>(())

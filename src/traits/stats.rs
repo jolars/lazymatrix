@@ -8,9 +8,9 @@ use crate::{Centering, Normalization, NormalizationStats, QuantileRange, Scaling
 /// stored entries — structurally absent entries are treated as zero — without
 /// ever densifying a column.
 ///
-/// All means and standard deviations use the **population** convention (divide
-/// by `n`, the number of rows), matching the design-matrix normalization used by
-/// the R `lazymatrix` package.
+/// Means divide by `n`, the number of rows. Standard deviations divide the sum
+/// of squared deviations by `n - df`: use `df = 0` for population standard
+/// deviations or `df = 1` for sample standard deviations.
 ///
 /// Statistics follow IEEE floating-point behavior. In particular, means,
 /// standard deviations, minima, and ranges of a zero-row column are `NaN`;
@@ -57,11 +57,13 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
     /// Column means `c_j = (Σ_i x_ij) / n`.
     fn col_means(&self) -> Result<Vec<F>, Self::Error>;
 
-    /// Column population standard deviations `√(Σ_i (x_ij − c_j)²/n)`.
+    /// Column standard deviations `√(Σ_i (x_ij − c_j)²/(n − df))`.
     ///
     /// Centering-invariant, so this is also the standard deviation of the
     /// centered column. Implementations use a stable two-pass calculation.
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error>;
+    /// Use `df = 0` for population standard deviations or `df = 1` for sample
+    /// standard deviations. Columns with `n <= df` produce `NaN`.
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error>;
 
     /// Column minima `min_i x_ij` of the un-centered column.
     fn col_mins(&self) -> Result<Vec<F>, Self::Error>;
@@ -121,7 +123,7 @@ where
     };
     let scales = match spec.scale {
         Scaling::None => None,
-        Scaling::Sd => Some(matrix.col_sds()?),
+        Scaling::Sd { df } => Some(matrix.col_sds(df)?),
         Scaling::Range => Some(matrix.col_ranges()?),
         Scaling::QuantileRange(range) => Some(match ranges {
             Some(values) => values,
@@ -167,8 +169,8 @@ where
         (**self).col_means()
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-        (**self).col_sds()
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+        (**self).col_sds(df)
     }
 
     fn col_mins(&self) -> Result<Vec<F>, Self::Error> {
@@ -228,8 +230,8 @@ where
         (**self).col_means()
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-        (**self).col_sds()
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+        (**self).col_sds(df)
     }
 
     fn col_mins(&self) -> Result<Vec<F>, Self::Error> {

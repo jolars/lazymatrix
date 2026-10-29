@@ -141,7 +141,7 @@ fn bench_matrix<const DEFAULT_HOOK: bool, M, V>(
         ),
         (
             "standardized",
-            Normalization::new(Centering::Mean, Scaling::Sd),
+            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         ),
     ] {
         let lazy = LazyMatrix::new(matrix, normalization).unwrap();

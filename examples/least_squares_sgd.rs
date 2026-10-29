@@ -198,7 +198,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let raw = SparseRowMat::<usize, f64>::try_new_from_triplets(nrows, ncols, &triplets)?;
-    let matrix = LazyMatrix::new(raw, Normalization::new(Centering::Mean, Scaling::Sd))?;
+    let matrix = LazyMatrix::new(
+        raw,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )?;
     let beta_star = Col::from_fn(ncols, |j| (j as f64 - 4.5) * 0.5);
     let response = matrix.matvec(&beta_star)?;
     let y: Vec<_> = (0..nrows).map(|i| response[i]).collect();

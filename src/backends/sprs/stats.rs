@@ -108,9 +108,9 @@ where
         ))
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
         let means = self.col_means()?;
-        let n = F::from_usize(self.rows()).unwrap();
+        let n = crate::normalization::sd_divisor::<F>(self.rows(), df);
         Ok(reduce_columns(
             self.view(),
             |_| F::zero(),

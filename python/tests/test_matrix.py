@@ -24,9 +24,9 @@ def matrix(request):
     )
 
 
-def dense_reference(x, center=True, scale=True):
+def dense_reference(x, center=True, scale=True, df=0):
     raw = np.asarray(x.toarray() if sparse.issparse(x) else x, dtype=np.float64)
-    scales = raw.std(axis=0) if scale else np.ones(raw.shape[1])
+    scales = raw.std(axis=0, ddof=df) if scale else np.ones(raw.shape[1])
     scales[scales == 0] = 1
     centers = raw.mean(axis=0) if center else np.zeros(raw.shape[1])
     return (raw - centers) / scales
@@ -34,9 +34,10 @@ def dense_reference(x, center=True, scale=True):
 
 @pytest.mark.parametrize("center", [False, True])
 @pytest.mark.parametrize("scale", [False, True])
-def test_normalization_and_products(matrix, center, scale):
-    z = standardize(matrix, center=center, scale=scale)
-    expected = dense_reference(matrix, center, scale)
+@pytest.mark.parametrize("df", [0, 1, 2])
+def test_normalization_and_products(matrix, center, scale, df):
+    z = standardize(matrix, center=center, scale=scale, df=df)
+    expected = dense_reference(matrix, center, scale, df)
     v = np.array([0.5, -2.0, 1.0])
     u = np.array([1.0, -0.25, 2.0, 0.0])
     b = np.column_stack([v, -v])
@@ -88,6 +89,39 @@ def test_owned_storage_and_parameter_copies(matrix):
     assert_allclose(z.toarray(), expected)
 
 
+@pytest.mark.parametrize("nrows", [1, 4])
+def test_insufficient_degrees_of_freedom(matrix, nrows):
+    source = matrix[:nrows]
+    for df in (nrows, nrows + 1, np.iinfo(np.uintp).max):
+        z = standardize(source, df=df)
+        assert np.isnan(z.scales).all()
+        assert np.isnan(z.toarray()).all()
+        unscaled = standardize(source, scale=False, df=df)
+        assert unscaled.scales is None
+        assert_allclose(unscaled.toarray(), dense_reference(source, scale=False))
+
+
+@pytest.mark.parametrize("df", [0, 1, 2])
+def test_standard_deviations_preserve_small_variation(df):
+    x = np.array([[1e12 + 1, 5.0], [1e12 + 2, 5.0], [1e12 + 3, 5.0]])
+    for source in (x, sparse.csc_matrix(x), sparse.csr_matrix(x)):
+        z = standardize(source, df=df)
+        assert_allclose(z.scales, [np.sqrt(2.0 / (3 - df)), 1.0])
+        assert_allclose(z.toarray(), dense_reference(source, df=df))
+
+
+@pytest.mark.parametrize("constructor", [LazyMatrix, standardize])
+def test_degrees_of_freedom_validation(constructor, matrix):
+    assert_allclose(
+        constructor(matrix, df=np.int64(1)).toarray(), dense_reference(matrix, df=1)
+    )
+    with pytest.raises(ValueError, match="df must be nonnegative"):
+        constructor(matrix, df=-1)
+    for df in (0.5, "1", None):
+        with pytest.raises(TypeError):
+            constructor(matrix, df=df)
+
+
 @pytest.mark.parametrize("order", ["C", "F", "strided", "reversed"])
 def test_dense_storage_layouts(order):
     raw = np.arange(48.0).reshape(8, 6)
@@ -108,7 +142,8 @@ def test_real_numeric_inputs_become_float64(dtype):
     assert_allclose(standardize(x).toarray(), dense_reference(x))
 
 
-def test_sparse_duplicates_unsorted_indices_and_explicit_zeros():
+@pytest.mark.parametrize("df", [0, 1])
+def test_sparse_duplicates_unsorted_indices_and_explicit_zeros(df):
     x = sparse.csc_matrix(
         (
             np.array([3.0, 1.0, -1.0, 0.0, 4.0]),
@@ -118,8 +153,8 @@ def test_sparse_duplicates_unsorted_indices_and_explicit_zeros():
         shape=(3, 2),
     )
     before = (x.data.copy(), x.indices.copy(), x.indptr.copy())
-    expected = dense_reference(x)
-    z = standardize(x)
+    expected = dense_reference(x, df=df)
+    z = standardize(x, df=df)
     assert_allclose(z.toarray(), expected)
     assert_allclose(z @ np.ones(2), expected @ np.ones(2))
     for actual, original in zip((x.data, x.indices, x.indptr), before, strict=True):
@@ -169,10 +204,11 @@ def test_empty_dimensions():
         standardize(np.empty((0, 2)))
 
 
-def test_nonfinite_values_are_retained():
+@pytest.mark.parametrize("df", [0, 1])
+def test_nonfinite_values_are_retained(df):
     x = np.array([[np.nan, np.inf, 1.0], [2.0, 3.0, 1.0]])
     for source in (x, sparse.csc_matrix(x)):
-        z = standardize(source)
+        z = standardize(source, df=df)
         assert np.isnan(z.centers[0])
         assert np.isinf(z.centers[1])
         assert np.isnan(z.scales[:2]).all()

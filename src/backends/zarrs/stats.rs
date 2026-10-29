@@ -36,7 +36,7 @@ impl<F: Scalar> Reduction<F> {
 fn accumulate_norm<F: Scalar>(sum: F, value: F, scale: Scaling) -> F {
     match scale {
         Scaling::L1 => sum + value.abs(),
-        Scaling::L2 | Scaling::Sd => sum + value * value,
+        Scaling::L2 | Scaling::Sd { .. } => sum + value * value,
         Scaling::MaxAbs if sum.is_nan() || value.is_nan() => F::nan(),
         Scaling::MaxAbs => sum.max(value.abs()),
         _ => sum,
@@ -46,7 +46,7 @@ fn accumulate_norm<F: Scalar>(sum: F, value: F, scale: Scaling) -> F {
 fn finish_norm<F: Scalar>(sum: F, scale: Scaling, rows: usize) -> F {
     match scale {
         Scaling::L2 => sum.sqrt(),
-        Scaling::Sd => (sum / F::from_usize(rows).unwrap()).sqrt(),
+        Scaling::Sd { df } => (sum / crate::normalization::sd_divisor::<F>(rows, df)).sqrt(),
         _ => sum,
     }
 }
@@ -116,9 +116,9 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
         if spec == Normalization::default() {
             return Ok((None, None));
         }
-        let mean = spec.center == Centering::Mean || spec.scale == Scaling::Sd;
+        let mean = spec.center == Centering::Mean || matches!(spec.scale, Scaling::Sd { .. });
         let extrema = spec.center == Centering::Min || spec.scale == Scaling::Range;
-        let second_pass = spec.scale == Scaling::Sd
+        let second_pass = matches!(spec.scale, Scaling::Sd { .. })
             || (spec.center != Centering::None
                 && matches!(spec.scale, Scaling::L1 | Scaling::L2 | Scaling::MaxAbs));
         let stats = self.reductions(
@@ -141,7 +141,7 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
         let scales = match spec.scale {
             Scaling::None => None,
             // SD uses the mean even when the requested center is the minimum.
-            Scaling::Sd => Some(self.column_norms(means.as_deref(), Scaling::Sd)?),
+            scale @ Scaling::Sd { .. } => Some(self.column_norms(means.as_deref(), scale)?),
             Scaling::Range => Some(stats.iter().map(Reduction::range).collect()),
             scale if second_pass => Some(self.column_norms(centers.as_deref(), scale)?),
             scale => Some(
@@ -174,8 +174,8 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
             .1
             .unwrap())
     }
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-        self.column_norms(Some(&self.col_means()?), Scaling::Sd)
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+        self.column_norms(Some(&self.col_means()?), Scaling::Sd { df })
     }
     fn col_mins(&self) -> Result<Vec<F>, Self::Error> {
         Ok(self

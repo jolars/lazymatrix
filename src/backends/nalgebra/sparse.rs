@@ -199,12 +199,12 @@ where
         }))
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
         let nrows = self.nrows();
         let (col_offsets, _row_idx, values) = self.csc_data();
         Ok(collect_columns(self.ncols(), |j| {
             let (start, end) = (col_offsets[j], col_offsets[j + 1]);
-            sparse_column_sd(&values[start..end], nrows)
+            sparse_column_sd(&values[start..end], nrows, df)
         }))
     }
 

@@ -29,6 +29,9 @@ column = Z[:, 0]
 ```
 
 `standardize` fits column means and population standard deviations immediately.
+Pass `df=1` for sample standard deviations; `df=0` is the default. The variance
+divisor is `nrows - df`, and scales are `NaN` when `nrows <= df`. `df` must be a
+nonnegative integer and affects scaling independently of centering.
 Pass `center=False` or `scale=False` to disable either component. Exact zero
 scales become one, so constant columns do not cause division by zero.
 Nonfinite values follow ordinary IEEE arithmetic; missing values are not ignored.

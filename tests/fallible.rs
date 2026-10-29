@@ -187,8 +187,8 @@ fn allocating_forward_errors_skip_centering_with_or_without_scaling() {
 }
 
 macro_rules! failing_stats {
-    ($($name:ident $(($arg:ident))?),* $(,)?) => {
-        $(fn $name(&self $(, $arg: &[f64])?) -> Result<Vec<f64>, ReadError> {
+    ($($name:ident $(($arg:ident: $ty:ty))?),* $(,)?) => {
+        $(fn $name(&self $(, $arg: $ty)?) -> Result<Vec<f64>, ReadError> {
             $(let _ = $arg;)?
             Err(ReadError)
         })*
@@ -202,15 +202,15 @@ impl ColumnStats<f64> for Source {
     failing_stats!(
         col_medians,
         col_means,
-        col_sds,
+        col_sds(df: usize),
         col_mins,
         col_ranges,
         col_maxabs,
         col_l1,
         col_l2,
-        col_l1_centered(centers),
-        col_l2_centered(centers),
-        col_maxabs_centered(centers)
+        col_l1_centered(centers: &[f64]),
+        col_l2_centered(centers: &[f64]),
+        col_maxabs_centered(centers: &[f64])
     );
 
     fn normalization_stats(
@@ -231,7 +231,7 @@ fn normalization_uses_borrowed_fused_hook_and_preserves_scale_policy() {
         fail: Cell::new(false),
         fused_calls: Cell::new(0),
     };
-    let spec = Normalization::new(Centering::Mean, Scaling::Sd);
+    let spec = Normalization::new(Centering::Mean, Scaling::Sd { df: 0 });
     let lazy = LazyMatrix::new(&source, spec).unwrap();
     assert_eq!(source.fused_calls.get(), 1);
     assert_eq!(lazy.centers(), Some([1.0, 2.0].as_slice()));
@@ -273,15 +273,15 @@ impl ColumnStats<f64> for DefaultStats {
     failing_stats!(
         col_medians,
         col_means,
-        col_sds,
+        col_sds(df: usize),
         col_mins,
         col_ranges,
         col_maxabs,
         col_l1,
         col_l2,
-        col_l1_centered(centers),
-        col_l2_centered(centers),
-        col_maxabs_centered(centers)
+        col_l1_centered(centers: &[f64]),
+        col_l2_centered(centers: &[f64]),
+        col_maxabs_centered(centers: &[f64])
     );
 }
 
@@ -299,7 +299,8 @@ fn default_normalization_hook_propagates_statistic_errors() {
     ] {
         for scale in [
             Scaling::None,
-            Scaling::Sd,
+            Scaling::Sd { df: 0 },
+            Scaling::Sd { df: 1 },
             Scaling::L1,
             Scaling::L2,
             Scaling::MaxAbs,

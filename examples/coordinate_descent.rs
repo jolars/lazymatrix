@@ -188,7 +188,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let data = SparseColMat::<usize, f64>::try_new_from_triplets(nrows, ncols, &triplets)?;
-    let matrix = LazyMatrix::new(data, Normalization::new(Centering::Mean, Scaling::Sd))?;
+    let matrix = LazyMatrix::new(
+        data,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )?;
 
     let beta_star = Col::from_fn(ncols, |j| match j {
         0 => 2.0,

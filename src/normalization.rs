@@ -69,8 +69,14 @@ pub enum Scaling {
     /// No scaling.
     #[default]
     None,
-    /// Divide by the (population) standard deviation.
-    Sd,
+    /// Divide by the standard deviation, using `nrows - df` as the variance divisor.
+    ///
+    /// Use `df = 0` for population standard deviation or `df = 1` for sample
+    /// standard deviation. When `nrows <= df`, the scale is `NaN`.
+    Sd {
+        /// Degrees of freedom subtracted from the number of rows.
+        df: usize,
+    },
     /// Divide by the maximum absolute value.
     MaxAbs,
     /// Divide by the 1-norm.
@@ -114,8 +120,10 @@ impl Normalization {
     /// The variance uses `nrows` as its divisor. Fitting with
     /// [`crate::LazyMatrix::new`] replaces exact zero standard deviations with
     /// one, so constant columns become zero.
+    /// For sample standard deviations, use
+    /// `Normalization::new(Centering::Mean, Scaling::Sd { df: 1 })`.
     pub const fn standardize() -> Self {
-        Self::new(Centering::Mean, Scaling::Sd)
+        Self::new(Centering::Mean, Scaling::Sd { df: 0 })
     }
 
     /// Subtract each column's minimum and divide by its range.
@@ -138,6 +146,21 @@ impl Normalization {
             Centering::Median,
             Scaling::QuantileRange(QuantileRange::default()),
         )
+    }
+}
+
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
+pub(crate) fn sd_divisor<F: crate::Scalar>(nrows: usize, df: usize) -> F {
+    if nrows > df {
+        F::from_usize(nrows - df).unwrap()
+    } else {
+        F::nan()
     }
 }
 

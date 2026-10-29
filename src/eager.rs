@@ -306,8 +306,8 @@ where
         self.data.col_means()
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-        self.data.col_sds()
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+        self.data.col_sds(df)
     }
 
     fn col_mins(&self) -> Result<Vec<F>, Self::Error> {

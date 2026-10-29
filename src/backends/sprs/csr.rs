@@ -193,8 +193,8 @@ impl<M: ColumnStats<F>, F: Scalar> ColumnStats<F> for SprsCsr<M> {
     fn col_means(&self) -> Result<Vec<F>, Self::Error> {
         self.inner.col_means()
     }
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-        self.inner.col_sds()
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+        self.inner.col_sds(df)
     }
     fn col_mins(&self) -> Result<Vec<F>, Self::Error> {
         self.inner.col_mins()

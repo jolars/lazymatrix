@@ -134,7 +134,8 @@ where
         ] {
             for scale in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::MaxAbs,
@@ -1043,6 +1044,7 @@ pub fn run_backend_suite<M, V>(
     quantile_statistics(&build);
     normalization_statistic_dispatch(&build);
     column_sds_large_offset(&build);
+    column_sds_degrees_of_freedom(&build);
     zero_scale_guard(&build, &to_v, &from_v);
     empty_and_nonfinite_stats(&build);
     shape_is_inferred(&build);
@@ -1442,8 +1444,11 @@ where
     }
 
     let matrix = build(&tm);
-    let borrowed =
-        LazyMatrix::new(&matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+    let borrowed = LazyMatrix::new(
+        &matrix,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )
+    .unwrap();
     assert_eq!(borrowed.nrows(), tm.nrows);
     assert_eq!(borrowed.ncols(), tm.ncols);
     assert_eq!(borrowed.column(0).len(), tm.nrows);
@@ -1960,7 +1965,13 @@ where
             .iter()
             .all(|value| value.is_nan())
     );
-    assert!(matrix.col_sds().unwrap().iter().all(|value| value.is_nan()));
+    assert!(
+        matrix
+            .col_sds(0)
+            .unwrap()
+            .iter()
+            .all(|value| value.is_nan())
+    );
     assert!(
         matrix
             .col_mins()
@@ -1979,7 +1990,11 @@ where
     assert_eq!(matrix.col_l1().unwrap(), vec![0.0, 0.0]);
     assert_eq!(matrix.col_l2().unwrap(), vec![0.0, 0.0]);
 
-    let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+    let lazy = LazyMatrix::new(
+        matrix,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )
+    .unwrap();
     let (data, centers, scales) = lazy.into_parts();
     let lazy = LazyMatrix::from_parts(data, centers, scales);
     assert!(lazy.centers().unwrap().iter().all(|value| value.is_nan()));
@@ -1993,7 +2008,8 @@ where
     };
     let matrix = build(&nan_column);
     assert!(matrix.col_means().unwrap()[0].is_nan());
-    assert!(matrix.col_sds().unwrap()[0].is_nan());
+    assert!(matrix.col_sds(0).unwrap()[0].is_nan());
+    assert!(matrix.col_sds(1).unwrap()[0].is_nan());
     assert!(matrix.col_mins().unwrap()[0].is_nan());
     assert!(matrix.col_ranges().unwrap()[0].is_nan());
     assert!(matrix.col_maxabs().unwrap()[0].is_nan());
@@ -2034,11 +2050,69 @@ where
         ],
     };
 
-    assert_close(
-        &build(&tm).col_sds().unwrap(),
-        &[(2.0_f64 / 3.0).sqrt()],
-        EPS,
-    );
+    for df in [0, 1, 2] {
+        assert_close(
+            &build(&tm).col_sds(df).unwrap(),
+            &[(2.0 / (3 - df) as f64).sqrt()],
+            EPS,
+        );
+    }
+}
+
+fn column_sds_degrees_of_freedom<M>(build: &impl Fn(&TestMatrix) -> M)
+where
+    M: ColumnStats<f64> + MatrixShape,
+{
+    for nrows in [0, 1, 3] {
+        let mut tm =
+            matrix_from_dense((0..nrows).map(|i| vec![i as f64 + 1.0, 0.0, 5.0]).collect());
+        tm.ncols = 3;
+        let matrix = build(&tm);
+        for df in [0, 1, 2, 3, usize::MAX] {
+            let expected = if nrows <= df {
+                vec![f64::NAN; 3]
+            } else {
+                let squared_deviations = if nrows == 3 { 2.0 } else { 0.0 };
+                vec![(squared_deviations / (nrows - df) as f64).sqrt(), 0.0, 0.0]
+            };
+            let check = |actual: &[f64], expected: &[f64]| {
+                assert_eq!(actual.len(), expected.len());
+                if nrows <= df {
+                    assert!(actual.iter().all(|value| value.is_nan()));
+                } else {
+                    assert_close(actual, expected, EPS);
+                }
+            };
+            check(&matrix.col_sds(df).unwrap(), &expected);
+            check(
+                &<&M as ColumnStats<f64>>::col_sds(&&matrix, df).unwrap(),
+                &expected,
+            );
+            for center in [
+                Centering::None,
+                Centering::Mean,
+                Centering::Min,
+                Centering::Median,
+            ] {
+                let spec = Normalization::new(center, Scaling::Sd { df });
+                let (_, raw_scales) = matrix.normalization_stats(spec).unwrap();
+                check(raw_scales.as_deref().unwrap(), &expected);
+                let lazy = LazyMatrix::new(&matrix, spec).unwrap();
+                let guarded: Vec<_> = expected
+                    .iter()
+                    .map(|&value| if value == 0.0 { 1.0 } else { value })
+                    .collect();
+                check(lazy.scales().unwrap(), &guarded);
+                if center == Centering::Mean {
+                    if nrows == 0 {
+                        assert!(lazy.centers().unwrap().iter().all(|value| value.is_nan()));
+                    } else {
+                        assert_close(lazy.centers().unwrap(), &matrix.col_means().unwrap(), EPS);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The wrapper obtains its dimensions from the backend matrix.
@@ -2262,7 +2336,8 @@ fn new_matches_oracle<M, V>(
     ];
     let scalings = [
         Scaling::None,
-        Scaling::Sd,
+        Scaling::Sd { df: 0 },
+        Scaling::Sd { df: 1 },
         Scaling::L1,
         Scaling::L2,
         Scaling::MaxAbs,
@@ -2426,7 +2501,19 @@ where
     }
 }
 
-pub fn check_quantiles_f32<M: ColumnStats<f32>>(matrix: &M) {
+pub fn check_column_stats_f32<M: ColumnStats<f32>>(matrix: &M) {
+    for (df, expected) in [(0, 1.0), (1, 2.0_f32.sqrt())] {
+        approx::assert_abs_diff_eq!(matrix.col_sds(df).unwrap()[0], expected, epsilon = 1e-6);
+        for center in [Centering::None, Centering::Mean, Centering::Median] {
+            let (_, scales) = matrix
+                .normalization_stats(Normalization::new(center, Scaling::Sd { df }))
+                .unwrap();
+            approx::assert_abs_diff_eq!(scales.unwrap()[0], expected, epsilon = 1e-6);
+        }
+    }
+    for df in [2, 3, usize::MAX] {
+        assert!(matrix.col_sds(df).unwrap()[0].is_nan());
+    }
     assert_eq!(matrix.col_medians().unwrap(), [2.0]);
     assert_eq!(
         matrix
@@ -2483,8 +2570,13 @@ where
     assert_close(&m.col_means().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
     // population sd: col0 var = 10/3 − (4/3)² = 14/9; col1 = 0; col2 constant = 0
     assert_close(
-        &m.col_sds().unwrap(),
+        &m.col_sds(0).unwrap(),
         &[(14.0_f64 / 9.0).sqrt(), 0.0, 0.0],
+        EPS,
+    );
+    assert_close(
+        &m.col_sds(1).unwrap(),
+        &[(7.0_f64 / 3.0).sqrt(), 0.0, 0.0],
         EPS,
     );
     assert_close(&m.col_mins().unwrap(), &[0.0, 0.0, 5.0], EPS);
@@ -2677,7 +2769,8 @@ fn intercept_products<M, V>(
         ] {
             for scale in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::Range,
@@ -2759,7 +2852,8 @@ where
         for center in [Centering::None, Centering::Mean, Centering::Min] {
             for scale in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::Range,
@@ -2903,7 +2997,8 @@ where
         ] {
             for scale in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::Range,
                 Scaling::L1,
                 Scaling::L2,
@@ -3011,8 +3106,11 @@ pub fn run_eager_product_suite<M, D, V>(
 {
     use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
     let tm = random_matrix(125, 7, 4, 0.5);
-    let lazy =
-        LazyMatrix::new(build(&tm), Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+    let lazy = LazyMatrix::new(
+        build(&tm),
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )
+    .unwrap();
     let eager = lazy.to_eager::<D>().unwrap();
     let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
     let coefficients = random_vec(129, 4);
@@ -3133,7 +3231,8 @@ where
         for centering in [Centering::None, Centering::Mean, Centering::Min] {
             for scaling in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::MaxAbs,

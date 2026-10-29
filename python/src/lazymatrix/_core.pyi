@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 class Matrix:
     @staticmethod
     def from_dense(
-        values: NDArray[np.float64], normalization: tuple[bool, bool]
+        values: NDArray[np.float64], normalization: tuple[bool, bool], df: int
     ) -> Matrix: ...
     @staticmethod
     def from_csc(
@@ -13,6 +13,7 @@ class Matrix:
         indices: NDArray[np.int64],
         indptr: NDArray[np.int64],
         normalization: tuple[bool, bool],
+        df: int,
     ) -> Matrix: ...
     @property
     def shape(self) -> tuple[int, int]: ...

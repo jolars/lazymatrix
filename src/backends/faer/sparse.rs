@@ -202,13 +202,13 @@ where
         }))
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
         let nrows = self.nrows();
         let col_ptr = self.col_ptr();
         let vals = self.val();
         Ok(collect_columns(self.ncols(), |j| {
             let (start, end) = (col_ptr[j], col_ptr[j + 1]);
-            sparse_column_sd(&vals[start..end], nrows)
+            sparse_column_sd(&vals[start..end], nrows, df)
         }))
     }
 

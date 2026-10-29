@@ -27,7 +27,8 @@ Dense inputs require a full raw-data copy. Sparse inputs remain sparse and are
 copied into canonical CSC storage. Products accept dense vectors and matrices;
 multiple right-hand sides currently use repeated vector products. All stored
 values and results use float64. Normalization uses population standard deviations
-and replaces exact zero scales with one.
+by default; pass `df=1` for sample standard deviations. The variance divisor is
+`nrows - df`; scales are `NaN` when `nrows <= df`. Exact zero scales become one.
 
 From the repository root, use `task python:check` to build and test the package.
 Python and Rust have independent versions and share one release PR.

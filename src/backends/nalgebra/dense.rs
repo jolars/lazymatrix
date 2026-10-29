@@ -398,9 +398,9 @@ where
         }))
     }
 
-    fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
+    fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
         let centers = self.col_means()?;
-        let n = F::from_usize(self.nrows()).unwrap();
+        let n = crate::normalization::sd_divisor::<F>(self.nrows(), df);
         Ok(collect_columns(self.ncols(), |j| {
             ((0..self.nrows())
                 .map(|i| {

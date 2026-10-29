@@ -291,10 +291,13 @@ where
             "centered",
             Normalization::new(Centering::Mean, Scaling::None),
         ),
-        ("scaled", Normalization::new(Centering::None, Scaling::Sd)),
+        (
+            "scaled",
+            Normalization::new(Centering::None, Scaling::Sd { df: 0 }),
+        ),
         (
             "standardized",
-            Normalization::new(Centering::Mean, Scaling::Sd),
+            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         ),
     ] {
         let matrix = LazyMatrix::new(source, spec).unwrap();

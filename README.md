@@ -71,8 +71,9 @@ cargo run --locked --example coordinate_descent --features faer
 
 ## Features
 
-- Mean, minimum, or median centering, with scaling by standard deviation, L1 or
-  L2 norm, maximum absolute value, range, or configurable quantile range.
+- Mean, minimum, or median centering, with scaling by population or sample
+  standard deviation, L1 or L2 norm, maximum absolute value, range, or
+  configurable quantile range.
 - Forward and transpose matrix–vector products, reusable output buffers, and
   weighted Gram matrices.
 - Batched forward and transpose products with caller-selected dense outputs.

@@ -24,16 +24,16 @@ fn build(tm: &TestMatrix) -> CsMat<f64> {
 }
 
 #[test]
-fn quantiles_support_f32_storage_orientations_and_index_widths() {
+fn column_stats_support_f32_storage_orientations_and_index_widths() {
     let matrix = CsMat::new_csc((2, 1), vec![0, 2], vec![0, 1], vec![1.0_f32, 3.0]);
-    common::check_quantiles_f32(&matrix);
-    common::check_quantiles_f32(&matrix.view());
-    common::check_quantiles_f32(&matrix.to_csr());
-    common::check_quantiles_f32(&SprsCsc::try_new(matrix.view()).unwrap());
-    common::check_quantiles_f32(&SprsCsr::try_new(matrix.to_csr()).unwrap());
+    common::check_column_stats_f32(&matrix);
+    common::check_column_stats_f32(&matrix.view());
+    common::check_column_stats_f32(&matrix.to_csr());
+    common::check_column_stats_f32(&SprsCsc::try_new(matrix.view()).unwrap());
+    common::check_column_stats_f32(&SprsCsr::try_new(matrix.to_csr()).unwrap());
     let matrix = CsMatI::<f32, u32, u64>::new((2, 1), vec![0, 1, 2], vec![0, 0], vec![1.0, 3.0]);
-    common::check_quantiles_f32(&matrix);
-    common::check_quantiles_f32(&matrix.to_csc());
+    common::check_column_stats_f32(&matrix);
+    common::check_column_stats_f32(&matrix.to_csc());
 }
 
 #[test]
@@ -342,7 +342,7 @@ fn sprs_views_and_alternate_indices_support_products_and_statistics() {
     }
     let lazy = LazyMatrix::new(
         csc.view_mut(),
-        Normalization::new(Centering::Mean, Scaling::Sd),
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     assert!(
@@ -375,7 +375,8 @@ fn sprs_sliced_and_transposed_views_use_local_dimensions() {
         for center in [Centering::None, Centering::Mean, Centering::Min] {
             for scale in [
                 Scaling::None,
-                Scaling::Sd,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::MaxAbs,
@@ -425,8 +426,11 @@ fn sprs_f32_normalization_and_mutable_csc_view() {
     );
     let csr = csc.to_csr();
     for matrix in [csc.view(), csr.view()] {
-        let lazy =
-            LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+        let lazy = LazyMatrix::new(
+            matrix,
+            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        )
+        .unwrap();
         assert_eq!(lazy.centers(), Some([2.0, 3.0].as_slice()));
         assert_eq!(lazy.scales(), Some([1.0, 1.0].as_slice()));
         assert_eq!(lazy.matvec(&vec![2.0, 1.0]).unwrap(), vec![-2.0, 2.0]);
@@ -436,7 +440,11 @@ fn sprs_f32_normalization_and_mutable_csc_view() {
         );
     }
     let wrapped = SprsCsc::try_new(csc.view_mut()).unwrap();
-    let lazy = LazyMatrix::new(wrapped, Normalization::new(Centering::Mean, Scaling::Sd)).unwrap();
+    let lazy = LazyMatrix::new(
+        wrapped,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )
+    .unwrap();
     assert_eq!(lazy.column(0).dot(&[1.0, 2.0]), 1.0);
 }
 
@@ -454,7 +462,7 @@ fn sprs_infinite_statistics_preserve_ieee_values() {
             matrix.col_means().unwrap(),
             vec![f64::INFINITY, f64::NEG_INFINITY]
         );
-        assert!(matrix.col_sds().unwrap().iter().all(|v| v.is_nan()));
+        assert!(matrix.col_sds(0).unwrap().iter().all(|v| v.is_nan()));
         assert_eq!(matrix.col_mins().unwrap(), vec![0.0, f64::NEG_INFINITY]);
         assert_eq!(matrix.col_ranges().unwrap(), vec![f64::INFINITY; 2]);
         assert_eq!(matrix.col_maxabs().unwrap(), vec![f64::INFINITY; 2]);
@@ -548,7 +556,7 @@ macro_rules! ndarray_suite {
 
                 let lazy = LazyMatrix::new(
                     SprsCsc::try_new(matrix.view()).unwrap(),
-                    Normalization::new(Centering::Mean, Scaling::Sd),
+                    Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
                 )
                 .unwrap();
                 let input = array![1.0, 3.0, 2.0];

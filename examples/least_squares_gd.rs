@@ -32,7 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     let x = SparseColMat::<usize, f64>::try_new_from_triplets(nrows, ncols, &triplets)?;
-    let lazy = LazyMatrix::new(x, Normalization::new(Centering::Mean, Scaling::Sd))?;
+    let lazy = LazyMatrix::new(
+        x,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )?;
     let beta_star = Col::<f64>::from_fn(ncols, |j| ((j as f64) - 4.5) * 0.5);
     let y = lazy.matvec(&beta_star)?;
     let options = Options {

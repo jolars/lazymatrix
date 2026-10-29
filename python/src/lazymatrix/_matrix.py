@@ -30,8 +30,13 @@ class LazyMatrix:
     center : bool, default=True
         Subtract each column's mean during matrix operations.
     scale : bool, default=True
-        Divide each column by its population standard deviation. Exact zero
+        Divide each column by its standard deviation. Exact zero
         scales are replaced with one.
+    df : int, default=0
+        Nonnegative degrees of freedom subtracted from the number of rows in
+        the variance divisor. Use zero for population standard deviations or
+        one for sample standard deviations. Columns with at most df rows have
+        NaN scales. Ignored when scale is False.
 
     Notes
     -----
@@ -58,9 +63,14 @@ class LazyMatrix:
     __slots__ = ("_matrix", "_transposed", "_transpose")
     __array_priority__ = 1000
 
-    def __init__(self, X: Any, *, center: bool = True, scale: bool = True) -> None:
+    def __init__(
+        self, X: Any, *, center: bool = True, scale: bool = True, df: int = 0
+    ) -> None:
         if not isinstance(center, bool) or not isinstance(scale, bool):
             raise TypeError("center and scale must be booleans")
+        df = operator.index(df)
+        if df < 0:
+            raise ValueError("df must be nonnegative")
         if sparse.issparse(X):
             if X.format not in ("csr", "csc"):
                 raise TypeError("sparse input must use CSR or CSC storage")
@@ -79,6 +89,7 @@ class LazyMatrix:
                 np.asarray(raw.indices, dtype=np.int64),
                 np.asarray(raw.indptr, dtype=np.int64),
                 (center, scale),
+                df,
             )
         else:
             if not isinstance(X, np.ndarray):
@@ -86,7 +97,7 @@ class LazyMatrix:
             raw = _real_array(X)
             if raw.ndim != 2:
                 raise ValueError("input must be two-dimensional")
-            self._matrix = Matrix.from_dense(raw, (center, scale))
+            self._matrix = Matrix.from_dense(raw, (center, scale), df)
         self._transposed = False
         self._transpose: LazyMatrix | None = None
 
@@ -218,8 +229,10 @@ class LazyMatrix:
         return self._matrix.toarray(self._transposed)
 
 
-def standardize(X: Any, *, center: bool = True, scale: bool = True) -> LazyMatrix:
-    """Fit column means and population scales and return a lazy matrix.
+def standardize(
+    X: Any, *, center: bool = True, scale: bool = True, df: int = 0
+) -> LazyMatrix:
+    """Fit column means and standard deviations and return a lazy matrix.
 
     Parameters
     ----------
@@ -229,8 +242,13 @@ def standardize(X: Any, *, center: bool = True, scale: bool = True) -> LazyMatri
     center : bool, default=True
         Subtract each column's mean during operations.
     scale : bool, default=True
-        Divide each column by its population standard deviation, replacing
+        Divide each column by its standard deviation, replacing
         exact zero scales with one.
+    df : int, default=0
+        Nonnegative degrees of freedom subtracted from the number of rows in
+        the variance divisor. Use zero for population standard deviations or
+        one for sample standard deviations. Columns with at most df rows have
+        NaN scales. Ignored when scale is False.
 
     Returns
     -------
@@ -243,7 +261,7 @@ def standardize(X: Any, *, center: bool = True, scale: bool = True) -> LazyMatri
     TypeError
         If the input type, storage format, values, or options are unsupported.
     ValueError
-        If the input is not two-dimensional or has no rows.
+        If the input is not two-dimensional, has no rows, or df is negative.
 
     Notes
     -----
@@ -259,4 +277,4 @@ def standardize(X: Any, *, center: bool = True, scale: bool = True) -> LazyMatri
     >>> Z @ np.ones(2)
     array([-2.,  2.])
     """
-    return LazyMatrix(X, center=center, scale=scale)
+    return LazyMatrix(X, center=center, scale=scale, df=df)

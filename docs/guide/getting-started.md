@@ -55,8 +55,23 @@ combination:
 | `min_max()`     | Minimum   | Range                         |
 | `robust()`      | Median    | Interquartile range           |
 
-Standardization uses `nrows` as the variance divisor. Min-max scaling maps finite,
-nonconstant columns to `[0, 1]` on the fitting data; reusing fitted parameters
+Standardization uses `nrows` as the variance divisor by default. For sample
+standard deviations, subtract one degree of freedom:
+
+```rust
+use lazymatrix::{Centering, Scaling};
+
+let sample = Normalization::new(Centering::Mean, Scaling::Sd { df: 1 });
+let lazy = LazyMatrix::new(x.view(), sample).unwrap();
+```
+
+`Scaling::Sd { df }` uses `nrows - df` as the variance divisor; `df = 0` selects
+population standard deviations, and `df = 1` selects sample standard deviations.
+`ColumnStats::col_sds(df)` uses the same convention. Scales are `NaN` when
+`nrows <= df`, including constant columns with too few rows.
+
+Min-max scaling maps finite, nonconstant columns to `[0, 1]` on the fitting data;
+reusing fitted parameters
 does not clip new observations to that range. Centering and scaling are
 independently optional, and `Normalization::default()` performs neither.
 Computed scales become one when they would otherwise be exactly zero.

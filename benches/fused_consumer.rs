@@ -475,7 +475,7 @@ where
         ),
         (
             "standardized",
-            Normalization::new(Centering::Mean, Scaling::Sd),
+            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         ),
     ] {
         let lazy = LazyMatrix::new(matrix, spec).unwrap();

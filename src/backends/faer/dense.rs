@@ -394,13 +394,14 @@ where
 fn sds<F>(
     nrows: usize,
     ncols: usize,
+    df: usize,
     at: impl Fn(usize, usize) -> F + MaybeSend + MaybeSync,
 ) -> Vec<F>
 where
     F: Scalar + MaybeSend + MaybeSync,
 {
     let centers = means(nrows, ncols, &at);
-    let n = F::from_usize(nrows).unwrap();
+    let n = crate::normalization::sd_divisor::<F>(nrows, df);
     collect_columns(ncols, |j| {
         ((0..nrows)
             .map(|i| {
@@ -425,8 +426,8 @@ macro_rules! impl_dense_stats {
                 Ok(means(self.nrows(), self.ncols(), |i, j| self[(i, j)]))
             }
 
-            fn col_sds(&self) -> Result<Vec<F>, Self::Error> {
-                Ok(sds(self.nrows(), self.ncols(), |i, j| self[(i, j)]))
+            fn col_sds(&self, df: usize) -> Result<Vec<F>, Self::Error> {
+                Ok(sds(self.nrows(), self.ncols(), df, |i, j| self[(i, j)]))
             }
 
             fn col_mins(&self) -> Result<Vec<F>, Self::Error> {

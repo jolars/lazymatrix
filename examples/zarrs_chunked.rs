@@ -65,7 +65,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let array = Array::open(store, "/matrix")?;
     let matrix = ZarrMatrix::<_, f64>::try_new(array)?;
     let start = Instant::now();
-    let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd))?;
+    let lazy = LazyMatrix::new(
+        matrix,
+        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+    )?;
     println!("Normalization: {:?}", start.elapsed());
     let v = vec![1.0; ncols];
     let mut y = vec![0.0; nrows];

@@ -453,7 +453,8 @@ fn check_agreement(
     for center in [Centering::None, Centering::Mean, Centering::Min] {
         for scale in [
             Scaling::None,
-            Scaling::Sd,
+            Scaling::Sd { df: 0 },
+            Scaling::Sd { df: 1 },
             Scaling::L1,
             Scaling::L2,
             Scaling::MaxAbs,

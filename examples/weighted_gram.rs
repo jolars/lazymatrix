@@ -17,7 +17,7 @@ fn main() {
         vec![1.0, 2.0, 3.0, 4.0],
     );
     let weights = array![1.0, 0.5, 2.0];
-    let spec = Normalization::new(Centering::Mean, Scaling::Sd);
+    let spec = Normalization::new(Centering::Mean, Scaling::Sd { df: 0 });
     let dense = LazyMatrix::new(dense.view(), spec).unwrap();
     let sparse = LazyMatrix::new(SprsCsc::try_new(sparse.view()).unwrap(), spec).unwrap();
     let mut gram = Array2::zeros((2, 2));
