@@ -61,6 +61,17 @@ companion packages; the Rust core remains independent of Python and solvers.
   - Cover sprs and Zarr interoperability with every enabled ndarray release, and
     compare products and Gram outputs across backend versions.
 
+- [ ] Support borrowed faer CSC views alongside owned matrices.
+  - Shrinkage's cross-validation integration against 0.9.0 exposed missing
+    capabilities on `SparseColMatRef`: shape and error types, raw and sparse
+    column borrowing, column statistics, and native forward and transpose
+    products are implemented only for owned `SparseColMat` input.
+  - Extend these capabilities across supported faer releases without requiring a
+    matrix clone. Respect view offsets and column capacity, and preserve the
+    combined `normalization_stats` hook.
+  - Compare borrowed and owned views with dense reconstruction, normalization
+    statistics, and the adjoint identity, including reusable-output products.
+
 ## Out-of-core storage
 
 - [x] Demonstrate memory-mapped ndarray views with a private `.npy` file.
@@ -334,6 +345,24 @@ assuming full API or numerical parity.
     workspace and the cost of repeated scans and chunk decoding.
 - [ ] Evaluate arbitrary index selections after defining ordering,
   duplicate-index, mapping, allocation, and complexity contracts.
+- [ ] Add raw indexed-row selection for fitting normalization on a subset.
+  - Shrinkage's cross-validation paths currently copy dense and CSC training and
+    validation matrices through downstream `RowSubset` adapters. Existing
+    `Submatrix` views restrict contiguous ranges of an already normalized
+    matrix; training-fold statistics require selecting raw rows first.
+  - Provide `MatrixShape`, `MatrixErrorType`, `ColumnStats`, and its combined
+    `normalization_stats` hook, plus native forward and transpose products with
+    reusable outputs. Expose `RawColumns` only where borrowing is natural, and
+    preserve implicit zeros and duplicate-entry semantics.
+  - Start with strictly increasing, unique row indices, as used by Shrinkage.
+    Define empty and invalid selections, index mapping, ownership, allocation,
+    and scan costs. Evaluate borrowed views to avoid fold matrix copies, without
+    hiding gathering or allocation in borrowing methods.
+  - Verify all normalization choices and products against explicit raw subsets,
+    including sparse inputs, empty selections, local row indices, and unselected
+    outliers that must not affect fitted parameters. Reuse fitted parameters on
+    held-out rows without refitting. Keep folds, scoring, path workspaces, and
+    model selection in Shrinkage.
 - [ ] Expose submatrix selection in Python after defining indexing and
   ownership.
 
