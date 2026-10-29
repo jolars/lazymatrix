@@ -5,7 +5,7 @@ use crate::{
     WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
 };
 use faer::linalg::matmul::matmul;
-use faer::sparse::SparseColMat;
+use faer::sparse::{SparseColMat, SparseColMatMut, SparseColMatRef};
 use faer::{Accum, Mat, MatMut, MatRef, Par};
 
 impl<F> MatrixShape for MatMut<'_, F> {
@@ -168,68 +168,80 @@ impl_dense_weighted_products!(Mat<F>);
 impl_dense_weighted_products!(MatRef<'_, F>);
 impl_dense_weighted_products!(MatMut<'_, F>);
 
-impl<F> WeightedGramInto<F> for SparseColMat<usize, F>
-where
-    F: Scalar,
-{
-    fn weighted_gram_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
-    where
-        W: VectorView<F> + ?Sized,
-        O: MatrixWrite<F> + ?Sized,
-    {
-        self.weighted_gram_normalized_into(weights, None, None, out)
-    }
+macro_rules! impl_sparse_weighted_products {
+    ($matrix:ty) => {
+        impl<F> WeightedGramInto<F> for $matrix
+        where
+            F: Scalar,
+        {
+            fn weighted_gram_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
+            where
+                W: VectorView<F> + ?Sized,
+                O: MatrixWrite<F> + ?Sized,
+            {
+                self.weighted_gram_normalized_into(weights, None, None, out)
+            }
+        }
+
+        impl<F> WeightedGramKernel<F> for $matrix
+        where
+            F: Scalar,
+        {
+            fn weighted_gram_normalized_into<W, O>(
+                &self,
+                weights: &W,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                W: VectorView<F> + ?Sized,
+                O: MatrixWrite<F> + ?Sized,
+            {
+                crate::gram::sparse_gram(self, weights, centers, scales, out);
+                Ok(())
+            }
+        }
+
+        impl<F> WeightedColumnSumsInto<F> for $matrix
+        where
+            F: Scalar,
+        {
+            fn weighted_column_sums_into<W, O>(
+                &self,
+                weights: &W,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                W: VectorView<F> + ?Sized,
+                O: VectorViewMut<F> + ?Sized,
+            {
+                self.weighted_column_sums_normalized_into(weights, None, None, out)
+            }
+        }
+
+        impl<F> WeightedColumnSumsKernel<F> for $matrix
+        where
+            F: Scalar,
+        {
+            fn weighted_column_sums_normalized_into<W, O>(
+                &self,
+                weights: &W,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut O,
+            ) -> Result<(), Self::Error>
+            where
+                W: VectorView<F> + ?Sized,
+                O: VectorViewMut<F> + ?Sized,
+            {
+                crate::weighted_sums::sparse_sums(self, weights, centers, scales, out);
+                Ok(())
+            }
+        }
+    };
 }
 
-impl<F> WeightedGramKernel<F> for SparseColMat<usize, F>
-where
-    F: Scalar,
-{
-    fn weighted_gram_normalized_into<W, O>(
-        &self,
-        weights: &W,
-        centers: Option<&[F]>,
-        scales: Option<&[F]>,
-        out: &mut O,
-    ) -> Result<(), Self::Error>
-    where
-        W: VectorView<F> + ?Sized,
-        O: MatrixWrite<F> + ?Sized,
-    {
-        crate::gram::sparse_gram(self, weights, centers, scales, out);
-        Ok(())
-    }
-}
-
-impl<F> WeightedColumnSumsInto<F> for SparseColMat<usize, F>
-where
-    F: Scalar,
-{
-    fn weighted_column_sums_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
-    where
-        W: VectorView<F> + ?Sized,
-        O: VectorViewMut<F> + ?Sized,
-    {
-        self.weighted_column_sums_normalized_into(weights, None, None, out)
-    }
-}
-
-impl<F> WeightedColumnSumsKernel<F> for SparseColMat<usize, F>
-where
-    F: Scalar,
-{
-    fn weighted_column_sums_normalized_into<W, O>(
-        &self,
-        weights: &W,
-        centers: Option<&[F]>,
-        scales: Option<&[F]>,
-        out: &mut O,
-    ) -> Result<(), Self::Error>
-    where
-        W: VectorView<F> + ?Sized,
-        O: VectorViewMut<F> + ?Sized,
-    {
-        crate::weighted_sums::sparse_sums(self, weights, centers, scales, out);
-        Ok(())
-    }
-}
+impl_sparse_weighted_products!(SparseColMat<usize, F>);
+impl_sparse_weighted_products!(SparseColMatRef<'_, usize, F>);
+impl_sparse_weighted_products!(SparseColMatMut<'_, usize, F>);

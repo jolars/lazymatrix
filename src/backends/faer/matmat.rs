@@ -1,7 +1,9 @@
 use super::{faer, faer_traits};
 use crate::{MatMatInto, MatTransposeMatInto, MatrixRead, MatrixWrite, Scalar};
 use faer::prelude::Reborrow;
-use faer::sparse::{SparseColMat, SparseRowMat, SparseRowMatMut, SparseRowMatRef};
+use faer::sparse::{
+    SparseColMat, SparseColMatMut, SparseColMatRef, SparseRowMat, SparseRowMatMut, SparseRowMatRef,
+};
 use faer::{Accum, Mat, MatMut, MatRef, Par};
 
 fn parallelism() -> Par {
@@ -109,44 +111,59 @@ where
     );
 }
 
-impl<F: Scalar + faer_traits::ComplexField> MatMatInto<F> for SparseColMat<usize, F> {
-    fn matmat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
-    where
-        R: MatrixRead<F> + ?Sized,
-        O: MatrixRead<F> + MatrixWrite<F> + ?Sized,
-    {
-        crate::matmat::validate(self, rhs, out, false);
-        crate::matmat::sparse_panels(rhs, out, |input: &Mat<F>, output: &mut Mat<F>, width| {
-            faer::sparse::linalg::matmul::sparse_dense_matmul(
-                output.as_mut().subcols_mut(0, width),
-                Accum::Replace,
-                self.as_ref(),
-                input.as_ref().subcols(0, width),
-                F::one(),
-                parallelism(),
-            );
-        });
-        Ok(())
-    }
+macro_rules! csc {
+    ($matrix:ty) => {
+        impl<F: Scalar + faer_traits::ComplexField> MatMatInto<F> for $matrix {
+            fn matmat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
+            where
+                R: MatrixRead<F> + ?Sized,
+                O: MatrixRead<F> + MatrixWrite<F> + ?Sized,
+            {
+                crate::matmat::validate(self, rhs, out, false);
+                crate::matmat::sparse_panels(
+                    rhs,
+                    out,
+                    |input: &Mat<F>, output: &mut Mat<F>, width| {
+                        faer::sparse::linalg::matmul::sparse_dense_matmul(
+                            output.as_mut().subcols_mut(0, width),
+                            Accum::Replace,
+                            self.rb(),
+                            input.as_ref().subcols(0, width),
+                            F::one(),
+                            parallelism(),
+                        );
+                    },
+                );
+                Ok(())
+            }
+        }
+        impl<F: Scalar + faer_traits::ComplexField> MatTransposeMatInto<F> for $matrix {
+            fn mat_transpose_mat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
+            where
+                R: MatrixRead<F> + ?Sized,
+                O: MatrixRead<F> + MatrixWrite<F> + ?Sized,
+            {
+                crate::matmat::validate(self, rhs, out, true);
+                crate::matmat::sparse_panels(
+                    rhs,
+                    out,
+                    |input: &Mat<F>, output: &mut Mat<F>, width| {
+                        super::transpose::multiply_transpose_mat(
+                            self.rb(),
+                            input.as_ref().subcols(0, width),
+                            output.as_mut().subcols_mut(0, width),
+                            parallelism(),
+                        );
+                    },
+                );
+                Ok(())
+            }
+        }
+    };
 }
-impl<F: Scalar + faer_traits::ComplexField> MatTransposeMatInto<F> for SparseColMat<usize, F> {
-    fn mat_transpose_mat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
-    where
-        R: MatrixRead<F> + ?Sized,
-        O: MatrixRead<F> + MatrixWrite<F> + ?Sized,
-    {
-        crate::matmat::validate(self, rhs, out, true);
-        crate::matmat::sparse_panels(rhs, out, |input: &Mat<F>, output: &mut Mat<F>, width| {
-            super::transpose::multiply_transpose_mat(
-                self,
-                input.as_ref().subcols(0, width),
-                output.as_mut().subcols_mut(0, width),
-                parallelism(),
-            );
-        });
-        Ok(())
-    }
-}
+csc!(SparseColMat<usize, F>);
+csc!(SparseColMatRef<'_, usize, F>);
+csc!(SparseColMatMut<'_, usize, F>);
 
 macro_rules! csr {
     ($matrix:ty) => {

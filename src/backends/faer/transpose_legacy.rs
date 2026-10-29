@@ -1,6 +1,6 @@
 use super::{faer, faer_traits};
 use crate::Scalar;
-use faer::sparse::SparseColMat;
+use faer::sparse::SparseColMatRef;
 use faer::{Accum, Col, Par};
 
 pub(super) fn multiply_csr_mat<F: Scalar + faer_traits::ComplexField>(
@@ -21,7 +21,7 @@ pub(super) fn multiply_csr_mat<F: Scalar + faer_traits::ComplexField>(
 }
 
 pub(super) fn multiply_transpose_mat<F: Scalar + faer_traits::ComplexField>(
-    matrix: &SparseColMat<usize, F>,
+    matrix: SparseColMatRef<'_, usize, F>,
     input: faer::MatRef<'_, F>,
     output: faer::MatMut<'_, F>,
     parallelism: Par,
@@ -30,7 +30,7 @@ pub(super) fn multiply_transpose_mat<F: Scalar + faer_traits::ComplexField>(
         output.transpose_mut(),
         Accum::Replace,
         input.transpose(),
-        matrix.as_ref(),
+        matrix,
         F::one(),
         parallelism,
     );
@@ -56,7 +56,7 @@ pub(super) fn multiply_csr<F: Scalar + faer_traits::ComplexField>(
 }
 
 pub(super) fn multiply<F: Scalar + faer_traits::ComplexField>(
-    matrix: &SparseColMat<usize, F>,
+    matrix: SparseColMatRef<'_, usize, F>,
     input: &Col<F>,
     output: &mut Col<F>,
     alpha: F,
@@ -68,7 +68,7 @@ pub(super) fn multiply<F: Scalar + faer_traits::ComplexField>(
         output.as_mat_mut().transpose_mut(),
         accumulation,
         input.as_mat().transpose(),
-        matrix.as_ref(),
+        matrix,
         alpha,
         parallelism,
     );

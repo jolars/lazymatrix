@@ -99,7 +99,10 @@
 //! behind feature flags:
 //!
 //! * `faer` — `faer::Mat`, `faer::sparse::SparseColMat`, and
-//!   `faer::sparse::SparseRowMat` over `faer::Col`.
+//!   `faer::sparse::SparseRowMat`, including immutable and mutable borrowed
+//!   views, over `faer::Col`. CSC views support fitted normalization, borrowed
+//!   columns, products, Gram matrices, and explicit dense conversion without
+//!   cloning their sparse storage.
 //! * `nalgebra` — `nalgebra::DMatrix`, `nalgebra_sparse::CscMatrix`, and
 //!   `nalgebra_sparse::CsrMatrix` over
 //!   `nalgebra::DVector`.

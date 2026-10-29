@@ -61,16 +61,19 @@ companion packages; the Rust core remains independent of Python and solvers.
   - Cover sprs and Zarr interoperability with every enabled ndarray release, and
     compare products and Gram outputs across backend versions.
 
-- [ ] Support borrowed faer CSC views alongside owned matrices.
+- [x] Support borrowed faer CSC views alongside owned matrices.
   - Shrinkage's cross-validation integration against 0.9.0 exposed missing
     capabilities on `SparseColMatRef`: shape and error types, raw and sparse
     column borrowing, column statistics, and native forward and transpose
-    products are implemented only for owned `SparseColMat` input.
+    products were implemented only for owned `SparseColMat` input.
   - Extend these capabilities across supported faer releases without requiring a
     matrix clone. Respect view offsets and column capacity, and preserve the
     combined `normalization_stats` hook.
   - Compare borrowed and owned views with dense reconstruction, normalization
     statistics, and the adjoint identity, including reusable-output products.
+  - Owned matrices, `SparseColMatRef`, and `SparseColMatMut` share these
+    capabilities on faer 0.22, 0.23, and 0.24. CSC statistics exclude spare
+    capacity and combine duplicate cells before nonlinear reductions.
 
 ## Out-of-core storage
 

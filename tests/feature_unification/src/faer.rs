@@ -81,6 +81,13 @@ pub fn check() {
         Col::zeros(2),
     );
     oracle::check(
+        sparse.as_ref(),
+        input.clone(),
+        rows.clone(),
+        Col::zeros(3),
+        Col::zeros(2),
+    );
+    oracle::check(
         sparse,
         input.clone(),
         rows.clone(),

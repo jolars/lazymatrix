@@ -130,6 +130,31 @@ impl<F> Scalar for F where
 {
 }
 
+/// Borrows canonical CSC values or sums duplicate cells in one working column.
+#[cfg(feature = "faer_all")]
+pub(crate) fn coalesced_column_values<'a, F: Scalar>(
+    rows: &[usize],
+    values: &'a [F],
+) -> std::borrow::Cow<'a, [F]> {
+    if rows.windows(2).all(|pair| pair[0] < pair[1]) {
+        return std::borrow::Cow::Borrowed(values);
+    }
+    let mut entries: Vec<_> = rows.iter().copied().zip(values.iter().copied()).collect();
+    // Stable sorting retains the storage order when summing a duplicate cell.
+    entries.sort_by_key(|&(row, _)| row);
+    let mut length = 0;
+    for i in 0..entries.len() {
+        let (row, value) = entries[i];
+        if length != 0 && entries[length - 1].0 == row {
+            entries[length - 1].1 = entries[length - 1].1 + value;
+        } else {
+            entries[length] = (row, value);
+            length += 1;
+        }
+    }
+    std::borrow::Cow::Owned(entries[..length].iter().map(|&(_, value)| value).collect())
+}
+
 /// Computes a standard deviation from stored values and implicit zeros.
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
 pub(crate) fn sparse_column_sd<F: Scalar>(values: &[F], nrows: usize, df: usize) -> F {

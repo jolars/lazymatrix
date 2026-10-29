@@ -107,6 +107,12 @@ feature such as `nalgebra_v0_34` for an older release, and match your direct
 backend dependency to it. Enable `parallel` alongside a backend for parallel
 column statistics where supported.
 
+Faer matrices support immutable and mutable borrowed views, including
+`SparseColMatRef` and `SparseColMatMut` for CSC storage. Pass `matrix.as_ref()`
+directly to `LazyMatrix::new` to fit normalization and use products or borrowed
+columns without cloning the matrix. CSC operations respect occupied column
+ranges, including views with nonzero storage offsets and spare capacity.
+
 Custom backends can implement the crate's matrix and vector traits. See the [API
 reference](https://docs.rs/lazymatrix) for capabilities and supported types.
 

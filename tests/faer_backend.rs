@@ -34,6 +34,214 @@ macro_rules! backend_suite {
                 Col::from_fn(v.len(), |i| v[i])
             }
 
+            fn check_csc_view<M>(matrix: &M, dense: &[Vec<f64>])
+            where
+                M: lazymatrix::ColumnStats<f64>
+                    + lazymatrix::RawColumns<f64>
+                    + lazymatrix::SparseColumns<f64>
+                    + lazymatrix::MatVec<Col<f64>>
+                    + lazymatrix::MatVecInto<Col<f64>>
+                    + lazymatrix::MatTransposeVec<Col<f64>>
+                    + lazymatrix::MatTransposeVecInto<Col<f64>>
+                    + lazymatrix::MatVecScaledInto<Col<f64>, Col<f64>, f64>
+                    + lazymatrix::MatTransposeVecScaledInto<Col<f64>, Col<f64>, f64>
+                    + lazymatrix::MatMatInto<f64>
+                    + lazymatrix::MatTransposeMatInto<f64>
+                    + lazymatrix::WeightedGramKernel<f64>
+                    + lazymatrix::WeightedColumnSumsKernel<f64>
+                    + lazymatrix::MaterializeDense<f64>
+                    + lazymatrix::SubmatrixKernel<f64>,
+            {
+                use lazymatrix::{RawColumn, WeightedColumnSumsInto, WeightedGramInto};
+                let reference = Mat::from_fn(matrix.nrows(), matrix.ncols(), |i, j| dense[i][j]);
+                common::check_column_stats_against(matrix, &reference);
+                common::check_transpose_products(matrix, dense, &to_col, &from_col);
+                common::check_fused_operator(matrix, dense, matrix.ncols(), &to_col);
+                common::batched::check_batched(matrix, dense);
+                let lazy = LazyMatrix::from_parts(
+                    matrix,
+                    Some(vec![0.75; matrix.ncols()]),
+                    Some(vec![-2.0; matrix.ncols()]),
+                );
+                common::batched::check_batched(
+                    &lazy,
+                    &common::materialize(dense, lazy.centers(), lazy.scales()),
+                );
+                common::check_submatrix_weighted(matrix, dense);
+                for j in 0..matrix.ncols() {
+                    let raw = matrix.raw_column(j);
+                    assert_eq!(raw.len(), matrix.nrows());
+                    let mut column = vec![0.0; matrix.nrows()];
+                    raw.for_each_stored(|i, value| column[i] += value);
+                    for (i, &value) in column.iter().enumerate() {
+                        approx::assert_abs_diff_eq!(value, dense[i][j], epsilon = 1e-12);
+                    }
+                }
+                for center in [
+                    Centering::None,
+                    Centering::Mean,
+                    Centering::Min,
+                    Centering::Median,
+                ] {
+                    for scale in [
+                        Scaling::None,
+                        Scaling::Sd { df: 0 },
+                        Scaling::Sd { df: 1 },
+                        Scaling::L1,
+                        Scaling::L2,
+                        Scaling::MaxAbs,
+                        Scaling::Range,
+                        Scaling::QuantileRange(lazymatrix::QuantileRange::default()),
+                    ] {
+                        if matrix.nrows() <= 1
+                            && (center != Centering::None || scale != Scaling::None)
+                        {
+                            continue;
+                        }
+                        let lazy =
+                            LazyMatrix::new(matrix, Normalization::new(center, scale)).unwrap();
+                        let normalized = common::materialize(dense, lazy.centers(), lazy.scales());
+                        common::check_transpose_products(&lazy, &normalized, &to_col, &from_col);
+                        common::check_fused_operator(&lazy, &normalized, matrix.ncols(), &to_col);
+                        let eager = lazy.to_eager::<Mat<f64>>().unwrap();
+                        for (i, row) in normalized.iter().enumerate() {
+                            for (j, &value) in row.iter().enumerate() {
+                                approx::assert_abs_diff_eq!(
+                                    eager.data()[(i, j)],
+                                    value,
+                                    epsilon = 1e-12
+                                );
+                            }
+                        }
+                        let weights = common::random_vec(0xC5D, matrix.nrows());
+                        let mut gram = common::GramOutput(vec![
+                            vec![f64::NAN; matrix.ncols()];
+                            matrix.ncols()
+                        ]);
+                        lazy.weighted_gram_into(&weights, &mut gram).unwrap();
+                        common::assert_gram(&gram, &normalized, &weights);
+                        let mut sums = vec![f64::NAN; matrix.ncols()];
+                        lazy.weighted_column_sums_into(&weights, &mut sums).unwrap();
+                        common::assert_close(
+                            &sums,
+                            &common::dense_matvec(
+                                &common::dense_transpose(&normalized, matrix.ncols()),
+                                &weights,
+                            ),
+                            1e-10,
+                        );
+                    }
+                }
+            }
+
+            #[test]
+            fn csc_borrowed_views_match_owned_and_dense() {
+                for (n, p, density) in [
+                    (9, 5, 0.4),
+                    (3, 7, 0.6),
+                    (4, 3, 0.0),
+                    (0, 3, 0.0),
+                    (5, 0, 0.0),
+                    (0, 0, 0.0),
+                ] {
+                    let fixture = common::random_matrix(0xC5C, n, p, density);
+                    let mut matrix = build(&fixture);
+                    check_csc_view(&matrix, &fixture.dense);
+                    check_csc_view(&matrix.as_ref(), &fixture.dense);
+                    check_csc_view(&matrix.rb_mut(), &fixture.dense);
+                    let csr = build_csr(&fixture);
+                    check_csc_view(
+                        &csr.as_ref().transpose(),
+                        &common::dense_transpose(&fixture.dense, p),
+                    );
+                }
+            }
+
+            #[test]
+            fn csc_views_preserve_offsets_capacity_and_duplicates() {
+                use faer::sparse::{
+                    SparseColMatMut, SparseColMatRef, SymbolicSparseColMat, SymbolicSparseColMatRef,
+                };
+                use lazymatrix::{RawColumns, SparseColumns};
+                let mut rows = vec![99; 20];
+                let mut values = vec![f64::NAN; 20];
+                rows[1..5].copy_from_slice(&[2, 0, 2, 0]);
+                values[1..5].copy_from_slice(&[1.0, 0.0, -2.0, 2.0]);
+                rows[8..12].copy_from_slice(&[2, 0, 2, 1]);
+                values[8..12].copy_from_slice(&[1.0, 2.0, 3.0, 0.0]);
+                rows[14..17].copy_from_slice(&[0, 1, 2]);
+                values[14..17].copy_from_slice(&[1.0, 2.0, 3.0]);
+                let offsets = vec![1, 6, 8, 14, 18];
+                let counts = vec![4, 0, 4, 3];
+                let dense = vec![
+                    vec![2.0, 0.0, 2.0, 1.0],
+                    vec![0.0, 0.0, 0.0, 2.0],
+                    vec![-1.0, 0.0, 4.0, 3.0],
+                ];
+                let symbolic =
+                    SymbolicSparseColMat::new_unsorted_checked(3, 4, offsets, Some(counts), rows);
+                let mut matrix = SparseColMat::new(symbolic, values);
+                check_csc_view(&matrix, &dense);
+                check_csc_view(&matrix.as_ref(), &dense);
+                check_csc_view(&matrix.rb_mut(), &dense);
+                let symbolic = SymbolicSparseColMatRef::new_unsorted_checked(
+                    3,
+                    2,
+                    &matrix.col_ptr()[1..4],
+                    Some(&matrix.col_nnz().unwrap()[1..3]),
+                    matrix.row_idx(),
+                );
+                let view = SparseColMatRef::new(symbolic, matrix.val());
+                let selected: Vec<Vec<_>> = dense.iter().map(|row| row[1..3].to_vec()).collect();
+                check_csc_view(&view, &selected);
+                assert_eq!(view.sparse_column(0), (&[][..], &[][..]));
+                let (indices, values) = view.sparse_column(1);
+                assert_eq!(indices, &[2, 0, 2, 1]);
+                assert_eq!(indices.as_ptr(), matrix.row_idx()[8..].as_ptr());
+                assert_eq!(values.as_ptr(), matrix.val()[8..].as_ptr());
+                assert_eq!(view.raw_column(1).row_indices().as_ptr(), indices.as_ptr());
+                assert_eq!(view.raw_column(1).values().as_ptr(), values.as_ptr());
+                let mut storage = matrix.val().to_vec();
+                let view = SparseColMatMut::new(symbolic, &mut storage);
+                check_csc_view(&view, &selected);
+                for (before, after) in matrix.val().iter().zip(storage) {
+                    assert_eq!(before.to_bits(), after.to_bits());
+                }
+            }
+
+            #[test]
+            fn csc_view_statistics_cover_nonfinite_values_and_large_offsets() {
+                use faer::sparse::{SparseColMatRef, SymbolicSparseColMatRef};
+                for values in [
+                    [5e11, 1e12 + 1.0, 5e11 + 2.0, 1e12 + 3.0],
+                    [f64::INFINITY, 1.0, f64::NEG_INFINITY, 0.0],
+                    [f64::NAN, 1.0, 2.0, 0.0],
+                ] {
+                    let symbolic = SymbolicSparseColMatRef::new_unsorted_checked(
+                        3,
+                        1,
+                        &[0, 4],
+                        None,
+                        &[2, 0, 2, 1],
+                    );
+                    let view = SparseColMatRef::new(symbolic, &values);
+                    let dense = Mat::from_fn(3, 1, |i, _| {
+                        [values[1], values[3], values[0] + values[2]][i]
+                    });
+                    common::check_column_stats_against(&view, &dense);
+                }
+                let sparse = SparseColMat::try_new_from_triplets(
+                    2,
+                    1,
+                    &[Triplet::new(0, 0, 1.0_f32), Triplet::new(1, 0, 3.0)],
+                )
+                .unwrap();
+                common::check_column_stats_f32(&sparse.as_ref());
+                common::check_fused_f32(&sparse.as_ref(), |values| {
+                    Col::from_fn(values.len(), |i| values[i])
+                });
+            }
+
             #[test]
             fn batched_products() {
                 use lazymatrix::{MatMat, MatrixRead};

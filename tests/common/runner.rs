@@ -2611,6 +2611,81 @@ where
     }
 }
 
+/// Compare individual statistics and the combined fitting hook with a dense backend.
+pub fn check_column_stats_against<M, D>(matrix: &M, dense: &D)
+where
+    M: ColumnStats<f64> + MatrixShape,
+    D: ColumnStats<f64> + MatrixShape,
+{
+    assert_eq!(matrix.nrows(), dense.nrows());
+    assert_eq!(matrix.ncols(), dense.ncols());
+    for (actual, expected) in [
+        (matrix.col_means(), dense.col_means()),
+        (matrix.col_mins(), dense.col_mins()),
+        (matrix.col_ranges(), dense.col_ranges()),
+        (matrix.col_maxabs(), dense.col_maxabs()),
+        (matrix.col_l1(), dense.col_l1()),
+        (matrix.col_l2(), dense.col_l2()),
+        (matrix.col_medians(), dense.col_medians()),
+    ] {
+        assert_quantile_values(&actual.unwrap(), &expected.unwrap(), EPS);
+    }
+    for df in [0, 1, matrix.nrows(), usize::MAX] {
+        assert_quantile_values(
+            &matrix.col_sds(df).unwrap(),
+            &dense.col_sds(df).unwrap(),
+            EPS,
+        );
+    }
+    for center in [0.0, 0.75, f64::NAN, f64::INFINITY] {
+        let centers = vec![center; matrix.ncols()];
+        for (actual, expected) in [
+            (
+                matrix.col_l1_centered(&centers),
+                dense.col_l1_centered(&centers),
+            ),
+            (
+                matrix.col_l2_centered(&centers),
+                dense.col_l2_centered(&centers),
+            ),
+            (
+                matrix.col_maxabs_centered(&centers),
+                dense.col_maxabs_centered(&centers),
+            ),
+        ] {
+            assert_quantile_values(&actual.unwrap(), &expected.unwrap(), EPS);
+        }
+    }
+    for center in [
+        Centering::None,
+        Centering::Mean,
+        Centering::Min,
+        Centering::Median,
+    ] {
+        for scale in [
+            Scaling::None,
+            Scaling::Sd { df: 0 },
+            Scaling::Sd { df: 1 },
+            Scaling::L1,
+            Scaling::L2,
+            Scaling::MaxAbs,
+            Scaling::Range,
+            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
+        ] {
+            let spec = Normalization::new(center, scale);
+            let (centers, scales) = matrix.normalization_stats(spec).unwrap();
+            let (expected_centers, expected_scales) = dense.normalization_stats(spec).unwrap();
+            for (actual, expected) in [(centers, expected_centers), (scales, expected_scales)] {
+                assert_eq!(actual.is_some(), expected.is_some());
+                if let (Some(actual), Some(expected)) = (actual, expected) {
+                    assert_quantile_values(&actual, &expected, EPS);
+                }
+            }
+        }
+    }
+}
+
 pub fn check_column_stats_f32<M: ColumnStats<f32>>(matrix: &M) {
     for (df, expected) in [(0, 1.0), (1, 2.0_f32.sqrt())] {
         approx::assert_abs_diff_eq!(matrix.col_sds(df).unwrap()[0], expected, epsilon = 1e-6);
