@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/jolars/lazymatrix/compare/python-v0.1.1...python-v0.2.0) (2026-10-29)
+
+### Breaking changes
+
+- support sample standard deviation ([`1398bf4`](https://github.com/jolars/lazymatrix/commit/1398bf442d1a95c85a47fc22d506b155ba796bd9))
+
+### Features
+
+- add native PyTorch normalization layer ([`b1cff22`](https://github.com/jolars/lazymatrix/commit/b1cff2276dfc7a8a2fa3caee6df1bab7ceafeba3))
+- support sample standard deviation ([`1398bf4`](https://github.com/jolars/lazymatrix/commit/1398bf442d1a95c85a47fc22d506b155ba796bd9))
+
+### Dependencies
+
+- updated lazymatrix to v0.9.0
+
 ## [0.1.1](https://github.com/jolars/lazymatrix/compare/python-v0.1.0...python-v0.1.1) (2026-10-26)
 
 ### Dependencies
