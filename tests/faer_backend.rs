@@ -17,7 +17,7 @@ macro_rules! backend_suite {
             use faer::sparse::{SparseColMat, SparseRowMat, SymbolicSparseRowMat, Triplet};
             use faer::{Col, Mat};
             use lazymatrix::{
-                Centering, LazyMatrix, MatrixShape, Normalization, Scaling, SparseRows,
+                Centering, ColumnNormalization, LazyMatrix, MatrixShape, Scaling, SparseRows,
             };
 
             fn build(tm: &TestMatrix) -> SparseColMat<usize, f64> {
@@ -98,8 +98,8 @@ macro_rules! backend_suite {
                         {
                             continue;
                         }
-                        let lazy =
-                            LazyMatrix::new(matrix, Normalization::new(center, scale)).unwrap();
+                        let lazy = LazyMatrix::new(matrix, ColumnNormalization::new(center, scale))
+                            .unwrap();
                         let normalized = common::materialize(dense, lazy.centers(), lazy.scales());
                         common::check_transpose_products(&lazy, &normalized, &to_col, &from_col);
                         common::check_fused_operator(&lazy, &normalized, matrix.ncols(), &to_col);
@@ -913,9 +913,11 @@ macro_rules! backend_suite {
                     2,
                     &to_col,
                 );
-                let lazy =
-                    LazyMatrix::new(design, Normalization::new(Centering::Mean, Scaling::L2))
-                        .unwrap();
+                let lazy = LazyMatrix::new(
+                    design,
+                    ColumnNormalization::new(Centering::Mean, Scaling::L2),
+                )
+                .unwrap();
 
                 let vector_storage = Mat::from_fn(2, 4, |i, j| (i + j + 1) as f64);
                 let vector = vector_storage.row(1).transpose();

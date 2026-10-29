@@ -1,7 +1,7 @@
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatTransposeVec, MatTransposeVecInto,
-    MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixShape, Normalization,
-    Scaling, VectorOwned, VectorView, VectorViewMut, WithIntercept,
+    Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatTransposeVec, MatTransposeVecInto,
+    MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixShape, Scaling,
+    VectorOwned, VectorView, VectorViewMut, WithIntercept,
 };
 
 pub fn check<M, V>(matrix: M, input: V, rows: V, mut out: V, mut transpose_out: V)
@@ -18,8 +18,11 @@ where
         + MatTransposeVecScaledInto<V, V, f64>,
     V: VectorView<f64> + VectorViewMut<f64> + VectorOwned<f64, Owned = V>,
 {
-    let lazy =
-        LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Range)).unwrap();
+    let lazy = LazyMatrix::new(
+        matrix,
+        ColumnNormalization::new(Centering::Mean, Scaling::Range),
+    )
+    .unwrap();
     assert_eq!(lazy.centers().unwrap(), &[1.0, 3.0]);
     assert_eq!(lazy.scales().unwrap(), &[2.0, 6.0]);
     {

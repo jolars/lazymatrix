@@ -1,7 +1,7 @@
 use super::IndexedRows;
 use crate::{
-    Centering, ColumnStats, IndexedRowSource, MatrixShape, Normalization, NormalizationStats,
-    QuantileRange, Scalar, Scaling,
+    Centering, ColumnNormalization, ColumnNormalizationStats, ColumnStats, IndexedRowSource,
+    MatrixShape, QuantileRange, Scalar, Scaling,
 };
 
 #[derive(Clone, Copy)]
@@ -82,7 +82,7 @@ impl<M: IndexedRowSource<F>, F: Scalar> IndexedRows<'_, M, F> {
     fn quantiles(
         &self,
         request: crate::quantiles::Request,
-    ) -> Result<NormalizationStats<F>, M::Error> {
+    ) -> Result<ColumnNormalizationStats<F>, M::Error> {
         let mut counts = vec![0; self.ncols()];
         crate::quantiles::stream(self.nrows(), self.ncols(), request, |visit| {
             counts.fill(0);
@@ -111,8 +111,8 @@ impl<M: IndexedRowSource<F>, F: Scalar> IndexedRows<'_, M, F> {
 impl<M: IndexedRowSource<F>, F: Scalar> ColumnStats<F> for IndexedRows<'_, M, F> {
     fn normalization_stats(
         &self,
-        spec: Normalization,
-    ) -> Result<NormalizationStats<F>, Self::Error> {
+        spec: ColumnNormalization,
+    ) -> Result<ColumnNormalizationStats<F>, Self::Error> {
         if spec.center == Centering::Mean && matches!(spec.scale, Scaling::Sd { .. }) {
             let centers = self.col_means()?;
             let Scaling::Sd { df } = spec.scale else {

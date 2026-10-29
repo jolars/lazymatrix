@@ -2,8 +2,8 @@ use super::{
     MaterializeOutput, TestMatrix, assert_close, dense_transpose, materialize, random_matrix,
 };
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto,
-    MatrixOwned, MatrixRead, MatrixShape, Normalization, Scaling, Transpose, WithIntercept,
+    Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatMat, MatMatInto, MatTransposeMat,
+    MatTransposeMatInto, MatrixOwned, MatrixRead, MatrixShape, Scaling, Transpose, WithIntercept,
 };
 
 impl<F: lazymatrix::Scalar> MatrixRead<F> for MaterializeOutput<F> {
@@ -109,7 +109,8 @@ where
                     Scaling::Range,
                 ] {
                     let lazy =
-                        LazyMatrix::new(&matrix, Normalization::new(centering, scaling)).unwrap();
+                        LazyMatrix::new(&matrix, ColumnNormalization::new(centering, scaling))
+                            .unwrap();
                     check_batched(
                         &lazy,
                         &materialize(&tm.dense, lazy.centers(), lazy.scales()),

@@ -22,12 +22,12 @@ use crate::{
 /// ```
 /// # #[cfg(feature = "sprs_all")]
 /// # {
-/// use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling, SprsCsc};
+/// use lazymatrix::{Centering, LazyMatrix, MatVec, ColumnNormalization, Scaling, SprsCsc};
 /// use sprs::CsMat;
 ///
 /// let x = CsMat::new_csc((3, 2), vec![0, 2, 3], vec![0, 2, 1], vec![1.0, 3.0, 2.0]);
 /// let csc = SprsCsc::try_new(x.view()).unwrap();
-/// let lazy = LazyMatrix::new(csc, Normalization::new(Centering::Mean, Scaling::Sd { df: 0 })).unwrap();
+/// let lazy = LazyMatrix::new(csc, ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 })).unwrap();
 /// assert_eq!(lazy.matvec(&vec![1.0, -1.0]).unwrap().len(), 3);
 /// assert_eq!(lazy.sparse_column(0).row_indices(), &[0, 2]);
 /// # }
@@ -219,8 +219,8 @@ impl<M: ColumnStats<F>, F: Scalar> ColumnStats<F> for SprsCsc<M> {
     }
     fn normalization_stats(
         &self,
-        spec: crate::Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: crate::ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         self.inner.normalization_stats(spec)
     }
 

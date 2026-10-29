@@ -10,8 +10,8 @@ mod common;
 
 use common::{TestMatrix, assert_close};
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto,
-    Normalization, Scaling, SparseColumns, SparseRows, SprsCsc, SprsCsr,
+    Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatTransposeVec, MatTransposeVecInto,
+    MatVec, MatVecInto, Scaling, SparseColumns, SparseRows, SprsCsc, SprsCsr,
 };
 use sprs::{CsMat, CsMatI, TriMat};
 
@@ -305,7 +305,11 @@ fn sprs_csc_wrapper_checks_orientation_without_copying() {
     assert_eq!(values, &[0.0, 2.0]);
     assert_eq!(rows.as_ptr(), matrix.indices()[1..].as_ptr());
     assert_eq!(values.as_ptr(), matrix.data()[1..].as_ptr());
-    let lazy = LazyMatrix::new(wrapped, Normalization::new(Centering::Mean, Scaling::L2)).unwrap();
+    let lazy = LazyMatrix::new(
+        wrapped,
+        ColumnNormalization::new(Centering::Mean, Scaling::L2),
+    )
+    .unwrap();
     assert_eq!(lazy.sparse_column(0).values().len(), 2);
     assert_close(
         &lazy.matvec(&vec![1.0, 0.0]).unwrap(),
@@ -342,7 +346,7 @@ fn sprs_views_and_alternate_indices_support_products_and_statistics() {
     }
     let lazy = LazyMatrix::new(
         csc.view_mut(),
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     assert!(
@@ -382,7 +386,7 @@ fn sprs_sliced_and_transposed_views_use_local_dimensions() {
                 Scaling::MaxAbs,
                 Scaling::Range,
             ] {
-                let spec = Normalization::new(center, scale);
+                let spec = ColumnNormalization::new(center, scale);
                 let lazy = LazyMatrix::new(matrix, spec).unwrap();
                 let owned = LazyMatrix::new(matrix.to_owned(), spec).unwrap();
                 assert_eq!(lazy.centers(), owned.centers());
@@ -428,7 +432,7 @@ fn sprs_f32_normalization_and_mutable_csc_view() {
     for matrix in [csc.view(), csr.view()] {
         let lazy = LazyMatrix::new(
             matrix,
-            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+            ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         )
         .unwrap();
         assert_eq!(lazy.centers(), Some([2.0, 3.0].as_slice()));
@@ -442,7 +446,7 @@ fn sprs_f32_normalization_and_mutable_csc_view() {
     let wrapped = SprsCsc::try_new(csc.view_mut()).unwrap();
     let lazy = LazyMatrix::new(
         wrapped,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     assert_eq!(lazy.column(0).dot(&[1.0, 2.0]), 1.0);
@@ -556,7 +560,7 @@ macro_rules! ndarray_suite {
 
                 let lazy = LazyMatrix::new(
                     SprsCsc::try_new(matrix.view()).unwrap(),
-                    Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+                    ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
                 )
                 .unwrap();
                 let input = array![1.0, 3.0, 2.0];

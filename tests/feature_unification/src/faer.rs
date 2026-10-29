@@ -54,9 +54,12 @@ pub fn check() {
         assert_eq!(actual, expected);
     }
     {
-        use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
-        let lazy =
-            LazyMatrix::new(&dense, Normalization::new(Centering::Mean, Scaling::Range)).unwrap();
+        use lazymatrix::{Centering, ColumnNormalization, LazyMatrix, MatVec, Scaling};
+        let lazy = LazyMatrix::new(
+            &dense,
+            ColumnNormalization::new(Centering::Mean, Scaling::Range),
+        )
+        .unwrap();
         let eager = lazy.to_eager::<Mat<f64>>().unwrap();
         assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
         let result = eager.matvec(&Col::from_fn(2, |i| [2.0, -1.0][i])).unwrap();

@@ -185,8 +185,8 @@ impl<M: ColumnStats<F>, F: Scalar> ColumnStats<F> for SprsCsr<M> {
     }
     fn normalization_stats(
         &self,
-        spec: crate::Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: crate::ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         self.inner.normalization_stats(spec)
     }
 

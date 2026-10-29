@@ -4,15 +4,15 @@
 mod backend_aliases;
 use backend_aliases::ndarray::{Array2, array};
 use lazymatrix::{
-    Centering, LazyMatrix, MatTransposeVec, MatVec, Normalization, Scaling, WeightedColumnSumsInto,
-    WeightedGramInto,
+    Centering, ColumnNormalization, LazyMatrix, MatTransposeVec, MatVec, Scaling,
+    WeightedColumnSumsInto, WeightedGramInto,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let raw = array![[1.0, 0.0, 3.0], [2.0, 3.0, 6.0], [0.0, 4.0, 9.0]];
     let lazy = LazyMatrix::new(
         raw.view(),
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
     let selected = lazy.submatrix(1..3, 1..3);
     assert_eq!(selected.centers(), Some(&lazy.centers().unwrap()[1..3]));

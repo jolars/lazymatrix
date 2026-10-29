@@ -147,9 +147,13 @@ methods](https://scikit-learn.org/stable/modules/preprocessing.html) as a
 coverage reference. Evaluate additions against the library's scope rather than
 assuming full API or numerical parity.
 
+- [x] Give the Rust column-normalization types explicit axis names.
+  - Use `ColumnNormalization`, `ColumnNormalizationParams`, and
+    `ColumnNormalizationStats` before introducing row normalization.
+
 - [x] Add median centering and configurable quantile-range scaling.
   - Use exact linear quantiles, with the interquartile range as the default.
-    Reuse `NormalizationParams` and preserve sparse duplicates and implicit
+    Reuse `ColumnNormalizationParams` and preserve sparse duplicates and implicit
     zeros.
   - Dense and CSC fitting reuse one working column; CSR and Zarr use O(ncols)
     selection state and exact repeated scans without storage conversion.
@@ -171,6 +175,9 @@ assuming full API or numerical parity.
 - [ ] Evaluate row normalization (`Normalizer` and `normalize(axis=1)`).
   - Support L1, L2, and maximum-absolute norms, leaving zero rows unchanged.
     Column normalization with these norms already exists.
+  - Design `RowNormalization` with independent centering and scaling choices,
+    matching `ColumnNormalization`. Keep explicit parameters and custom fitting
+    possible, and define the order when both axes are normalized.
   - Consider a composable row-scaling operator and define its ordering relative
     to column normalization. Compute row factors independently for new samples.
 
@@ -375,11 +382,11 @@ assuming full API or numerical parity.
 
 ## Surface ownership decisions
 
-- [x] Add named presets on `Normalization` for common recipes.
+- [x] Add named presets on `ColumnNormalization` for common recipes.
   - `standardize()` selects mean centering and population SD scaling,
     `min_max()` selects minimum centering and range scaling, and `robust()`
     selects median centering and interquartile-range scaling.
-  - Keep `Normalization::new(center, scale)` for custom combinations and retain
+  - Keep `ColumnNormalization::new(center, scale)` for custom combinations and retain
     no normalization as the default. Presets reuse the existing fitting and
     operator machinery.
 

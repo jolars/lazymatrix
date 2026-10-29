@@ -7,10 +7,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use lazymatrix::{
-    Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVec,
-    MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
-    MatrixShape, Normalization, ScaledSubSlice, Scaling, SubScalarAssign, SumEntries, VectorOwned,
-    VectorViewMut, WithIntercept, ZarrMatrix,
+    Centering, ColumnNormalization, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix,
+    MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
+    MatVecScaledInto, MatrixShape, ScaledSubSlice, Scaling, SubScalarAssign, SumEntries,
+    VectorOwned, VectorViewMut, WithIntercept, ZarrMatrix,
 };
 
 #[path = "../tests/common/backend_aliases.rs"]
@@ -468,14 +468,14 @@ where
 {
     let response = vector(&common::random_vec(204, matrix.nrows()));
     for (normalization, spec) in [
-        ("raw", Normalization::default()),
+        ("raw", ColumnNormalization::default()),
         (
             "centered",
-            Normalization::new(Centering::Mean, Scaling::None),
+            ColumnNormalization::new(Centering::Mean, Scaling::None),
         ),
         (
             "standardized",
-            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+            ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         ),
     ] {
         let lazy = LazyMatrix::new(matrix, spec).unwrap();

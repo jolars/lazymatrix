@@ -10,9 +10,9 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto,
-    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixRead,
-    MatrixShape, MatrixWrite, Normalization, Scaling, WithIntercept, ZarrMatrix,
+    Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatMat, MatMatInto, MatTransposeMat,
+    MatTransposeMatInto, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType,
+    MatrixRead, MatrixShape, MatrixWrite, Scaling, WithIntercept, ZarrMatrix,
 };
 
 #[path = "../tests/common/backend_aliases.rs"]
@@ -286,18 +286,21 @@ where
     V: BenchVector,
 {
     for (normalization, spec) in [
-        ("raw", Normalization::new(Centering::None, Scaling::None)),
+        (
+            "raw",
+            ColumnNormalization::new(Centering::None, Scaling::None),
+        ),
         (
             "centered",
-            Normalization::new(Centering::Mean, Scaling::None),
+            ColumnNormalization::new(Centering::Mean, Scaling::None),
         ),
         (
             "scaled",
-            Normalization::new(Centering::None, Scaling::Sd { df: 0 }),
+            ColumnNormalization::new(Centering::None, Scaling::Sd { df: 0 }),
         ),
         (
             "standardized",
-            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+            ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         ),
     ] {
         let matrix = LazyMatrix::new(source, spec).unwrap();

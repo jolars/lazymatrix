@@ -1,5 +1,5 @@
 use super::{MatrixErrorType, Scalar};
-use crate::{Centering, Normalization, NormalizationStats, QuantileRange, Scaling};
+use crate::{Centering, ColumnNormalization, ColumnNormalizationStats, QuantileRange, Scaling};
 
 /// Column-wise statistics of a design matrix, returned as plain `Vec<F>` of
 /// length `ncols`.
@@ -28,8 +28,8 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
     /// Returns the first error encountered while computing the statistics.
     fn normalization_stats(
         &self,
-        spec: Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         normalization_stats_with_quantiles(self, spec, None)
     }
 
@@ -105,9 +105,9 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
 
 pub(crate) fn normalization_stats_with_quantiles<M, F>(
     matrix: &M,
-    spec: Normalization,
-    quantiles: Option<NormalizationStats<F>>,
-) -> Result<NormalizationStats<F>, M::Error>
+    spec: ColumnNormalization,
+    quantiles: Option<ColumnNormalizationStats<F>>,
+) -> Result<ColumnNormalizationStats<F>, M::Error>
 where
     M: ColumnStats<F> + ?Sized,
     F: Scalar,
@@ -161,8 +161,8 @@ where
 
     fn normalization_stats(
         &self,
-        spec: Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         (**self).normalization_stats(spec)
     }
 
@@ -222,8 +222,8 @@ where
 
     fn normalization_stats(
         &self,
-        spec: Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         (**self).normalization_stats(spec)
     }
 

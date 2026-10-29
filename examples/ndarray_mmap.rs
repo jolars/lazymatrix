@@ -12,7 +12,9 @@ use std::error::Error;
 use std::io::Seek;
 use std::time::Instant;
 
-use lazymatrix::{Centering, LazyMatrix, MatTransposeVecInto, MatVecInto, Normalization, Scaling};
+use lazymatrix::{
+    Centering, ColumnNormalization, LazyMatrix, MatTransposeVecInto, MatVecInto, Scaling,
+};
 use memmap2::MmapMut;
 use ndarray::{Array1, ArrayView2, ArrayViewMut2};
 use ndarray_npy::npy::header::{Header, Layout};
@@ -67,9 +69,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
     let lazy = LazyMatrix::new(
         view,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
-    println!("Normalization: {:?}", start.elapsed());
+    println!("ColumnNormalization: {:?}", start.elapsed());
     let v = Array1::ones(ncols);
     let mut y = Array1::zeros(nrows);
     let mut z = Array1::zeros(ncols);

@@ -16,7 +16,7 @@ use backend_aliases::*;
 use faer::Col;
 use faer::sparse::{SparseColMat, Triplet};
 use lazymatrix::{
-    Centering, LazyMatrix, LazySparseColumn, MatVec, Normalization, Scaling, SparseColumns,
+    Centering, ColumnNormalization, LazyMatrix, LazySparseColumn, MatVec, Scaling, SparseColumns,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -190,7 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = SparseColMat::<usize, f64>::try_new_from_triplets(nrows, ncols, &triplets)?;
     let matrix = LazyMatrix::new(
         data,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
 
     let beta_star = Col::from_fn(ncols, |j| match j {

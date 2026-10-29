@@ -2,8 +2,8 @@
 #![allow(dead_code)]
 
 use lazymatrix::{
-    Centering, DotSlice, ElemDivAssign, Normalization, ScaledSubSlice, Scaling, SubScalarAssign,
-    SumEntries, VectorOwned, VectorViewMut,
+    Centering, ColumnNormalization, DotSlice, ElemDivAssign, ScaledSubSlice, Scaling,
+    SubScalarAssign, SumEntries, VectorOwned, VectorViewMut,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -12,17 +12,17 @@ use crate::backend_aliases::sprs;
 
 pub const SEED: u64 = 205;
 pub const PAIRS: usize = 10;
-pub const NORMALIZATIONS: [(&str, Normalization); 2] = [
+pub const NORMALIZATIONS: [(&str, ColumnNormalization); 2] = [
     (
         "standardized",
-        Normalization {
+        ColumnNormalization {
             center: Centering::Mean,
             scale: Scaling::Sd { df: 0 },
         },
     ),
     (
         "scaled",
-        Normalization {
+        ColumnNormalization {
             center: Centering::None,
             scale: Scaling::Sd { df: 0 },
         },

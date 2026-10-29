@@ -153,7 +153,7 @@ of reusing training parameters. No method updates fitted statistics online.
 The portable representation is an integer `ncols` and optional one-dimensional
 float64 `centers` and `scales` arrays in feature order. Missing arrays mean the
 component is inactive. The same fields reconstruct Rust's
-`NormalizationParams::from_parts(ncols, centers, scales)` and supply PyTorch
+`ColumnNormalizationParams::from_parts(ncols, centers, scales)` and supply PyTorch
 buffers. Keep application-specific scale exponents in consumer code and pass the
 resulting explicit scales to `NormalizationParams`.
 

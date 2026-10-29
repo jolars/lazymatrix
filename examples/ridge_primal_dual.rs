@@ -14,7 +14,7 @@ use backend_aliases::*;
 use faer::Col;
 use faer::sparse::{SparseColMat, Triplet};
 use lazymatrix::{
-    DotProduct, LazyMatrix, MatTransposeVecInto, MatVecInto, Normalization, ScaleAssign,
+    ColumnNormalization, DotProduct, LazyMatrix, MatTransposeVecInto, MatVecInto, ScaleAssign,
     ScaledAddAssign, Transpose,
 };
 use rand::{RngExt, SeedableRng};
@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         let raw = SparseColMat::<usize, f64>::try_new_from_triplets(n, p, &triplets)?;
-        let design = LazyMatrix::new(raw, Normalization::standardize())?;
+        let design = LazyMatrix::new(raw, ColumnNormalization::standardize())?;
         let response = Col::from_fn(n, |i| (i % 7) as f64 - 3.0);
         let penalty = 0.5;
         let coefficients = ridge(&design, &response, penalty)?;

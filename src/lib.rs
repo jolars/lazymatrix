@@ -73,13 +73,13 @@
 //! implement [`IndexedRowSource`]. See [`IndexedRows`] for allocation and scan costs.
 //!
 //! ```
-//! use lazymatrix::{IndexedRows, IndexedRowSource, LazyMatrix, Normalization};
+//! use lazymatrix::{IndexedRows, IndexedRowSource, LazyMatrix, ColumnNormalization};
 //!
 //! fn fit_selected<'a, M: IndexedRowSource<f64>>(
 //!     raw: &'a M,
 //!     rows: &'a [usize],
 //! ) -> Result<LazyMatrix<IndexedRows<'a, &'a M>>, M::Error> {
-//!     LazyMatrix::new(IndexedRows::new(raw, rows), Normalization::standardize())
+//!     LazyMatrix::new(IndexedRows::new(raw, rows), ColumnNormalization::standardize())
 //! }
 //! ```
 //!
@@ -101,9 +101,9 @@
 //!
 //! ```
 //! use lazymatrix::{ColumnStats, EagerMatrix, LazyMatrix, MaterializeDense,
-//!                  MatrixOwned, Normalization};
+//!                  MatrixOwned, ColumnNormalization};
 //!
-//! fn eager_design<M, D>(x: &M, spec: Normalization)
+//! fn eager_design<M, D>(x: &M, spec: ColumnNormalization)
 //!     -> Result<EagerMatrix<D>, M::Error>
 //! where
 //!     M: ColumnStats<f64> + MaterializeDense<f64>,
@@ -168,24 +168,24 @@
 //! # Example
 //!
 //! ```ignore
-//! use lazymatrix::{LazyMatrix, MatVec, Normalization};
+//! use lazymatrix::{LazyMatrix, MatVec, ColumnNormalization};
 //!
 //! // `x` is some backend matrix implementing `MatVec`, `MatTransposeVec`,
 //! // `ColumnStats`, `MatrixShape`; `v` a backend vector.
-//! let spec = Normalization::standardize();
+//! let spec = ColumnNormalization::standardize();
 //! let lazy = LazyMatrix::new(x, spec).unwrap();
 //! let y = lazy.matvec(&v).unwrap(); // == ((X − 1cᵀ)S⁻¹) v, sparsity preserved
 //! ```
 //!
 //! Named presets also provide min-max scaling and robust normalization.
-//! Custom combinations remain available through [`Normalization::new`]:
+//! Custom combinations remain available through [`ColumnNormalization::new`]:
 //!
 //! ```
-//! use lazymatrix::{Centering, Normalization, QuantileRange, Scaling};
+//! use lazymatrix::{Centering, ColumnNormalization, QuantileRange, Scaling};
 //!
-//! let min_max = Normalization::min_max();
-//! let robust = Normalization::robust();
-//! let custom = Normalization::new(
+//! let min_max = ColumnNormalization::min_max();
+//! let robust = ColumnNormalization::robust();
+//! let custom = ColumnNormalization::new(
 //!     Centering::Median,
 //!     Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
 //! );
@@ -209,11 +209,11 @@
 //! # use ndarray_0_15 as ndarray;
 //! # #[cfg(all(feature = "ndarray_v0_16", not(feature = "ndarray_v0_17")))]
 //! # use ndarray_0_16 as ndarray;
-//! use lazymatrix::{LazyMatrix, MatVec, Normalization};
+//! use lazymatrix::{LazyMatrix, MatVec, ColumnNormalization};
 //! use ndarray::array;
 //!
 //! let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-//! let lazy = LazyMatrix::new(x.view(), Normalization::standardize()).unwrap();
+//! let lazy = LazyMatrix::new(x.view(), ColumnNormalization::standardize()).unwrap();
 //! let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
 //! assert_eq!(y.len(), 3);
 //! # }
@@ -354,7 +354,7 @@
 //! # #[cfg(feature = "zarrs_all")]
 //! # {
 //! use std::sync::Arc;
-//! use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling, ZarrMatrix};
+//! use lazymatrix::{Centering, LazyMatrix, MatVec, ColumnNormalization, Scaling, ZarrMatrix};
 //! # #[cfg(all(feature = "zarrs_v0_22", not(feature = "zarrs_v0_23")))]
 //! # use zarrs_0_22 as zarrs;
 //! use zarrs::{array::ArrayBuilder, storage::store::MemoryStore};
@@ -366,7 +366,7 @@
 //! let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], float64(), 1.0f64)
 //!     .build(Arc::new(MemoryStore::new()), "/matrix")?;
 //! let matrix = ZarrMatrix::<_, f64>::try_new(array)?;
-//! let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }))?;
+//! let lazy = LazyMatrix::new(matrix, ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }))?;
 //! assert_eq!(lazy.matvec(&vec![1.0, 2.0])?, vec![0.0; 3]);
 //! # }
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -524,7 +524,8 @@ pub use indexed_rows::{IndexedRawColumn, IndexedRows};
 pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
-    Centering, Normalization, NormalizationParams, NormalizationStats, QuantileRange, Scaling,
+    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationStats,
+    QuantileRange, Scaling,
 };
 pub use row::LazyRow;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};

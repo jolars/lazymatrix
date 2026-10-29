@@ -1,5 +1,5 @@
 use super::Request;
-use crate::{NormalizationStats, Scalar};
+use crate::{ColumnNormalizationStats, Scalar};
 
 #[cfg(any(
     feature = "faer_all",
@@ -9,7 +9,7 @@ use crate::{NormalizationStats, Scalar};
 pub(crate) fn dense_columns<M: crate::MatrixRead<F> + ?Sized, F: Scalar>(
     matrix: &M,
     request: Request,
-) -> NormalizationStats<F> {
+) -> ColumnNormalizationStats<F> {
     let positions = request.positions(matrix.nrows());
     let mut output = request.output(matrix.ncols());
     let mut column = Vec::new();
@@ -30,7 +30,7 @@ pub(crate) fn dense_columns<M: crate::MatrixRead<F> + ?Sized, F: Scalar>(
 }
 
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
-pub(crate) fn borrowed_columns<M, F>(matrix: &M, request: Request) -> NormalizationStats<F>
+pub(crate) fn borrowed_columns<M, F>(matrix: &M, request: Request) -> ColumnNormalizationStats<F>
 where
     M: crate::RawColumns<F> + ?Sized,
     F: Scalar,
@@ -54,7 +54,7 @@ pub(crate) fn columns<F: Scalar>(
     ncols: usize,
     request: Request,
     mut collect: impl FnMut(usize, &mut Vec<(usize, F)>),
-) -> NormalizationStats<F> {
+) -> ColumnNormalizationStats<F> {
     let positions = request.positions(nrows);
     let mut output = request.output(ncols);
     let mut entries: Vec<(usize, F)> = Vec::new();

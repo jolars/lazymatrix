@@ -1,6 +1,6 @@
 //! Fit and apply borrowed raw selections versus explicit fold copies.
 use criterion::{Criterion, criterion_group, criterion_main};
-use lazymatrix::{IndexedRows, LazyMatrix, MatVecInto, Normalization};
+use lazymatrix::{ColumnNormalization, IndexedRows, LazyMatrix, MatVecInto};
 use std::{hint::black_box, time::Duration};
 #[path = "common/allocations.rs"]
 mod allocations;
@@ -46,8 +46,8 @@ fn benchmark(c: &mut Criterion) {
     let mut out = Array1::zeros(rows.len());
     eprintln!("backend,operation,representation,peak_live_bytes");
     for (name, spec) in [
-        ("standardize", Normalization::standardize()),
-        ("robust", Normalization::robust()),
+        ("standardize", ColumnNormalization::standardize()),
+        ("robust", ColumnNormalization::robust()),
     ] {
         let mut group = c.benchmark_group(format!("indexed_rows/{name}"));
         group
@@ -94,17 +94,21 @@ fn benchmark(c: &mut Criterion) {
     }
     let dense_borrowed = LazyMatrix::new(
         IndexedRows::new(dense.view(), &rows),
-        Normalization::standardize(),
+        ColumnNormalization::standardize(),
     )
     .unwrap();
-    let dense_copy =
-        LazyMatrix::new(dense.select(Axis(0), &rows), Normalization::standardize()).unwrap();
+    let dense_copy = LazyMatrix::new(
+        dense.select(Axis(0), &rows),
+        ColumnNormalization::standardize(),
+    )
+    .unwrap();
     let csc_borrowed = LazyMatrix::new(
         IndexedRows::new(csc.view(), &rows),
-        Normalization::standardize(),
+        ColumnNormalization::standardize(),
     )
     .unwrap();
-    let csc_copy = LazyMatrix::new(copy_csc(&csc, &rows), Normalization::standardize()).unwrap();
+    let csc_copy =
+        LazyMatrix::new(copy_csc(&csc, &rows), ColumnNormalization::standardize()).unwrap();
     let mut group = c.benchmark_group("indexed_rows/matvec");
     group
         .sample_size(10)

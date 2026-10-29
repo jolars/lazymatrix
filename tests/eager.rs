@@ -1,8 +1,8 @@
 use std::convert::Infallible;
 
 use lazymatrix::{
-    DenseNormalize, EagerMatrix, LazyMatrix, MatVec, MaterializeDense, MatrixErrorType,
-    MatrixOwned, MatrixShape, MatrixWrite, NormalizationParams,
+    ColumnNormalizationParams, DenseNormalize, EagerMatrix, LazyMatrix, MatVec, MaterializeDense,
+    MatrixErrorType, MatrixOwned, MatrixShape, MatrixWrite,
 };
 
 #[derive(Clone, Debug)]
@@ -150,7 +150,7 @@ fn output_dimensions_are_checked_before_writing() {
 
 #[test]
 fn fitted_parameters_check_shape_even_when_both_axes_are_inactive() {
-    let params = NormalizationParams::<f64>::from_parts(3, None, None);
+    let params = ColumnNormalizationParams::<f64>::from_parts(3, None, None);
     assert!(
         std::panic::catch_unwind(|| { LazyMatrix::from_normalization(source(), params) }).is_err()
     );

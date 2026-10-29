@@ -10,7 +10,7 @@ use crate::{ColumnStats, Scalar};
 fn quantiles<F: Scalar, I: SpIndex, Iptr: SpIndex>(
     matrix: CsMatViewI<'_, F, I, Iptr>,
     request: crate::quantiles::Request,
-) -> crate::NormalizationStats<F> {
+) -> crate::ColumnNormalizationStats<F> {
     if matrix.is_csc() {
         crate::quantiles::columns(matrix.rows(), matrix.cols(), request, |j, entries| {
             entries.extend(
@@ -79,8 +79,8 @@ where
 {
     fn normalization_stats(
         &self,
-        spec: crate::Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: crate::ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         crate::quantiles::fit(self, spec, |request| Ok(quantiles(self.view(), request)))
     }
 

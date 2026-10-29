@@ -3,11 +3,11 @@
 use std::ops::Range;
 
 use crate::{
-    Columns, EagerMatrix, LazyColumn, LazyMatrix, MatTransposeVec, MatTransposeVecInto,
-    MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixErrorType, MatrixOwned,
-    MatrixShape, MatrixWrite, NormalizationParams, RawColumn, RawColumns, Scalar, SparseColumnRef,
-    SparseColumns, SparseRows, SubmatrixKernel, VectorOwned, VectorView, VectorViewMut,
-    WeightedColumnSumsInto, WeightedGramInto,
+    ColumnNormalizationParams, Columns, EagerMatrix, LazyColumn, LazyMatrix, MatTransposeVec,
+    MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
+    MatrixErrorType, MatrixOwned, MatrixShape, MatrixWrite, RawColumn, RawColumns, Scalar,
+    SparseColumnRef, SparseColumns, SparseRows, SubmatrixKernel, VectorOwned, VectorView,
+    VectorViewMut, WeightedColumnSumsInto, WeightedGramInto,
 };
 
 /// A borrowed restriction of an already normalized matrix to contiguous ranges.
@@ -253,8 +253,8 @@ impl<M: SubmatrixKernel<F>, F: Scalar> WeightedGramInto<F> for Submatrix<'_, M, 
 }
 
 impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
-    fn fitted_parameters(&self) -> NormalizationParams<F> {
-        NormalizationParams::from_parts(
+    fn fitted_parameters(&self) -> ColumnNormalizationParams<F> {
+        ColumnNormalizationParams::from_parts(
             self.ncols(),
             self.centers().map(<[F]>::to_vec),
             self.scales().map(<[F]>::to_vec),

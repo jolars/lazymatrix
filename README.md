@@ -36,12 +36,12 @@ Fit column means and standard deviations, then multiply by the normalized
 matrix:
 
 ```rust
-use lazymatrix::{LazyMatrix, MatVec, Normalization};
+use lazymatrix::{ColumnNormalization, LazyMatrix, MatVec};
 use ndarray::array;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-    let normalization = Normalization::standardize();
+    let normalization = ColumnNormalization::standardize();
     let lazy = LazyMatrix::new(x.view(), normalization)?;
 
     let y = lazy.matvec(&array![1.0, -1.0])?;
@@ -51,11 +51,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The operator borrows the original matrix and keeps the fitted centers and
-scales. Use `Normalization::min_max()` for min-max scaling to `[0, 1]` on fitted
-data or `Normalization::robust()` for median centering and interquartile-range
-scaling. `Normalization::new(center, scale)` accepts custom combinations, with
-centering and scaling independently optional. Reuse fitted parameters on new
-observations with `LazyMatrix::from_normalization`.
+scales. Use `ColumnNormalization::min_max()` for min-max scaling to `[0, 1]` on
+fitted data or `ColumnNormalization::robust()` for median centering and
+interquartile-range scaling. `ColumnNormalization::new(center, scale)` accepts
+custom combinations, with centering and scaling independently optional. Reuse
+fitted parameters on new observations with `LazyMatrix::from_normalization`.
 
 Fit on selected raw rows without copying the training matrix:
 
@@ -66,7 +66,7 @@ let training_rows = [0, 2];
 let held_out_rows = [1];
 let training = LazyMatrix::new(
     IndexedRows::new(x.view(), &training_rows),
-    Normalization::standardize(),
+    ColumnNormalization::standardize(),
 )?;
 let validation = LazyMatrix::from_normalization(
     IndexedRows::new(x.view(), &held_out_rows),

@@ -37,16 +37,16 @@ Rust 1.89. The `zarrs` feature requires Rust 1.91; `zarrs_v0_22` retains Rust
 ## Fit normalization and apply a product
 
 ```rust
-use lazymatrix::{LazyMatrix, MatVec, Normalization};
+use lazymatrix::{LazyMatrix, MatVec, ColumnNormalization};
 use ndarray::array;
 
 let x = array![[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]];
-let lazy = LazyMatrix::new(x.view(), Normalization::standardize()).unwrap();
+let lazy = LazyMatrix::new(x.view(), ColumnNormalization::standardize()).unwrap();
 
 let y = lazy.matvec(&array![1.0, -1.0]).unwrap();
 ```
 
-Choose a named recipe or use `Normalization::new(center, scale)` for a custom
+Choose a named recipe or use `ColumnNormalization::new(center, scale)` for a custom
 combination:
 
 | Preset          | Centering | Scaling                       |
@@ -61,7 +61,7 @@ standard deviations, subtract one degree of freedom:
 ```rust
 use lazymatrix::{Centering, Scaling};
 
-let sample = Normalization::new(Centering::Mean, Scaling::Sd { df: 1 });
+let sample = ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 1 });
 let lazy = LazyMatrix::new(x.view(), sample).unwrap();
 ```
 
@@ -73,7 +73,7 @@ population standard deviations, and `df = 1` selects sample standard deviations.
 Min-max scaling maps finite, nonconstant columns to `[0, 1]` on the fitting data;
 reusing fitted parameters
 does not clip new observations to that range. Centering and scaling are
-independently optional, and `Normalization::default()` performs neither.
+independently optional, and `ColumnNormalization::default()` performs neither.
 Computed scales become one when they would otherwise be exactly zero.
 Construction and products return `Result`, so storage backends can report read
 errors. Dimension mismatches panic.
@@ -87,7 +87,7 @@ capabilities supported by each backend.
 Subtract column medians and divide by the interquartile range:
 
 ```rust
-let robust = LazyMatrix::new(x.view(), Normalization::robust()).unwrap();
+let robust = LazyMatrix::new(x.view(), ColumnNormalization::robust()).unwrap();
 ```
 
 For the 10th-to-90th percentile range, specify custom quantile bounds:
@@ -95,7 +95,7 @@ For the 10th-to-90th percentile range, specify custom quantile bounds:
 ```rust
 use lazymatrix::{Centering, QuantileRange, Scaling};
 
-let custom = Normalization::new(
+let custom = ColumnNormalization::new(
     Centering::Median,
     Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
 );

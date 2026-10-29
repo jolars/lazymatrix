@@ -62,13 +62,13 @@ normalization. Here, we center by the mean and scale by the maximum absolute
 value of each column. Then, we multiply the normalized matrix by a vector.
 
 ```rust
-use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
+use lazymatrix::{Centering, LazyMatrix, MatVec, ColumnNormalization, Scaling};
 use ndarray::array;
 
 let x = array![[3.0, 6.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 9.0]];
 let lazy = LazyMatrix::new(
     x.view(),
-    Normalization::new(Centering::Mean, Scaling::MaxAbs),
+    ColumnNormalization::new(Centering::Mean, Scaling::MaxAbs),
 ).unwrap();
 
 let y = lazy.matvec(&array![1.0, 1.0, 1.0]).unwrap();

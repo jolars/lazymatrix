@@ -25,7 +25,7 @@ use backend_aliases::faer;
 use faer::Col;
 use faer::sparse::{SparseRowMat, Triplet};
 use lazymatrix::{
-    Centering, LazyMatrix, LazyRow, MatTransposeVecInto, MatVec, MatVecInto, Normalization,
+    Centering, ColumnNormalization, LazyMatrix, LazyRow, MatTransposeVecInto, MatVec, MatVecInto,
     Scaling, SparseRows,
 };
 use rand::seq::SliceRandom;
@@ -200,7 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let raw = SparseRowMat::<usize, f64>::try_new_from_triplets(nrows, ncols, &triplets)?;
     let matrix = LazyMatrix::new(
         raw,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
     let beta_star = Col::from_fn(ncols, |j| (j as f64 - 4.5) * 0.5);
     let response = matrix.matvec(&beta_star)?;

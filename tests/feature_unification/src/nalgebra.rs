@@ -18,9 +18,12 @@ pub fn check() {
     let rows = DVector::from_column_slice(&[1.0, 2.0, -1.0]);
     let view: DMatrixView<'_, f64> = dense.as_view();
     {
-        use lazymatrix::{Centering, LazyMatrix, MatVec, Normalization, Scaling};
-        let lazy =
-            LazyMatrix::new(&dense, Normalization::new(Centering::Mean, Scaling::Range)).unwrap();
+        use lazymatrix::{Centering, ColumnNormalization, LazyMatrix, MatVec, Scaling};
+        let lazy = LazyMatrix::new(
+            &dense,
+            ColumnNormalization::new(Centering::Mean, Scaling::Range),
+        )
+        .unwrap();
         let eager = lazy.to_eager::<DMatrix<f64>>().unwrap();
         assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
         let result = eager

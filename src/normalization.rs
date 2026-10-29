@@ -3,7 +3,7 @@
 /// An inactive normalization component is `None`. Present vectors have one
 /// entry per column. Raw scales may be zero; [`crate::LazyMatrix::new`] replaces
 /// exact zeros with one while preserving nonfinite values.
-pub type NormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
+pub type ColumnNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 
 /// How to center each column.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -91,7 +91,7 @@ pub enum Scaling {
     QuantileRange(QuantileRange),
 }
 
-/// A full normalization specification: an independent [`Centering`] and
+/// A column normalization specification: an independent [`Centering`] and
 /// [`Scaling`] choice.
 ///
 /// Use [`Self::standardize`], [`Self::min_max`], or [`Self::robust`] for common
@@ -104,12 +104,12 @@ pub enum Scaling {
 /// and
 /// [`ColumnStats::col_maxabs_centered`](crate::traits::ColumnStats::col_maxabs_centered).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Normalization {
+pub struct ColumnNormalization {
     pub center: Centering,
     pub scale: Scaling,
 }
 
-impl Normalization {
+impl ColumnNormalization {
     /// Build a specification from its two axes.
     pub const fn new(center: Centering, scale: Scaling) -> Self {
         Self { center, scale }
@@ -121,7 +121,7 @@ impl Normalization {
     /// [`crate::LazyMatrix::new`] replaces exact zero standard deviations with
     /// one, so constant columns become zero.
     /// For sample standard deviations, use
-    /// `Normalization::new(Centering::Mean, Scaling::Sd { df: 1 })`.
+    /// `ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 1 })`.
     pub const fn standardize() -> Self {
         Self::new(Centering::Mean, Scaling::Sd { df: 0 })
     }
@@ -163,13 +163,13 @@ pub(crate) fn sd_divisor<F: crate::Scalar>(nrows: usize, df: usize) -> F {
 /// scales with one before constructing these parameters. Explicit parameters
 /// preserve negative scales and nonfinite values.
 #[derive(Clone, Debug, PartialEq)]
-pub struct NormalizationParams<F = f64> {
+pub struct ColumnNormalizationParams<F = f64> {
     ncols: usize,
     pub(crate) centers: Option<Vec<F>>,
     pub(crate) scales: Option<Vec<F>>,
 }
 
-impl<F: crate::Scalar> NormalizationParams<F> {
+impl<F: crate::Scalar> ColumnNormalizationParams<F> {
     /// Construct validated explicit parameters.
     ///
     /// # Panics
@@ -200,7 +200,7 @@ impl<F: crate::Scalar> NormalizationParams<F> {
     }
 
     /// Recover the fitted centers and scales without copying.
-    pub fn into_parts(self) -> NormalizationStats<F> {
+    pub fn into_parts(self) -> ColumnNormalizationStats<F> {
         (self.centers, self.scales)
     }
 }

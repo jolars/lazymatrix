@@ -3,8 +3,8 @@
 use std::convert::Infallible;
 
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatTransposeVec, MatVec, MatrixShape, Normalization,
-    NormalizationParams, QuantileRange, Scaling, SprsCsc,
+    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnStats, LazyMatrix,
+    MatTransposeVec, MatVec, MatrixShape, QuantileRange, Scaling, SprsCsc,
 };
 use ndarray::{Array1, Array2, Axis};
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -73,7 +73,7 @@ where
             };
             Ok(infallible(LazyMatrix::new(
                 raw,
-                Normalization::new(center, scale),
+                ColumnNormalization::new(center, scale),
             )))
         }
         _ => Err(PyValueError::new_err(
@@ -84,7 +84,7 @@ where
 
 #[pyclass(frozen, module = "lazymatrix._core")]
 struct Params {
-    inner: NormalizationParams,
+    inner: ColumnNormalizationParams,
 }
 
 #[pymethods]
@@ -114,7 +114,7 @@ impl Params {
             )));
         }
         Ok(Self {
-            inner: NormalizationParams::from_parts(ncols, centers, scales),
+            inner: ColumnNormalizationParams::from_parts(ncols, centers, scales),
         })
     }
 
@@ -153,7 +153,7 @@ impl Storage {
         }
     }
 
-    fn normalization(&self) -> &NormalizationParams {
+    fn normalization(&self) -> &ColumnNormalizationParams {
         match self {
             Self::Dense(matrix) => matrix.normalization(),
             Self::Sparse(matrix) => matrix.normalization(),
@@ -196,7 +196,7 @@ impl Storage {
         let params = if transpose {
             fitted.clone()
         } else {
-            NormalizationParams::from_parts(
+            ColumnNormalizationParams::from_parts(
                 1,
                 fitted.centers().map(|values| vec![values[index]]),
                 fitted.scales().map(|values| vec![values[index]]),

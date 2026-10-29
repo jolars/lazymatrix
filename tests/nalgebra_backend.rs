@@ -14,7 +14,7 @@ macro_rules! backend_suite {
             use crate::backend_aliases::$sparse as nalgebra_sparse;
             use crate::common;
             use common::TestMatrix;
-            use lazymatrix::{Centering, LazyMatrix, Normalization, Scaling, SparseRows};
+            use lazymatrix::{Centering, ColumnNormalization, LazyMatrix, Scaling, SparseRows};
             use nalgebra::{DMatrix, DMatrixView, DVector, DVectorView, DVectorViewMut, Dyn};
             use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 
@@ -337,9 +337,11 @@ macro_rules! backend_suite {
                     2,
                     &to_dvec,
                 );
-                let lazy =
-                    LazyMatrix::new(design, Normalization::new(Centering::Mean, Scaling::L2))
-                        .unwrap();
+                let lazy = LazyMatrix::new(
+                    design,
+                    ColumnNormalization::new(Centering::Mean, Scaling::L2),
+                )
+                .unwrap();
 
                 let vector_storage = [1.0, -99.0, 2.0, -99.0, 3.0, -99.0, 4.0];
                 let vector =

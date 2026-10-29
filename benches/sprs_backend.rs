@@ -2,8 +2,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, Normalization, Scaling,
-    SprsCsc,
+    Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto,
+    Scaling, SprsCsc,
 };
 
 #[path = "../tests/common/backend_aliases.rs"]
@@ -30,7 +30,7 @@ fn benchmark_sprs(c: &mut Criterion) {
 
             let lazy = LazyMatrix::new(
                 matrix,
-                Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+                ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
             )
             .unwrap();
             let v = vec![1.0; ncols];

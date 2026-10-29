@@ -2,9 +2,9 @@ use std::cell::Cell;
 use std::fmt;
 
 use lazymatrix::{
-    Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVec,
-    MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape, Normalization, Scaling,
-    SubScalarAssign, Transpose,
+    Centering, ColumnNormalization, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix,
+    MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixShape,
+    Scaling, SubScalarAssign, Transpose,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -215,8 +215,8 @@ impl ColumnStats<f64> for Source {
 
     fn normalization_stats(
         &self,
-        _: Normalization,
-    ) -> Result<lazymatrix::NormalizationStats<f64>, ReadError> {
+        _: ColumnNormalization,
+    ) -> Result<lazymatrix::ColumnNormalizationStats<f64>, ReadError> {
         self.fused_calls.set(self.fused_calls.get() + 1);
         if self.fail.get() {
             return Err(ReadError);
@@ -231,7 +231,7 @@ fn normalization_uses_borrowed_fused_hook_and_preserves_scale_policy() {
         fail: Cell::new(false),
         fused_calls: Cell::new(0),
     };
-    let spec = Normalization::new(Centering::Mean, Scaling::Sd { df: 0 });
+    let spec = ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 });
     let lazy = LazyMatrix::new(&source, spec).unwrap();
     assert_eq!(source.fused_calls.get(), 1);
     assert_eq!(lazy.centers(), Some([1.0, 2.0].as_slice()));
@@ -299,7 +299,7 @@ impl ColumnStats<f64> for DefaultStats {
 #[test]
 fn default_normalization_hook_propagates_statistic_errors() {
     assert_eq!(
-        DefaultStats.normalization_stats(Normalization::default()),
+        DefaultStats.normalization_stats(ColumnNormalization::default()),
         Ok((None, None))
     );
     for center in [
@@ -318,8 +318,8 @@ fn default_normalization_hook_propagates_statistic_errors() {
             Scaling::Range,
             Scaling::QuantileRange(lazymatrix::QuantileRange::default()),
         ] {
-            let spec = Normalization::new(center, scale);
-            if spec != Normalization::default() {
+            let spec = ColumnNormalization::new(center, scale);
+            if spec != ColumnNormalization::default() {
                 assert_eq!(DefaultStats.normalization_stats(spec), Err(ReadError));
             }
         }
@@ -363,7 +363,7 @@ fn materialization_failure_returns_no_wrapper_and_retry_overwrites_output() {
         fail: Cell::new(false),
         fused_calls: Cell::new(0),
     };
-    let lazy = LazyMatrix::new(&source, Normalization::default()).unwrap();
+    let lazy = LazyMatrix::new(&source, ColumnNormalization::default()).unwrap();
     assert_eq!(source.fused_calls.get(), 1);
     let mut out = common::MaterializeOutput::zeros(2, 2);
     out.values.fill(99.0);

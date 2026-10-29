@@ -12,7 +12,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use lazymatrix::{
-    Centering, LazyMatrix, MatTransposeVecInto, MatVecInto, Normalization, Scaling, ZarrMatrix,
+    Centering, ColumnNormalization, LazyMatrix, MatTransposeVecInto, MatVecInto, Scaling,
+    ZarrMatrix,
 };
 use zarrs::array::{Array, ArrayBuilder};
 use zarrs::filesystem::FilesystemStore;
@@ -67,9 +68,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
     let lazy = LazyMatrix::new(
         matrix,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
-    println!("Normalization: {:?}", start.elapsed());
+    println!("ColumnNormalization: {:?}", start.elapsed());
     let v = vec![1.0; ncols];
     let mut y = vec![0.0; nrows];
     let mut z = vec![0.0; ncols];

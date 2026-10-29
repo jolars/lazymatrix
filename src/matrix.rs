@@ -1,5 +1,5 @@
 use crate::column::{LazyColumn, LazySparseColumn, SparseColumnRef};
-use crate::normalization::{Normalization, NormalizationParams};
+use crate::normalization::{ColumnNormalization, ColumnNormalizationParams};
 use crate::row::LazyRow;
 use crate::traits::{
     ColumnStats, Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
@@ -20,7 +20,7 @@ use crate::traits::{
 #[derive(Clone, Debug)]
 pub struct LazyMatrix<M, F = f64> {
     data: M,
-    normalization: NormalizationParams<F>,
+    normalization: ColumnNormalizationParams<F>,
 }
 
 impl<M, F: Scalar> LazyMatrix<M, F>
@@ -38,7 +38,7 @@ where
     /// `ncols`, or if a scale is `+0.0` or `-0.0`. The zero-scale panic reports
     /// the zero-based column index.
     pub fn from_parts(data: M, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
-        let normalization = NormalizationParams::from_parts(data.ncols(), centers, scales);
+        let normalization = ColumnNormalizationParams::from_parts(data.ncols(), centers, scales);
         Self::from_normalization(data, normalization)
     }
 
@@ -46,7 +46,7 @@ where
     ///
     /// # Panics
     /// Panics if the matrix column count differs from the fitted column count.
-    pub fn from_normalization(data: M, normalization: NormalizationParams<F>) -> Self {
+    pub fn from_normalization(data: M, normalization: ColumnNormalizationParams<F>) -> Self {
         assert_eq!(
             data.ncols(),
             normalization.ncols(),
@@ -59,7 +59,7 @@ where
     }
 
     /// Borrow fitted parameters for reuse on prediction data.
-    pub fn normalization(&self) -> &NormalizationParams<F> {
+    pub fn normalization(&self) -> &ColumnNormalizationParams<F> {
         &self.normalization
     }
 
@@ -232,7 +232,7 @@ where
     ///
     /// # Errors
     /// Returns the backend error if computing normalization statistics fails.
-    pub fn new(data: M, spec: Normalization) -> Result<Self, M::Error> {
+    pub fn new(data: M, spec: ColumnNormalization) -> Result<Self, M::Error> {
         let (centers, scales) = data.normalization_stats(spec)?;
         Ok(Self::from_parts(
             data,

@@ -49,7 +49,7 @@ statistics use the centered columns. Sparse statistics include the contribution
 of implicit zeros. Exact zero fitted scales become one, and nonfinite values
 retain their IEEE behavior.
 
-`NormalizationParams` stores the fitted centers and scales independently of the
+`ColumnNormalizationParams` stores the fitted centers and scales independently of the
 matrix backend. Reuse those parameters for prediction data or after converting
 to an eager representation.
 

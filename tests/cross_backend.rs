@@ -13,10 +13,10 @@ mod backend_aliases;
 mod common;
 
 use common::{TestMatrix, assert_close, random_matrix, random_vec};
-use lazymatrix::{Centering, LazyMatrix, MatTransposeVec, MatVec, Normalization, Scaling};
+use lazymatrix::{Centering, ColumnNormalization, LazyMatrix, MatTransposeVec, MatVec, Scaling};
 
 type Products = (Vec<f64>, Vec<f64>);
-type ProductFn = fn(&TestMatrix, Normalization, &[f64], &[f64]) -> Products;
+type ProductFn = fn(&TestMatrix, ColumnNormalization, &[f64], &[f64]) -> Products;
 
 fn with_batched<M>(matrix: &M, v: &[f64], u: &[f64], mut products: Products) -> Products
 where
@@ -66,7 +66,7 @@ macro_rules! faer_adapter {
             }
             pub(super) fn products(
                 tm: &TestMatrix,
-                spec: Normalization,
+                spec: ColumnNormalization,
                 v: &[f64],
                 u: &[f64],
             ) -> Products {
@@ -96,7 +96,7 @@ macro_rules! faer_adapter {
             }
             pub(super) fn products_csr(
                 tm: &TestMatrix,
-                spec: Normalization,
+                spec: ColumnNormalization,
                 v: &[f64],
                 u: &[f64],
             ) -> Products {
@@ -184,7 +184,7 @@ macro_rules! nalgebra_adapter {
             }
             pub(super) fn products(
                 tm: &TestMatrix,
-                spec: Normalization,
+                spec: ColumnNormalization,
                 v: &[f64],
                 u: &[f64],
             ) -> Products {
@@ -214,7 +214,7 @@ macro_rules! nalgebra_adapter {
             }
             pub(super) fn products_csr(
                 tm: &TestMatrix,
-                spec: Normalization,
+                spec: ColumnNormalization,
                 v: &[f64],
                 u: &[f64],
             ) -> Products {
@@ -283,7 +283,7 @@ macro_rules! ndarray_adapter {
             }
             pub(super) fn products(
                 tm: &TestMatrix,
-                spec: Normalization,
+                spec: ColumnNormalization,
                 v: &[f64],
                 u: &[f64],
             ) -> Products {
@@ -343,7 +343,12 @@ mod sprs {
                 .unwrap();
         }
     }
-    pub(super) fn products(tm: &TestMatrix, spec: Normalization, v: &[f64], u: &[f64]) -> Products {
+    pub(super) fn products(
+        tm: &TestMatrix,
+        spec: ColumnNormalization,
+        v: &[f64],
+        u: &[f64],
+    ) -> Products {
         let mut triplets = sprs::TriMat::new((tm.nrows, tm.ncols));
         for &(row, col, value) in &tm.triplets {
             triplets.add_triplet(row, col, value);
@@ -401,7 +406,7 @@ macro_rules! zarrs_adapter {
 
             pub(super) fn products(
                 tm: &TestMatrix,
-                spec: Normalization,
+                spec: ColumnNormalization,
                 v: &[f64],
                 u: &[f64],
             ) -> Products {
@@ -443,8 +448,8 @@ zarrs_adapter!(zarrs_0_22, zarrs_compat_v0_22);
 zarrs_adapter!(zarrs_0_23, zarrs_compat_v0_23);
 
 fn check_agreement(
-    left: impl Fn(&TestMatrix, Normalization, &[f64], &[f64]) -> Products,
-    right: impl Fn(&TestMatrix, Normalization, &[f64], &[f64]) -> Products,
+    left: impl Fn(&TestMatrix, ColumnNormalization, &[f64], &[f64]) -> Products,
+    right: impl Fn(&TestMatrix, ColumnNormalization, &[f64], &[f64]) -> Products,
 ) {
     let tm = random_matrix(42, 14, 9, 0.4);
     let v = random_vec(43, tm.ncols);
@@ -460,7 +465,7 @@ fn check_agreement(
             Scaling::MaxAbs,
             Scaling::Range,
         ] {
-            let spec = Normalization::new(center, scale);
+            let spec = ColumnNormalization::new(center, scale);
 
             let (left_y, left_z) = left(&tm, spec, &v, &u);
             let (right_y, right_z) = right(&tm, spec, &v, &u);

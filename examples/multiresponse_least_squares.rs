@@ -11,7 +11,7 @@ use backend_aliases::faer::{
     Mat,
     sparse::{SparseColMat, Triplet},
 };
-use lazymatrix::{Centering, LazyMatrix, MatMat, Normalization, Scaling, WithIntercept};
+use lazymatrix::{Centering, ColumnNormalization, LazyMatrix, MatMat, Scaling, WithIntercept};
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let raw = SparseColMat::<usize, f64>::try_new_from_triplets(n, p, &triplets)?;
     let lazy = LazyMatrix::new(
         raw,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
     let design = WithIntercept::new(&lazy);
     let truth = Mat::from_fn(p + 1, k, |j, r| (j as f64 - 3.) * (r + 1) as f64 / 4.);

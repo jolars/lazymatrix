@@ -1,7 +1,8 @@
 //! Exact order statistics shared by buffered and streaming backends.
 
 use crate::{
-    Centering, ColumnStats, Normalization, NormalizationStats, QuantileRange, Scalar, Scaling,
+    Centering, ColumnNormalization, ColumnNormalizationStats, ColumnStats, QuantileRange, Scalar,
+    Scaling,
 };
 
 #[cfg(any(
@@ -37,8 +38,8 @@ macro_rules! buffered_stats_methods {
     ($compute:path) => {
         fn normalization_stats(
             &self,
-            spec: crate::Normalization,
-        ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+            spec: crate::ColumnNormalization,
+        ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
             crate::quantiles::fit(self, spec, |request| Ok($compute(self, request)))
         }
 
@@ -83,7 +84,7 @@ impl Request {
         }
     }
 
-    fn from_spec(spec: Normalization) -> Self {
+    fn from_spec(spec: ColumnNormalization) -> Self {
         Self {
             median: spec.center == Centering::Median,
             range: match spec.scale {
@@ -105,7 +106,7 @@ impl Request {
         positions
     }
 
-    fn output<F>(self, ncols: usize) -> NormalizationStats<F> {
+    fn output<F>(self, ncols: usize) -> ColumnNormalizationStats<F> {
         (
             self.median.then(|| Vec::with_capacity(ncols)),
             self.range.map(|_| Vec::with_capacity(ncols)),
@@ -114,7 +115,7 @@ impl Request {
 
     fn push<F: Scalar>(
         self,
-        output: &mut NormalizationStats<F>,
+        output: &mut ColumnNormalizationStats<F>,
         positions: &[Position],
         values: &[F],
     ) {
@@ -135,9 +136,9 @@ impl Request {
 
 pub(crate) fn fit<M, F>(
     matrix: &M,
-    spec: Normalization,
-    compute: impl FnOnce(Request) -> Result<NormalizationStats<F>, M::Error>,
-) -> Result<NormalizationStats<F>, M::Error>
+    spec: ColumnNormalization,
+    compute: impl FnOnce(Request) -> Result<ColumnNormalizationStats<F>, M::Error>,
+) -> Result<ColumnNormalizationStats<F>, M::Error>
 where
     M: ColumnStats<F> + ?Sized,
     F: Scalar,
@@ -248,13 +249,13 @@ mod tests {
     use rand::{RngExt, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
-    fn buffered<F: Scalar>(values: &[F], request: Request) -> NormalizationStats<F> {
+    fn buffered<F: Scalar>(values: &[F], request: Request) -> ColumnNormalizationStats<F> {
         super::buffered::columns(values.len(), 1, request, |_, entries| {
             entries.extend(values.iter().copied().enumerate());
         })
     }
 
-    fn streamed<F: Scalar>(values: &[F], request: Request) -> NormalizationStats<F> {
+    fn streamed<F: Scalar>(values: &[F], request: Request) -> ColumnNormalizationStats<F> {
         let mut scans = 0;
         super::streaming::stream(values.len(), 1, request, |visit| {
             scans += 1;

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use lazymatrix::{
-    Centering, ColumnStats, LazyMatrix, MatrixShape, Normalization, NormalizationStats,
+    Centering, ColumnNormalization, ColumnNormalizationStats, ColumnStats, LazyMatrix, MatrixShape,
     QuantileRange, Scaling, ZarrMatrix,
 };
 use rand::{RngExt, SeedableRng};
@@ -52,7 +52,7 @@ impl ReadableStorageTraits for TrackedStore {
     }
 }
 
-fn sorted_reference(matrix: &ndarray::Array2<f64>) -> NormalizationStats<f64> {
+fn sorted_reference(matrix: &ndarray::Array2<f64>) -> ColumnNormalizationStats<f64> {
     let mut centers = Vec::with_capacity(matrix.ncols());
     let mut scales = Vec::with_capacity(matrix.ncols());
     let mut column = Vec::with_capacity(matrix.nrows());
@@ -76,8 +76,8 @@ fn sorted_reference(matrix: &ndarray::Array2<f64>) -> NormalizationStats<f64> {
 
 fn parameters<M: ColumnStats<f64> + MatrixShape>(
     matrix: &M,
-    spec: Normalization,
-) -> NormalizationStats<f64> {
+    spec: ColumnNormalization,
+) -> ColumnNormalizationStats<f64> {
     let (_, centers, scales) = LazyMatrix::new(matrix, spec).unwrap().into_parts();
     (centers, scales)
 }
@@ -88,8 +88,8 @@ fn profile(
     shape: (usize, usize),
     iterations: usize,
     storage: Option<(&TrackedStore, usize)>,
-    expected: &NormalizationStats<f64>,
-    mut fit: impl FnMut() -> NormalizationStats<f64>,
+    expected: &ColumnNormalizationStats<f64>,
+    mut fit: impl FnMut() -> ColumnNormalizationStats<f64>,
 ) {
     let actual = fit();
     for (actual, expected) in actual
@@ -179,7 +179,7 @@ fn main() {
             ZarrMatrix::try_new(zarrs::array::Array::open(store.clone(), "/quantiles").unwrap())
                 .unwrap();
         let expected = sorted_reference(&raw);
-        let spec = Normalization::new(
+        let spec = ColumnNormalization::new(
             Centering::Median,
             Scaling::QuantileRange(QuantileRange::default()),
         );

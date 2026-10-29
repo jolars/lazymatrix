@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use lazymatrix::{
-    Centering, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatVec, Normalization, Scaling,
-    SubScalarAssign, VectorView,
+    Centering, ColumnNormalization, ColumnStats, DotSlice, ElemDivAssign, LazyMatrix, MatVec,
+    Scaling, SubScalarAssign, VectorView,
 };
 
 #[path = "../tests/common/backend_aliases.rs"]
@@ -134,14 +134,14 @@ fn bench_matrix<const DEFAULT_HOOK: bool, M, V>(
     let x = vector(&input);
     let reverse = std::env::var_os("FORWARD_INPUT_REVERSE").is_some();
     for (mode, normalization) in [
-        ("raw", Normalization::default()),
+        ("raw", ColumnNormalization::default()),
         (
             "centered",
-            Normalization::new(Centering::Mean, Scaling::None),
+            ColumnNormalization::new(Centering::Mean, Scaling::None),
         ),
         (
             "standardized",
-            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+            ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         ),
     ] {
         let lazy = LazyMatrix::new(matrix, normalization).unwrap();

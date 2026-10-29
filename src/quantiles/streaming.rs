@@ -1,5 +1,5 @@
 use super::{Request, interpolate};
-use crate::{NormalizationStats, Scalar};
+use crate::{ColumnNormalizationStats, Scalar};
 
 #[derive(Clone, Copy)]
 struct Bounds<F> {
@@ -115,7 +115,7 @@ pub(crate) fn stream<F: Scalar, E>(
     ncols: usize,
     request: Request,
     mut scan: impl FnMut(&mut dyn FnMut(usize, F, usize)) -> Result<(), E>,
-) -> Result<NormalizationStats<F>, E> {
+) -> Result<ColumnNormalizationStats<F>, E> {
     let positions = request.positions(nrows);
     let mut output = request.output(ncols);
     let mut bounds = vec![Bounds::new(); ncols];
@@ -171,7 +171,7 @@ pub(crate) fn sparse_rows<F: Scalar>(
     ncols: usize,
     request: Request,
     mut row: impl FnMut(usize, &mut dyn FnMut(usize, F)),
-) -> NormalizationStats<F> {
+) -> ColumnNormalizationStats<F> {
     let mut sums = vec![F::zero(); ncols];
     let mut seen = vec![false; ncols];
     let mut touched = Vec::new();

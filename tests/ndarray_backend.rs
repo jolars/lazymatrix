@@ -47,7 +47,7 @@ macro_rules! backend_suite {
             use common::{TestMatrix, assert_close, dense_matvec, dense_tmatvec, materialize};
             use lazymatrix::{
                 Centering, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm, LazyMatrix,
-                MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, Normalization, ScaleAssign,
+                MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, ColumnNormalization, ScaleAssign,
                 ScaledAddAssign, ScaledSubSlice, Scaling, SubScalarAssign, SumEntries, VectorView,
                 VectorViewMut,
             };
@@ -263,7 +263,7 @@ macro_rules! backend_suite {
                         Scaling::MaxAbs,
                         Scaling::Range,
                     ] {
-                        let spec = Normalization::new(center, scale);
+                        let spec = ColumnNormalization::new(center, scale);
                         let lazy = LazyMatrix::new(matrix, spec).unwrap();
                         let reference = LazyMatrix::new(matrix.to_owned(), spec).unwrap();
                         assert_eq!(lazy.centers(), reference.centers());
@@ -302,7 +302,7 @@ macro_rules! backend_suite {
 
                 let lazy = LazyMatrix::new(
                     storage.view_mut(),
-                    Normalization::new(Centering::Mean, Scaling::L2),
+                    ColumnNormalization::new(Centering::Mean, Scaling::L2),
                 )
                 .unwrap();
                 assert_eq!(lazy.nrows(), 8);
@@ -438,7 +438,7 @@ macro_rules! backend_suite {
                     |v| Array1::from_vec(v.to_vec()),
                 );
                 let matrix = array![[1.0_f32, 3.0], [3.0, 3.0]];
-                let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Mean, Scaling::Sd { df: 0 })).unwrap();
+                let lazy = LazyMatrix::new(matrix, ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 })).unwrap();
                 assert_eq!(lazy.centers(), Some([2.0, 3.0].as_slice()));
                 assert_eq!(lazy.scales(), Some([1.0, 1.0].as_slice()));
                 assert_eq!(

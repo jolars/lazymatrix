@@ -3,7 +3,8 @@ use crate::common;
 use compat::zarrs;
 use compat::{float32, float64, store_chunk, store_subset};
 use lazymatrix::{
-    ColumnStats, LazyMatrix, MatVec, Normalization, QuantileRange, ZarrMatrix, ZarrMatrixError,
+    ColumnNormalization, ColumnStats, LazyMatrix, MatVec, QuantileRange, ZarrMatrix,
+    ZarrMatrixError,
 };
 use std::sync::Arc;
 use zarrs::array::{Array, ArrayBuilder};
@@ -163,7 +164,7 @@ fn missing_chunks_use_their_fill_value() {
     let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
     assert_eq!(matrix.col_means().unwrap(), [5.0, 5.0]);
     assert_eq!(matrix.matvec(&vec![2.0, 3.0]).unwrap(), [25.0; 3]);
-    let lazy = LazyMatrix::new(&matrix, Normalization::default()).unwrap();
+    let lazy = LazyMatrix::new(&matrix, ColumnNormalization::default()).unwrap();
     assert_eq!(lazy.matvec(&vec![2.0, 3.0]).unwrap(), [25.0; 3]);
     let mut forward = vec![3.0; 3];
     matrix
@@ -758,7 +759,8 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
                 Scaling::MaxAbs,
             ] {
                 store.reset();
-                let lazy = LazyMatrix::new(&matrix, Normalization::new(center, scale)).unwrap();
+                let lazy =
+                    LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap();
                 let scans = if center == Centering::None && scale == Scaling::None {
                     0
                 } else if matches!(scale, Scaling::Sd { .. })
@@ -785,7 +787,7 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
 fn quantile_fitting_shares_scans_and_propagates_later_failures() {
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);
-        let spec = Normalization::new(
+        let spec = ColumnNormalization::new(
             Centering::Median,
             Scaling::QuantileRange(QuantileRange::default()),
         );
@@ -836,7 +838,11 @@ fn quantile_scans_preserve_fill_values_and_ignore_padding() {
             .unwrap(),
         [3.5]
     );
-    let lazy = LazyMatrix::new(matrix, Normalization::new(Centering::Median, Scaling::L2)).unwrap();
+    let lazy = LazyMatrix::new(
+        matrix,
+        ColumnNormalization::new(Centering::Median, Scaling::L2),
+    )
+    .unwrap();
     approx::assert_abs_diff_eq!(lazy.scales().unwrap()[0], 29.0_f64.sqrt(), epsilon = 1e-12);
 }
 
@@ -871,7 +877,7 @@ fn read_errors_stop_the_scan_and_output_can_be_reused() {
         assert!(
             LazyMatrix::new(
                 &matrix,
-                Normalization::new(Centering::Mean, Scaling::Sd { df: 0 })
+                ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 })
             )
             .is_err()
         );
@@ -904,7 +910,7 @@ fn f32_normalization_and_products_match_known_values() {
     let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
     let lazy = LazyMatrix::new(
         matrix,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     assert_eq!(lazy.centers().unwrap(), [2.0, 4.0]);
@@ -1014,7 +1020,7 @@ macro_rules! ndarray_suite {
                         Scaling::L2,
                         Scaling::MaxAbs,
                     ] {
-                        let spec = Normalization::new(center, scale);
+                        let spec = ColumnNormalization::new(center, scale);
                         let chunked = LazyMatrix::new(&matrix, spec).unwrap();
                         let resident = LazyMatrix::new(&dense, spec).unwrap();
                         assert_eq!(chunked.centers().is_some(), resident.centers().is_some());
@@ -1128,7 +1134,7 @@ fn eager_conversion_reads_one_scan_and_retries_after_storage_failure() {
         let (matrix, store) = tracked(compressed);
         let lazy = LazyMatrix::new(
             &matrix,
-            Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+            ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
         )
         .unwrap();
         assert_scans(&store, &matrix, 2);

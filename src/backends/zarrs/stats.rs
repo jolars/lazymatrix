@@ -1,5 +1,5 @@
 use super::{ZarrArray, ZarrMatrix, ZarrMatrixError};
-use crate::{Centering, ColumnStats, MatrixShape, Normalization, Scalar, Scaling};
+use crate::{Centering, ColumnNormalization, ColumnStats, MatrixShape, Scalar, Scaling};
 
 #[derive(Clone, Copy)]
 struct Reduction<F> {
@@ -55,7 +55,7 @@ impl<A: ZarrArray<F>, F: Scalar> ZarrMatrix<A, F> {
     fn quantiles(
         &self,
         request: crate::quantiles::Request,
-    ) -> Result<crate::NormalizationStats<F>, ZarrMatrixError> {
+    ) -> Result<crate::ColumnNormalizationStats<F>, ZarrMatrixError> {
         crate::quantiles::stream(self.nrows(), self.ncols(), request, |visit| {
             self.for_each_value(|_, j, value| visit(j, value, 1))
         })
@@ -108,12 +108,12 @@ impl<A: ZarrArray<F>, F: Scalar> ZarrMatrix<A, F> {
 impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
     fn normalization_stats(
         &self,
-        spec: Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         if spec.center == Centering::Median || matches!(spec.scale, Scaling::QuantileRange(_)) {
             return crate::quantiles::fit(self, spec, |request| self.quantiles(request));
         }
-        if spec == Normalization::default() {
+        if spec == ColumnNormalization::default() {
             return Ok((None, None));
         }
         let mean = spec.center == Centering::Mean || matches!(spec.scale, Scaling::Sd { .. });

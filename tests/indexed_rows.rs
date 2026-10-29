@@ -211,8 +211,8 @@ fn sprs_indexed_rows() {
 #[test]
 fn dependency_light_sources_share_scans_and_forward_errors() {
     use lazymatrix::{
-        ColumnStats, IndexedRowSource, IndexedRows, LazyMatrix, MatVecInto, MatrixErrorType,
-        MatrixShape, Normalization,
+        ColumnNormalization, ColumnStats, IndexedRowSource, IndexedRows, LazyMatrix, MatVecInto,
+        MatrixErrorType, MatrixShape,
     };
     use std::cell::Cell;
     struct Source {
@@ -252,23 +252,23 @@ fn dependency_light_sources_share_scans_and_forward_errors() {
     };
     let selected = IndexedRows::new(&source, &[0, 2]);
     let (centers, scales) = selected
-        .normalization_stats(Normalization::standardize())
+        .normalization_stats(ColumnNormalization::standardize())
         .unwrap();
     assert_eq!(source.scans.get(), 2);
     assert_eq!(centers, Some(vec![2.0]));
     assert_eq!(scales, Some(vec![1.0]));
     let borrowed = &selected;
     borrowed
-        .normalization_stats(Normalization::standardize())
+        .normalization_stats(ColumnNormalization::standardize())
         .unwrap();
     assert_eq!(source.scans.get(), 4);
     selected
-        .normalization_stats(Normalization::default())
+        .normalization_stats(ColumnNormalization::default())
         .unwrap();
     assert_eq!(source.scans.get(), 4);
     let before = source.scans.get();
     selected
-        .normalization_stats(Normalization::robust())
+        .normalization_stats(ColumnNormalization::robust())
         .unwrap();
     let combined = source.scans.get() - before;
     let before = source.scans.get();
@@ -283,17 +283,19 @@ fn dependency_light_sources_share_scans_and_forward_errors() {
     assert!(selected.col_medians().is_err());
     assert!(
         selected
-            .normalization_stats(Normalization::robust())
+            .normalization_stats(ColumnNormalization::robust())
             .is_err()
     );
-    assert!(LazyMatrix::new(&selected, Normalization::standardize()).is_err());
+    assert!(LazyMatrix::new(&selected, ColumnNormalization::standardize()).is_err());
     let lazy = LazyMatrix::with_centers(&selected, vec![10.0]);
     let mut out = vec![99.0; 2];
     assert!(lazy.matvec_into(&vec![1.0], &mut out).is_err());
     assert_eq!(out[0], 1.0);
     let before = source.scans.get();
     let empty = IndexedRows::new(&source, &[]);
-    empty.normalization_stats(Normalization::robust()).unwrap();
+    empty
+        .normalization_stats(ColumnNormalization::robust())
+        .unwrap();
     empty
         .matvec_into(&vec![1.0], &mut Vec::<f64>::new())
         .unwrap();

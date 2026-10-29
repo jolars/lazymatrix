@@ -9,10 +9,10 @@ pub mod batched;
 
 use lazymatrix::VectorView;
 use lazymatrix::{
-    Centering, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm, LazyMatrix,
-    LazySparseColumn, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixShape,
-    Normalization, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
-    Scaling, SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
+    Centering, ColumnNormalization, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm,
+    LazyMatrix, LazySparseColumn, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto,
+    MatrixShape, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice, Scaling,
+    SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -142,7 +142,8 @@ where
                 Scaling::Range,
                 Scaling::QuantileRange(QuantileRange::default()),
             ] {
-                let lazy = LazyMatrix::new(&matrix, Normalization::new(center, scale)).unwrap();
+                let lazy =
+                    LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap();
                 lazy.weighted_gram_into(&weights, &mut out).unwrap();
                 assert_gram(
                     &out,
@@ -1556,7 +1557,7 @@ where
     let matrix = build(&tm);
     let borrowed = LazyMatrix::new(
         &matrix,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     assert_eq!(borrowed.nrows(), tm.nrows);
@@ -2102,7 +2103,7 @@ where
 
     let lazy = LazyMatrix::new(
         matrix,
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     let (data, centers, scales) = lazy.into_parts();
@@ -2204,7 +2205,7 @@ where
                 Centering::Min,
                 Centering::Median,
             ] {
-                let spec = Normalization::new(center, Scaling::Sd { df });
+                let spec = ColumnNormalization::new(center, Scaling::Sd { df });
                 let (_, raw_scales) = matrix.normalization_stats(spec).unwrap();
                 check(raw_scales.as_deref().unwrap(), &expected);
                 let lazy = LazyMatrix::new(&matrix, spec).unwrap();
@@ -2457,7 +2458,7 @@ fn new_matches_oracle<M, V>(
     ];
     for center in centerings {
         for scale in scalings {
-            let spec = Normalization::new(center, scale);
+            let spec = ColumnNormalization::new(center, scale);
             let lazy = LazyMatrix::new(build(&tm), spec).unwrap();
             let xtilde = materialize(&tm.dense, lazy.centers(), lazy.scales());
 
@@ -2552,7 +2553,7 @@ where
             assert_quantile_values(&matrix.col_quantile_ranges(range).unwrap(), &ranges, EPS);
             let normalized = LazyMatrix::new(
                 &matrix,
-                Normalization::new(Centering::Median, Scaling::QuantileRange(range)),
+                ColumnNormalization::new(Centering::Median, Scaling::QuantileRange(range)),
             )
             .unwrap();
             assert_quantile_values(normalized.centers().unwrap(), &medians, EPS);
@@ -2570,7 +2571,7 @@ where
         vec![4.0, 1.0, -2.0],
     ]);
     let matrix = build(&tm);
-    let normalized = LazyMatrix::new(&matrix, Normalization::robust()).unwrap();
+    let normalized = LazyMatrix::new(&matrix, ColumnNormalization::robust()).unwrap();
     assert_close(normalized.centers().unwrap(), &[1.0, 1.0, 2.0], EPS);
     assert_close(normalized.scales().unwrap(), &[3.0, 1.5, 2.5], EPS);
     let dense = materialize(&tm.dense, normalized.centers(), normalized.scales());
@@ -2673,7 +2674,7 @@ where
             Scaling::QuantileRange(QuantileRange::default()),
             Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
         ] {
-            let spec = Normalization::new(center, scale);
+            let spec = ColumnNormalization::new(center, scale);
             let (centers, scales) = matrix.normalization_stats(spec).unwrap();
             let (expected_centers, expected_scales) = dense.normalization_stats(spec).unwrap();
             for (actual, expected) in [(centers, expected_centers), (scales, expected_scales)] {
@@ -2691,7 +2692,7 @@ pub fn check_column_stats_f32<M: ColumnStats<f32>>(matrix: &M) {
         approx::assert_abs_diff_eq!(matrix.col_sds(df).unwrap()[0], expected, epsilon = 1e-6);
         for center in [Centering::None, Centering::Mean, Centering::Median] {
             let (_, scales) = matrix
-                .normalization_stats(Normalization::new(center, Scaling::Sd { df }))
+                .normalization_stats(ColumnNormalization::new(center, Scaling::Sd { df }))
                 .unwrap();
             approx::assert_abs_diff_eq!(scales.unwrap()[0], expected, epsilon = 1e-6);
         }
@@ -2713,7 +2714,7 @@ pub fn check_column_stats_f32<M: ColumnStats<f32>>(matrix: &M) {
         [2.0]
     );
     let stats = matrix
-        .normalization_stats(Normalization::new(
+        .normalization_stats(ColumnNormalization::new(
             Centering::Median,
             Scaling::QuantileRange(QuantileRange::default()),
         ))
@@ -2842,24 +2843,30 @@ where
         ],
     };
 
-    let raw_l1 =
-        LazyMatrix::new(build(&tm), Normalization::new(Centering::None, Scaling::L1)).unwrap();
+    let raw_l1 = LazyMatrix::new(
+        build(&tm),
+        ColumnNormalization::new(Centering::None, Scaling::L1),
+    )
+    .unwrap();
     assert_close(raw_l1.scales().unwrap(), &[4.0, 1.0, 15.0], EPS);
 
-    let centered_l1 =
-        LazyMatrix::new(build(&tm), Normalization::new(Centering::Mean, Scaling::L1)).unwrap();
+    let centered_l1 = LazyMatrix::new(
+        build(&tm),
+        ColumnNormalization::new(Centering::Mean, Scaling::L1),
+    )
+    .unwrap();
     assert_close(centered_l1.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
     assert_close(centered_l1.scales().unwrap(), &[10.0 / 3.0, 1.0, 1.0], EPS);
 
     let median_l1 = LazyMatrix::new(
         build(&tm),
-        Normalization::new(Centering::Median, Scaling::L1),
+        ColumnNormalization::new(Centering::Median, Scaling::L1),
     )
     .unwrap();
     assert_close(median_l1.centers().unwrap(), &[1.0, 0.0, 5.0], EPS);
     assert_close(median_l1.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
 
-    let standardized = LazyMatrix::new(build(&tm), Normalization::standardize()).unwrap();
+    let standardized = LazyMatrix::new(build(&tm), ColumnNormalization::standardize()).unwrap();
     assert_close(standardized.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
     assert_close(
         standardized.scales().unwrap(),
@@ -2867,7 +2874,7 @@ where
         EPS,
     );
 
-    let min_range = LazyMatrix::new(build(&tm), Normalization::min_max()).unwrap();
+    let min_range = LazyMatrix::new(build(&tm), ColumnNormalization::min_max()).unwrap();
     assert_close(min_range.centers().unwrap(), &[0.0, 0.0, 5.0], EPS);
     assert_close(min_range.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
 }
@@ -2905,10 +2912,10 @@ fn zero_scale_guard<M, V>(
         ],
     };
     for spec in [
-        Normalization::standardize(),
-        Normalization::new(Centering::Mean, Scaling::L1),
-        Normalization::min_max(),
-        Normalization::robust(),
+        ColumnNormalization::standardize(),
+        ColumnNormalization::new(Centering::Mean, Scaling::L1),
+        ColumnNormalization::min_max(),
+        ColumnNormalization::robust(),
     ] {
         let lazy = LazyMatrix::new(build(&tm), spec).unwrap();
         let scales = lazy.scales().unwrap();
@@ -2967,7 +2974,7 @@ fn intercept_products<M, V>(
                 let lazy = if n == 0 {
                     LazyMatrix::from_parts(&matrix, Some(vec![1.0; p]), Some(vec![-2.0; p]))
                 } else {
-                    LazyMatrix::new(&matrix, Normalization::new(center, scale)).unwrap()
+                    LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap()
                 };
                 let dense = with_intercept(&materialize(&tm.dense, lazy.centers(), lazy.scales()));
                 let augmented = WithIntercept::new(&lazy);
@@ -3044,7 +3051,8 @@ where
                 Scaling::Range,
                 Scaling::MaxAbs,
             ] {
-                let lazy = LazyMatrix::new(&matrix, Normalization::new(center, scale)).unwrap();
+                let lazy =
+                    LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap();
                 WithIntercept::new(&lazy)
                     .weighted_gram_into(&weights, &mut out)
                     .unwrap();
@@ -3190,7 +3198,8 @@ where
                 Scaling::MaxAbs,
                 Scaling::QuantileRange(QuantileRange::default()),
             ] {
-                let lazy = LazyMatrix::new(&source, Normalization::new(center, scale)).unwrap();
+                let lazy =
+                    LazyMatrix::new(&source, ColumnNormalization::new(center, scale)).unwrap();
                 let expected: Vec<_> = materialize(&tm.dense, lazy.centers(), lazy.scales())
                     .into_iter()
                     .flatten()
@@ -3293,7 +3302,7 @@ pub fn run_eager_product_suite<M, D, V>(
     let tm = random_matrix(125, 7, 4, 0.5);
     let lazy = LazyMatrix::new(
         build(&tm),
-        Normalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
     let eager = lazy.to_eager::<D>().unwrap();
@@ -3425,7 +3434,7 @@ where
                 Scaling::Range,
             ] {
                 let lazy =
-                    LazyMatrix::new(&matrix, Normalization::new(centering, scaling)).unwrap();
+                    LazyMatrix::new(&matrix, ColumnNormalization::new(centering, scaling)).unwrap();
                 let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
                 for (rows, cols) in [
                     (0..n, 0..p),
@@ -3905,7 +3914,7 @@ where
                     Scaling::Range,
                     Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
                 ] {
-                    let spec = Normalization::new(center, scale);
+                    let spec = ColumnNormalization::new(center, scale);
                     let fitted = LazyMatrix::new(&selected, spec).unwrap();
                     let expected = LazyMatrix::new(&reference, spec).unwrap();
                     for (a, b) in [

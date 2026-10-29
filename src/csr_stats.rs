@@ -69,7 +69,7 @@ pub(crate) fn means<F: Scalar, M: SparseRows<F> + ?Sized>(matrix: &M) -> Vec<F> 
 pub(crate) fn quantiles<F: Scalar, M: SparseRows<F> + ?Sized>(
     matrix: &M,
     request: crate::quantiles::Request,
-) -> crate::NormalizationStats<F> {
+) -> crate::ColumnNormalizationStats<F> {
     crate::quantiles::sparse_rows(matrix.nrows(), matrix.ncols(), request, |i, visit| {
         let (columns, values) = matrix.sparse_row(i);
         for (&j, &value) in columns.iter().zip(values) {
@@ -195,8 +195,8 @@ macro_rules! impl_column_stats {
         impl<F: crate::Scalar> crate::ColumnStats<F> for $matrix {
             fn normalization_stats(
                 &self,
-                spec: crate::Normalization,
-            ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+                spec: crate::ColumnNormalization,
+            ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
                 crate::quantiles::fit(self, spec, |request| {
                     Ok(crate::csr_stats::quantiles(self, request))
                 })

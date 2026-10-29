@@ -1,5 +1,5 @@
 use crate::traits::*;
-use crate::{LazyColumn, NormalizationParams};
+use crate::{ColumnNormalizationParams, LazyColumn};
 
 /// An eagerly normalized dense matrix with its original fitted parameters.
 ///
@@ -12,11 +12,11 @@ use crate::{LazyColumn, NormalizationParams};
 #[derive(Clone, Debug)]
 pub struct EagerMatrix<M, F = f64> {
     data: M,
-    normalization: NormalizationParams<F>,
+    normalization: ColumnNormalizationParams<F>,
 }
 
 impl<M: MatrixShape, F: Scalar> EagerMatrix<M, F> {
-    pub(crate) fn from_normalized(data: M, normalization: NormalizationParams<F>) -> Self {
+    pub(crate) fn from_normalized(data: M, normalization: ColumnNormalizationParams<F>) -> Self {
         Self {
             data,
             normalization,
@@ -36,7 +36,7 @@ impl<M: MatrixShape, F: Scalar> EagerMatrix<M, F> {
         &self.data
     }
     /// Borrow the original fitted normalization, for example for prediction.
-    pub fn normalization(&self) -> &NormalizationParams<F> {
+    pub fn normalization(&self) -> &ColumnNormalizationParams<F> {
         &self.normalization
     }
     /// Original fitted centers, already applied to the data.
@@ -297,8 +297,8 @@ where
     }
     fn normalization_stats(
         &self,
-        spec: Normalization,
-    ) -> Result<crate::NormalizationStats<F>, Self::Error> {
+        spec: ColumnNormalization,
+    ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
         self.data.normalization_stats(spec)
     }
 
