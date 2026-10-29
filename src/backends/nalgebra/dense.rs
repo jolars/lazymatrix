@@ -629,3 +629,21 @@ impl<F: Scalar + nalgebra::Scalar, R: Dim, C: Dim, S: RawStorage<F, R, C>> crate
         Ok(())
     }
 }
+
+impl<F: Scalar + nalgebra::Scalar, R: Dim, C: Dim, S: RawStorage<F, R, C>>
+    crate::IndexedRowSource<F> for Matrix<F, R, C, S>
+{
+    const IS_DENSE: bool = true;
+    fn for_each_indexed_entry(
+        &self,
+        rows: &[usize],
+        mut visit: impl FnMut(usize, usize, F),
+    ) -> Result<(), Self::Error> {
+        for j in 0..self.ncols() {
+            for (i, &row) in rows.iter().enumerate() {
+                visit(i, j, self[(row, j)]);
+            }
+        }
+        Ok(())
+    }
+}

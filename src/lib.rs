@@ -62,6 +62,27 @@
 //! Construction allocates nothing; sparse products use working vectors and
 //! never materialize the selected design matrix.
 //!
+//! # Fit normalization on selected raw rows
+//!
+//! [`IndexedRows::new`] selects strictly increasing, unique raw row indices.
+//! Pass a borrowed matrix or backend view to avoid copying a training design.
+//! [`LazyMatrix::new`] then fits only those rows, excluding unselected outliers.
+//! Use [`LazyMatrix::from_normalization`] to apply the fitted parameters to a
+//! second selection without refitting. Products use local row coordinates.
+//! Dense, CSC, and CSR sources from every supported in-memory backend release
+//! implement [`IndexedRowSource`]. See [`IndexedRows`] for allocation and scan costs.
+//!
+//! ```
+//! use lazymatrix::{IndexedRows, IndexedRowSource, LazyMatrix, Normalization};
+//!
+//! fn fit_selected<'a, M: IndexedRowSource<f64>>(
+//!     raw: &'a M,
+//!     rows: &'a [usize],
+//! ) -> Result<LazyMatrix<IndexedRows<'a, &'a M>>, M::Error> {
+//!     LazyMatrix::new(IndexedRows::new(raw, rows), Normalization::standardize())
+//! }
+//! ```
+//!
 //! # Eager normalization
 //!
 //! [`LazyMatrix::to_eager`] explicitly materializes normalized dense data from
@@ -174,7 +195,8 @@
 //! Sparse duplicates are combined, and implicit zeros contribute to their ranks.
 //! Dense and CSC fitting sort one working column at a time. CSR and Zarr fitting
 //! use O(ncols) selection state and a data-dependent number of scans. These
-//! fitting operations remain serial when `parallel` is enabled. Custom
+//! streaming costs also apply to [`IndexedRows`] for every storage orientation.
+//! Quantile fitting remains serial when `parallel` is enabled. Custom
 //! [`ColumnStats`] implementations must provide [`ColumnStats::col_medians`]
 //! and [`ColumnStats::col_quantile_ranges`] alongside the existing reductions.
 //!
@@ -464,18 +486,19 @@ mod csr_stats;
 mod dense_products;
 mod eager;
 mod gram;
+mod indexed_rows;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "ndarray_all",
+    feature = "sprs_all"
+))]
+mod indexed_rows_kernels;
 mod intercept;
 mod materialize;
 mod matmat;
 mod matrix;
 mod normalization;
-#[cfg(any(
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "ndarray_all",
-    feature = "sprs_all",
-    feature = "zarrs_all"
-))]
 mod quantiles;
 mod row;
 mod submatrix;
@@ -497,6 +520,7 @@ pub use backends::sprs::{SprsCsc, SprsCsr};
 pub use backends::zarrs::{ZarrArray, ZarrMatrix, ZarrMatrixError};
 pub use column::{LazyColumn, LazySparseColumn, SparseColumnRef};
 pub use eager::EagerMatrix;
+pub use indexed_rows::{IndexedRawColumn, IndexedRows};
 pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
@@ -505,13 +529,13 @@ pub use normalization::{
 pub use row::LazyRow;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};
 pub use traits::{
-    ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign, L2Norm,
-    LogicalColumn, MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatTransposeVec,
-    MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
-    MaterializeDense, MatrixErrorType, MatrixOwned, MatrixRead, MatrixShape, MatrixWrite,
-    RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
-    SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel, SumEntries, VectorOwned,
-    VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto,
-    WeightedGramKernel,
+    ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign,
+    IndexedRowSource, L2Norm, LogicalColumn, MatMat, MatMatInto, MatTransposeMat,
+    MatTransposeMatInto, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
+    MatVecInto, MatVecScaledInto, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixRead,
+    MatrixShape, MatrixWrite, RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign,
+    ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel,
+    SumEntries, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
+    WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
 };
 pub use transpose::Transpose;

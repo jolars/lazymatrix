@@ -1,0 +1,13 @@
+backend,operation,representation,peak_live_bytes
+dense,fit_standardize,borrowed,7168
+dense,fit_standardize,copied,1808352
+csc,fit_standardize,borrowed,38700
+csc,fit_standardize,copied,264704
+dense,fit_robust,borrowed,34936
+dense,fit_robust,copied,1808352
+csc,fit_robust,borrowed,66452
+csc,fit_robust,copied,266360
+dense,matvec,borrowed,0
+dense,matvec,copied,0
+csc,matvec,borrowed,32044
+csc,matvec,copied,512

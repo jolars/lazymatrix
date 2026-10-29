@@ -41,7 +41,8 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
     ///
     /// Dense and CSC backends sort one working column at a time. CSR and Zarr
     /// backends use exact repeated scans with O(ncols) state; their scan counts
-    /// depend on the values. Sparse duplicates are summed before selection, and
+    /// depend on the values. [`crate::IndexedRows`] uses repeated scans for all
+    /// storage orientations. Sparse duplicates are summed before selection, and
     /// implicit zeros contribute to the ranks without being materialized.
     fn col_medians(&self) -> Result<Vec<F>, Self::Error>;
 

@@ -590,3 +590,17 @@ impl<F: Scalar> crate::SubmatrixKernel<F> for SparseRowMatMut<'_, usize, F> {
         Ok(())
     }
 }
+
+crate::indexed_rows_kernels::sparse_source!(SparseRowMat<usize, F>, false, crate::SparseRows::sparse_row);
+
+crate::indexed_rows_kernels::sparse_source!(
+    SparseRowMatRef<'_, usize, F>,
+    false,
+    crate::SparseRows::sparse_row
+);
+
+crate::indexed_rows_kernels::sparse_source!(
+    SparseRowMatMut<'_, usize, F>,
+    false,
+    crate::SparseRows::sparse_row
+);

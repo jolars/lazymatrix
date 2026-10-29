@@ -543,3 +543,19 @@ impl<F: Scalar + 'static, S: Data<Elem = F>> crate::SubmatrixKernel<F> for Array
         Ok(())
     }
 }
+
+impl<F: Scalar + 'static, S: Data<Elem = F>> crate::IndexedRowSource<F> for ArrayBase<S, Ix2> {
+    const IS_DENSE: bool = true;
+    fn for_each_indexed_entry(
+        &self,
+        rows: &[usize],
+        mut visit: impl FnMut(usize, usize, F),
+    ) -> Result<(), Self::Error> {
+        for j in 0..self.ncols() {
+            for (i, &row) in rows.iter().enumerate() {
+                visit(i, j, self[(row, j)]);
+            }
+        }
+        Ok(())
+    }
+}

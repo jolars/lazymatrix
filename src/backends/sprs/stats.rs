@@ -119,8 +119,12 @@ where
                 sum + delta * delta
             },
             |j, sum, missing| {
-                let missing = F::from_usize(missing).unwrap();
-                ((sum + missing * means[j] * means[j]) / n).sqrt()
+                let implicit = if missing == 0 {
+                    F::zero()
+                } else {
+                    F::from_usize(missing).unwrap() * means[j] * means[j]
+                };
+                ((sum + implicit) / n).sqrt()
             },
         ))
     }
@@ -201,7 +205,13 @@ where
             self.view(),
             |_| F::zero(),
             |j, sum, v| sum + (v - centers[j]).abs(),
-            |j, sum, missing| sum + F::from_usize(missing).unwrap() * centers[j].abs(),
+            |j, sum, missing| {
+                if missing == 0 {
+                    sum
+                } else {
+                    sum + F::from_usize(missing).unwrap() * centers[j].abs()
+                }
+            },
         ))
     }
 
@@ -219,7 +229,12 @@ where
                 sum + delta * delta
             },
             |j, sum, missing| {
-                (sum + F::from_usize(missing).unwrap() * centers[j] * centers[j]).sqrt()
+                let implicit = if missing == 0 {
+                    F::zero()
+                } else {
+                    F::from_usize(missing).unwrap() * centers[j] * centers[j]
+                };
+                (sum + implicit).sqrt()
             },
         ))
     }

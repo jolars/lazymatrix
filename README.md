@@ -57,14 +57,39 @@ scaling. `Normalization::new(center, scale)` accepts custom combinations, with
 centering and scaling independently optional. Reuse fitted parameters on new
 observations with `LazyMatrix::from_normalization`.
 
+Fit on selected raw rows without copying the training matrix:
+
+```rust
+use lazymatrix::IndexedRows;
+
+let training_rows = [0, 2];
+let held_out_rows = [1];
+let training = LazyMatrix::new(
+    IndexedRows::new(x.view(), &training_rows),
+    Normalization::standardize(),
+)?;
+let validation = LazyMatrix::from_normalization(
+    IndexedRows::new(x.view(), &held_out_rows),
+    training.normalization().clone(),
+);
+```
+
+`IndexedRows` borrows strictly increasing, unique indices and accepts borrowed
+or owned source storage. Empty selections are valid; invalid indices panic.
+Products and statistics use local row indices and native dense, CSC, or CSR
+traversal without copying the selected design. Sparse duplicates and implicit
+zeros retain their logical values. In contrast, `LazyMatrix::submatrix`
+restricts an already fitted operator without recomputing normalization. See the
+[indexed-row measurements](benches/indexed_rows/README.md) for workspace and
+scan costs.
+
 Centered dense products normalize entries before accumulation to preserve small
 variations around large column offsets. They use the same numerical policy for
 allocating and reusable products without creating a normalized design copy.
 
 The [examples](examples/) cover gradient descent, stochastic gradient descent,
 coordinate descent, ridge regression through primal or dual systems, weighted
-Gram matrices, and file-backed input. Run one from
-a checkout with:
+Gram matrices, and file-backed input. Run one from a checkout with:
 
 ```sh
 cargo run --locked --example coordinate_descent --features faer

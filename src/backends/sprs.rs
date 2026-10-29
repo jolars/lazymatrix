@@ -443,3 +443,48 @@ where
         Ok(())
     }
 }
+
+impl<F, I, IP, IS, DS, Iptr> crate::IndexedRowSource<F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+{
+    fn for_each_indexed_entry(
+        &self,
+        rows: &[usize],
+        visit: impl FnMut(usize, usize, F),
+    ) -> Result<(), Self::Error> {
+        crate::indexed_rows_kernels::sparse(
+            rows,
+            self.cols(),
+            self.is_csc(),
+            |outer, f| {
+                for (i, &value) in self.outer_view(outer).unwrap().iter() {
+                    f(i, value);
+                }
+            },
+            visit,
+        );
+        Ok(())
+    }
+}
+
+macro_rules! indexed_source {
+    ($wrapper:ident) => {
+        impl<M: crate::IndexedRowSource<F>, F: Scalar> crate::IndexedRowSource<F> for $wrapper<M> {
+            fn for_each_indexed_entry(
+                &self,
+                rows: &[usize],
+                visit: impl FnMut(usize, usize, F),
+            ) -> Result<(), Self::Error> {
+                self.as_inner().for_each_indexed_entry(rows, visit)
+            }
+        }
+    };
+}
+indexed_source!(SprsCsc);
+indexed_source!(SprsCsr);

@@ -3797,3 +3797,206 @@ fn submatrix_sparse_rows_match_storage<M: SparseRows<f64>>(matrix: &M) {
         }
     }
 }
+
+/// Compare raw indexed rows with explicit subsets, including fitted prediction data.
+pub fn run_indexed_rows_suite<M, V>(build: impl Fn(&TestMatrix) -> M, to_v: impl Fn(&[f64]) -> V)
+where
+    M: ColumnStats<f64> + lazymatrix::IndexedRowSource<f64> + MatVec<V> + MatTransposeVec<V>,
+    V: Clone
+        + lazymatrix::VectorOwned<f64, Owned = V>
+        + lazymatrix::VectorViewMut<f64>
+        + VectorView<f64>
+        + ElemDivAssign<f64>
+        + DotSlice<f64>
+        + SubScalarAssign<f64>
+        + SumEntries<f64>
+        + ScaledSubSlice<f64>,
+{
+    use lazymatrix::{IndexedRows, MatTransposeVecScaledInto, MatVecScaledInto};
+    let read = |v: V| (0..v.len()).map(|i| v.get(i)).collect::<Vec<_>>();
+    for (n, p, density) in [(7, 4, 0.3), (7, 4, 1.0), (0, 4, 0.0), (7, 0, 0.0)] {
+        let tm = random_matrix(417, n, p, density);
+        let matrix = build(&tm);
+        for rows in [
+            Vec::new(),
+            (0..n).collect(),
+            (1..n).step_by(2).collect(),
+            (0..n.min(1)).collect(),
+        ] {
+            let selected = IndexedRows::new(&matrix, &rows);
+            assert_eq!(selected.row_indices(), rows);
+            assert!(std::ptr::eq(*selected.source(), &matrix));
+            let mut explicit =
+                matrix_from_dense(rows.iter().map(|&i| tm.dense[i].clone()).collect());
+            explicit.ncols = p;
+            let reference = build(&explicit);
+            check_column_stats_against(&selected, &reference);
+            let x: Vec<_> = (0..p).map(|j| j as f64 - 0.75).collect();
+            let u: Vec<_> = (0..rows.len()).map(|i| i as f64 + 0.5).collect();
+            let want = dense_matvec(&explicit.dense, &x);
+            let want_t: Vec<f64> = (0..p)
+                .map(|j| (0..rows.len()).map(|i| explicit.dense[i][j] * u[i]).sum())
+                .collect();
+            assert_close(&selected.matvec(&x).unwrap(), &want, EPS);
+            assert_close(&read(selected.matvec(&to_v(&x)).unwrap()), &want, EPS);
+            assert_close(
+                &read(selected.mat_transpose_vec(&to_v(&u)).unwrap()),
+                &want_t,
+                EPS,
+            );
+            assert_close(&selected.mat_transpose_vec(&u).unwrap(), &want_t, EPS);
+            let nested_indices: Vec<_> = (0..rows.len()).step_by(2).collect();
+            let nested = IndexedRows::new(&selected, &nested_indices);
+            assert_close(
+                &nested.matvec(&x).unwrap(),
+                &nested_indices.iter().map(|&i| want[i]).collect::<Vec<_>>(),
+                EPS,
+            );
+            for (alpha, beta) in [(1.0, 0.0), (0.0, 0.0), (-0.5, 0.25)] {
+                let initial = if beta == 0.0 { f64::NAN } else { 2.0 };
+                let mut out = vec![initial; rows.len()];
+                selected
+                    .matvec_scaled_into(alpha, &x, beta, &mut out)
+                    .unwrap();
+                assert_close(
+                    &out,
+                    &want
+                        .iter()
+                        .map(|v| alpha * v + if beta == 0.0 { 0.0 } else { 2.0 * beta })
+                        .collect::<Vec<_>>(),
+                    EPS,
+                );
+                let mut out = vec![initial; p];
+                selected
+                    .mat_transpose_vec_scaled_into(alpha, &u, beta, &mut out)
+                    .unwrap();
+                assert_close(
+                    &out,
+                    &want_t
+                        .iter()
+                        .map(|v| alpha * v + if beta == 0.0 { 0.0 } else { 2.0 * beta })
+                        .collect::<Vec<_>>(),
+                    EPS,
+                );
+            }
+            // Basis products reconstruct the raw subset using local output indices.
+            for j in 0..p {
+                let mut basis = vec![0.0; p];
+                basis[j] = 1.0;
+                assert_close(
+                    &selected.matvec(&basis).unwrap(),
+                    &explicit.dense.iter().map(|r| r[j]).collect::<Vec<_>>(),
+                    EPS,
+                );
+            }
+            for center in [
+                Centering::None,
+                Centering::Mean,
+                Centering::Min,
+                Centering::Median,
+            ] {
+                for scale in [
+                    Scaling::None,
+                    Scaling::Sd { df: 0 },
+                    Scaling::Sd { df: 1 },
+                    Scaling::L1,
+                    Scaling::L2,
+                    Scaling::MaxAbs,
+                    Scaling::Range,
+                    Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+                ] {
+                    let spec = Normalization::new(center, scale);
+                    let fitted = LazyMatrix::new(&selected, spec).unwrap();
+                    let expected = LazyMatrix::new(&reference, spec).unwrap();
+                    for (a, b) in [
+                        (fitted.centers(), expected.centers()),
+                        (fitted.scales(), expected.scales()),
+                    ] {
+                        if let (Some(a), Some(b)) = (a, b) {
+                            assert_quantile_values(a, b, EPS);
+                        } else {
+                            assert_eq!(a.is_some(), b.is_some());
+                        }
+                    }
+                    let want = read(expected.matvec(&to_v(&x)).unwrap());
+                    let want_t = read(expected.mat_transpose_vec(&to_v(&u)).unwrap());
+                    assert_quantile_values(&fitted.matvec(&x).unwrap(), &want, EPS);
+                    assert_quantile_values(&fitted.mat_transpose_vec(&u).unwrap(), &want_t, EPS);
+                    let mut out = vec![f64::NAN; rows.len()];
+                    let mut out_t = vec![f64::NAN; p];
+                    fitted.matvec_into(&x, &mut out).unwrap();
+                    fitted.mat_transpose_vec_into(&u, &mut out_t).unwrap();
+                    assert_quantile_values(&out, &want, EPS);
+                    assert_quantile_values(&out_t, &want_t, EPS);
+                    if want.iter().chain(&want_t).all(|v| v.is_finite()) {
+                        approx::assert_abs_diff_eq!(
+                            dot(&want, &u),
+                            dot(&x, &want_t),
+                            epsilon = 1e-9
+                        );
+                        fitted.matvec_scaled_into(-0.5, &x, 0.0, &mut out).unwrap();
+                        assert_close(
+                            &out,
+                            &want.iter().map(|v| -0.5 * v).collect::<Vec<_>>(),
+                            EPS,
+                        );
+                    }
+                    let held_rows: Vec<_> = (0..n).filter(|i| !rows.contains(i)).collect();
+                    let held = IndexedRows::new(&matrix, &held_rows);
+                    let prediction =
+                        LazyMatrix::from_normalization(held, fitted.normalization().clone());
+                    let mut held_tm =
+                        matrix_from_dense(held_rows.iter().map(|&i| tm.dense[i].clone()).collect());
+                    held_tm.ncols = p;
+                    let held_copy = LazyMatrix::from_normalization(
+                        build(&held_tm),
+                        expected.normalization().clone(),
+                    );
+                    assert_quantile_values(
+                        &prediction.matvec(&x).unwrap(),
+                        &read(held_copy.matvec(&to_v(&x)).unwrap()),
+                        EPS,
+                    );
+                }
+            }
+        }
+    }
+    // Unselected infinities, NaNs, and large offsets must not enter fitted statistics.
+    let tm = matrix_from_dense(vec![
+        vec![f64::NAN, f64::INFINITY],
+        vec![1.0, 0.0],
+        vec![1e200, -1e200],
+        vec![3.0, 4.0],
+        vec![f64::NEG_INFINITY, f64::NAN],
+    ]);
+    let matrix = build(&tm);
+    let selected = IndexedRows::new(&matrix, &[1, 3]);
+    let expected = build(&matrix_from_dense(vec![
+        tm.dense[1].clone(),
+        tm.dense[3].clone(),
+    ]));
+    check_column_stats_against(&selected, &expected);
+    for bad in [vec![1, 1], vec![2, 0], vec![tm.nrows], vec![usize::MAX]] {
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| IndexedRows::<_, f64>::new(
+                &matrix, &bad
+            )))
+            .is_err()
+        );
+    }
+    let mut wrong = vec![42.0; 3];
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || selected.matvec_into(&vec![1.0; 2], &mut wrong)
+        ))
+        .is_err()
+    );
+    assert_eq!(wrong, vec![42.0; 3]);
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || selected.mat_transpose_vec_into(&vec![1.0; 3], &mut wrong)
+        ))
+        .is_err()
+    );
+    assert_eq!(wrong, vec![42.0; 3]);
+}

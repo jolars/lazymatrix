@@ -503,3 +503,17 @@ macro_rules! impl_csc {
 impl_csc!(SparseColMat<usize, F>);
 impl_csc!(SparseColMatRef<'_, usize, F>);
 impl_csc!(SparseColMatMut<'_, usize, F>);
+
+crate::indexed_rows_kernels::sparse_source!(SparseColMat<usize, F>, true, crate::SparseColumns::sparse_column);
+
+crate::indexed_rows_kernels::sparse_source!(
+    SparseColMatRef<'_, usize, F>,
+    true,
+    crate::SparseColumns::sparse_column
+);
+
+crate::indexed_rows_kernels::sparse_source!(
+    SparseColMatMut<'_, usize, F>,
+    true,
+    crate::SparseColumns::sparse_column
+);

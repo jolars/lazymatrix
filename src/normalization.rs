@@ -149,13 +149,6 @@ impl Normalization {
     }
 }
 
-#[cfg(any(
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "ndarray_all",
-    feature = "sprs_all",
-    feature = "zarrs_all"
-))]
 pub(crate) fn sd_divisor<F: crate::Scalar>(nrows: usize, df: usize) -> F {
     if nrows > df {
         F::from_usize(nrows - df).unwrap()

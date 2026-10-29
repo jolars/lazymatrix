@@ -30,6 +30,8 @@
 //!   exactly the shape the centering/scaling math needs.
 //! * [`ColumnStats`] — column statistics computed directly over a (possibly
 //!   sparse) backend matrix, used by [`LazyMatrix::new`](crate::LazyMatrix::new).
+//! * [`IndexedRowSource`] — native raw traversal for [`crate::IndexedRows`],
+//!   which fits normalization on selected rows without copying the design.
 //! * [`VectorView`] / [`VectorViewMut`] — storage-independent borrowed vector
 //!   access, including strided backend views.
 //! * [`RawColumn`] / [`RawColumns`] and [`LogicalColumn`] / [`Columns`] — the
@@ -58,6 +60,7 @@ pub trait Scalar:
 mod blocks;
 mod columns;
 mod gram;
+mod indexed_rows;
 mod materialize;
 mod matmat;
 mod operator;
@@ -70,11 +73,6 @@ mod weighted_sums;
 #[cfg(feature = "zarrs_all")]
 pub(crate) use blocks::validate_rectangle;
 pub(crate) use operator::scale_output;
-#[cfg(any(
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "ndarray_all"
-))]
 pub(crate) use operator::{mat_transpose_vec_normalized_into, matvec_normalized_into};
 
 pub use crate::normalization::{
@@ -83,6 +81,7 @@ pub use crate::normalization::{
 pub use blocks::{DenseBlock, ReadBlock};
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};
 pub use gram::{MatrixWrite, WeightedGramInto, WeightedGramKernel};
+pub use indexed_rows::IndexedRowSource;
 pub use materialize::{DenseNormalize, MaterializeDense, MatrixOwned};
 pub use matmat::{MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatrixRead};
 pub use operator::{
@@ -91,13 +90,6 @@ pub use operator::{
 };
 pub use rows::SparseRows;
 pub use stats::ColumnStats;
-#[cfg(any(
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "ndarray_all",
-    feature = "sprs_all",
-    feature = "zarrs_all"
-))]
 pub(crate) use stats::normalization_stats_with_quantiles;
 pub use submatrix::SubmatrixKernel;
 pub use vectors::{

@@ -1,0 +1,17 @@
+{
+  "measured_at_utc": "2026-10-29T16:19:40.489193+00:00",
+  "base_commit": "ae3a867dd62c86a1b6b9eccbebd4c87f55aa4061",
+  "implementation": "working tree adding IndexedRows",
+  "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "command": "compute bench --reason \"LazyMatrix indexed rows versus explicit fold copies\" -- cargo bench --locked --features ndarray,sprs --bench indexed_rows",
+  "rows": 4096,
+  "columns": 64,
+  "selected_rows": 3276,
+  "stored_entries": 10362,
+  "criterion_samples": 10,
+  "criterion_warmup_ms": 100,
+  "criterion_measurement_ms": 300,
+  "confidence_level": 0.95
+}

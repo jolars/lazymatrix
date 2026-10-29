@@ -274,8 +274,12 @@ where
             let c = centers[j];
             let nnz = end - start;
             let stored: F = values[start..end].iter().map(|&v| (v - c) * (v - c)).sum();
-            let implicit = F::from_usize(nrows - nnz).unwrap();
-            (stored + implicit * c * c).sqrt()
+            let implicit = if nrows == nnz {
+                F::zero()
+            } else {
+                F::from_usize(nrows - nnz).unwrap() * c * c
+            };
+            (stored + implicit).sqrt()
         }))
     }
 
@@ -445,3 +449,9 @@ impl<F: Scalar> crate::SubmatrixKernel<F> for CscMatrix<F> {
         Ok(())
     }
 }
+
+crate::indexed_rows_kernels::sparse_source!(
+    CscMatrix<F>,
+    true,
+    crate::SparseColumns::sparse_column
+);

@@ -198,3 +198,8 @@ required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all"]
 name = "batched_products"
 harness = false
 required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all", "zarrs_all"]
+
+[[bench]]
+name = "indexed_rows"
+harness = false
+required-features = ["ndarray_all", "sprs_all"]

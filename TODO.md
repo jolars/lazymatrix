@@ -348,24 +348,27 @@ assuming full API or numerical parity.
     workspace and the cost of repeated scans and chunk decoding.
 - [ ] Evaluate arbitrary index selections after defining ordering,
   duplicate-index, mapping, allocation, and complexity contracts.
-- [ ] Add raw indexed-row selection for fitting normalization on a subset.
-  - Shrinkage's cross-validation paths currently copy dense and CSC training and
-    validation matrices through downstream `RowSubset` adapters. Existing
-    `Submatrix` views restrict contiguous ranges of an already normalized
-    matrix; training-fold statistics require selecting raw rows first.
-  - Provide `MatrixShape`, `MatrixErrorType`, `ColumnStats`, and its combined
-    `normalization_stats` hook, plus native forward and transpose products with
-    reusable outputs. Expose `RawColumns` only where borrowing is natural, and
-    preserve implicit zeros and duplicate-entry semantics.
-  - Start with strictly increasing, unique row indices, as used by Shrinkage.
-    Define empty and invalid selections, index mapping, ownership, allocation,
-    and scan costs. Evaluate borrowed views to avoid fold matrix copies, without
-    hiding gathering or allocation in borrowing methods.
-  - Verify all normalization choices and products against explicit raw subsets,
-    including sparse inputs, empty selections, local row indices, and unselected
-    outliers that must not affect fitted parameters. Reuse fitted parameters on
-    held-out rows without refitting. Keep folds, scoring, path workspaces, and
-    model selection in Shrinkage.
+- [x] Add raw indexed-row selection for fitting normalization on a subset.
+  - `IndexedRows::new(source, indices)` selects raw rows before fitting, without
+    copying dense, CSC, or CSR designs. It supports every in-memory backend
+    release and accepts owned storage, references, and backend views. Existing
+    `Submatrix` views continue to restrict an already normalized matrix.
+  - Provides `MatrixShape`, `MatrixErrorType`, `ColumnStats`, its combined
+    `normalization_stats` hook, and native allocating, reusable, and fused
+    forward and transpose products. `RawColumns` requires natural parent column
+    borrowing; sparse rows retain their original slices. Statistics and products
+    combine duplicate cells and preserve implicit zeros.
+  - Indices must be strictly increasing, unique, and in bounds. Empty selections
+    are valid. The view borrows indices and exposes local-to-source mapping.
+    [Measurements](benches/indexed_rows/README.md) document ownership,
+    allocation, scan costs, and the tradeoff between borrowed traversal and
+    explicit copies.
+  - Shared tests compare all normalization choices and products with explicit
+    raw subsets, including sparse inputs, empty selections, local indices,
+    unselected outliers, and held-out parameter reuse without refitting.
+    Borrowed sparse views also cover duplicates, stored zeros, offsets, and
+    spare capacity. Folds, scoring, path workspaces, and model selection remain
+    in Shrinkage.
 - [ ] Expose submatrix selection in Python after defining indexing and
   ownership.
 

@@ -167,9 +167,14 @@ pub(crate) fn sparse_column_sd<F: Scalar>(values: &[F], nrows: usize, df: usize)
             deviation * deviation
         })
         .sum::<F>();
-    let implicit_count = F::from_usize(nrows - values.len()).unwrap();
-    let variance = (stored_squared_deviations + implicit_count * mean * mean)
-        / crate::normalization::sd_divisor::<F>(nrows, df);
+    // An absent contribution must not manufacture NaN from zero times infinity.
+    let implicit = if values.len() == nrows {
+        F::zero()
+    } else {
+        F::from_usize(nrows - values.len()).unwrap() * mean * mean
+    };
+    let variance =
+        (stored_squared_deviations + implicit) / crate::normalization::sd_divisor::<F>(nrows, df);
     variance.sqrt()
 }
 

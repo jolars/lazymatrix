@@ -23,17 +23,9 @@ pub(crate) use buffered::columns;
 ))]
 pub(crate) use buffered::dense_columns;
 
-#[cfg(any(
-    test,
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "sprs_all",
-    feature = "zarrs_all"
-))]
 mod streaming;
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) use streaming::sparse_rows;
-#[cfg(feature = "zarrs_all")]
 pub(crate) use streaming::stream;
 
 #[cfg(any(

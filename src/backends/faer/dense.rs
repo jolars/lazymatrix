@@ -862,3 +862,9 @@ impl<F: Scalar> crate::SubmatrixKernel<F> for MatMut<'_, F> {
         Ok(())
     }
 }
+
+crate::indexed_rows_kernels::dense_source!(Mat<F>);
+
+crate::indexed_rows_kernels::dense_source!(MatRef<'_, F>);
+
+crate::indexed_rows_kernels::dense_source!(MatMut<'_, F>);
