@@ -81,6 +81,48 @@ assuming full API or numerical parity.
     working row; products normalize entries before accumulation without
     materializing the design.
 
+- [ ] Unify row and column normalization under `LazyMatrix`.
+  - Accept either axis's recipe or an ordered recipe chain in `LazyMatrix::new`,
+    and remove the separate `RowNormalizedMatrix` wrapper.
+  - Keep column-only use concise:
+    `LazyMatrix::new(data, ColumnNormalization::standardize())?`.
+    Retain specialized column-only kernels without row-parameter allocations or
+    runtime axis dispatch.
+  - Prefer consistent constructors, generic parameters, and accessors over
+    backward compatibility. Update Rust consumers, Python bindings, tests, and
+    documentation together.
+
+- [ ] Compose normalization recipes with `.then()`, read from left to right.
+  - Support row-then-column standardization for the Duke breast-cancer
+    preprocessing order:
+
+    ```rust
+    let recipe = RowNormalization::standardize()
+        .then(ColumnNormalization::standardize());
+    let matrix = LazyMatrix::new(data, recipe)?;
+    ```
+
+  - Fit each stage on the logical output of all preceding stages. Reversing the
+    recipe changes the fitted transformation; allow repeated axes as well.
+    Later stages may change statistics established by earlier stages.
+  - Preserve stage order in the types, and expose capabilities only when the
+    backend and the entire sequence support them.
+  - Apply the fitted transformation lazily, preserving sparse storage and
+    bounded workspace without materializing intermediate design matrices.
+
+- [ ] Represent fitted parameters in the same order as their recipes.
+  - Retain the axis-specific `RowNormalizationParams` and
+    `ColumnNormalizationParams` types. Have `normalization()` expose the fitted
+    sequence and `from_normalization` apply it unchanged, without refitting.
+  - Define an explicit path for new samples that fits their row stages at the
+    correct points in the sequence while reusing fitted training column stages.
+    Keep this distinct from applying frozen parameters to the same rows.
+
+- [ ] Validate ordered normalization against an eager dense oracle.
+  - Cover both axis orders, repeated stages, explicit and computed parameters,
+    new samples, the adjoint identity, and existing zero, empty, and nonfinite
+    cases across supported backends. Preserve the existing numerical invariants.
+
 - [ ] Extend row normalization (`Normalizer` and `normalize(axis=1)`) to sparse
   storage.
   - Combine duplicate cells before nonlinear statistics, include implicit
@@ -89,22 +131,19 @@ assuming full API or numerical parity.
 - [ ] Stream row fitting and products over Zarr chunks without materializing
   the array. Preserve fill values, exclude padding, and account for outer shards.
 
-- [ ] Define composition and ordering with column normalization.
-  - Consider a composable row-scaling operator and distinguish fitting row
-    factors before column normalization from fitting them afterward.
-
 - [ ] Add a public row-statistics capability when sparse or storage-backed
   fitting needs it, keeping shared fitting hooks and reference forwarding.
 
-- [ ] Extend row-normalized operators with fused and workspace products,
-  batched products, borrowed logical rows and columns, weighted operations,
-  and eager conversion.
+- [ ] Extend `LazyMatrix` capabilities to row and composed normalization:
+  fused and workspace products, batched products, borrowed logical rows and
+  columns, weighted operations, and eager conversion.
 
 - [ ] Expose row normalization in Python, including independent fitting for new
   samples and explicit parameters.
 
 - [ ] Benchmark row fitting and products across storage layouts and document
   scan counts, workspace, and tradeoffs against eager normalization.
+  Check column-only performance when unifying the wrappers.
 
 ## Operator algebra
 
