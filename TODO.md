@@ -1,144 +1,10 @@
 # TODO
 
-This file records design work identified during the initial API audit. The crate
-should expose normalized matrices and their storage capabilities; solver state
-and solver-specific update logic belong in consuming crates.
-
-## Python and neural-framework integration
-
-Identified October 12, 2026, for the `normreg-nn` research consumer. Lazy
-centering and scaling, reusable fitted parameters, and sparse CSR/CSC access
-already exist. The blockers below concern exposing those capabilities to Python
-and using them in neural first layers. Keep FFI and framework adapters in
-companion packages; the Rust core remains independent of Python and solvers.
-
-- [x] Include a native PyTorch first layer using supplied centers and scales.
-  - `lazymatrix.torch.NormalizedLinear` preserves trainable weights in
-    normalized coordinates, retains fixed normalization as checkpoint buffers,
-    and applies a dense centering correction without materializing the
-    normalized input.
-  - Dense and fixed sparse COO/CSR features support float32 and float64 on CPU
-    and CUDA. Predictions, parameter gradients, and optimizer updates are
-    checked against explicit dense normalization. CUDA cases run when available.
-  - The optional Python extra keeps Rust out of the training loop. The
-    `benches/torch_adapter` comparison measures peak memory and throughput;
-    performance depends on layout, density, and device. TensorFlow remains
-    separate work.
-
-- [x] Add an owned float64 Python binding for dense and CSR/CSC input, products,
-  transpose, column access, a SciPy operator adapter, and explicit dense
-  conversion. Python and Rust use independent versions in one release PR,
-  with both API references generated inside VitePress through Diplodocus.
-
-- [x] Expose reusable fitted `NormalizationParams` through the Python binding.
-  - Export and reconstruct centers and scales with column-count validation,
-    preserving constant-column and nonfinite-value semantics. Specify a portable
-    representation for reuse in framework buffers and checkpoints.
-  - Fit statistics on training data and reuse them unchanged for validation and
-    prediction. Online updates of statistics are a separate algorithm.
-  - Keep research scaling exponents in the consumer initially, using explicit
-    scales; determine whether a reusable core extension is actually needed.
-  - Verify reconstructed parameters and products against a dense reference,
-    including reuse across languages and recoverable parameter errors.
-
-- [ ] If a consumer needs Rust-backed neural products, use the existing
-  multiple-right-hand-side operator task to add sparse matrix--dense matrix
-  products and transpose products. The current public product traits operate
-  on vectors; repeated vector calls are a reference path, not evidence of
-  efficient batched execution.
-  - Benchmark against native framework products before choosing Rust for the
-    training loop. Define backward integration and device transfers only if that
-    route is justified. These are not blockers for the native PyTorch adapter
-    using exported normalization parameters.
-
-## Backend version compatibility
-
-- [x] Make versioned backend features additive under Cargo feature unification.
-  - Compile shared implementations independently for every enabled release, with
-    version-specific aliases and compatibility adapters.
-  - Run full backend suites for every enabled release, including version pairs,
-    all-feature builds, and parallelism. Separate consumer crates verify Cargo
-    feature unification across dependencies.
-  - Cover sprs and Zarr interoperability with every enabled ndarray release, and
-    compare products and Gram outputs across backend versions.
-
-- [x] Support borrowed faer CSC views alongside owned matrices.
-  - Shrinkage's cross-validation integration against 0.9.0 exposed missing
-    capabilities on `SparseColMatRef`: shape and error types, raw and sparse
-    column borrowing, column statistics, and native forward and transpose
-    products were implemented only for owned `SparseColMat` input.
-  - Extend these capabilities across supported faer releases without requiring a
-    matrix clone. Respect view offsets and column capacity, and preserve the
-    combined `normalization_stats` hook.
-  - Compare borrowed and owned views with dense reconstruction, normalization
-    statistics, and the adjoint identity, including reusable-output products.
-  - Owned matrices, `SparseColMatRef`, and `SparseColMatMut` share these
-    capabilities on faer 0.22, 0.23, and 0.24. CSC statistics exclude spare
-    capacity and combine duplicate cells before nonlinear reductions.
-
 ## Out-of-core storage
 
-- [x] Demonstrate memory-mapped ndarray views with a private `.npy` file.
-- [x] Make products, column statistics, and computed normalization fallible,
-  sharing each backend's error type through `MatrixErrorType`.
-- [x] Add synchronous zarrs 0.22 products and all normalization options, with
-  serial chunk reads and at most two scans for computed normalization.
-- [x] Prototype a separate fallible block-reader capability with a Shrinkage
-  consumer before stabilizing buffered access.
-  - Specify caller-owned buffer capacity, logical block dimensions, and how
-    returned views borrow the buffer until the next read. Keep memory bounded
-    independently of the full design size.
-  - Keep decoding and I/O out of infallible `RawColumns`, `SparseColumns`, and
-    `SparseRows` borrowing. Preserve the backend's error type and define which
-    buffer contents remain usable after a failed read.
-  - Inject failures during normalization statistics and a later solver pass.
-    Verify buffer reuse and that consumers discard partially written blocks.
-    Keep solver iteration and residual policies in Shrinkage.
-  - `ReadBlock` and `DenseBlock` provide raw rectangular Zarr reads into
-    caller-owned storage. Shrinkage's experimental buffered proximal consumer
-    reuses iteration and normalization, with parity and injected-failure tests.
-    Its development Cargo override remains local; the interfaces are
-    provisional.
 - [ ] Measure cold-I/O throughput and peak memory on larger-than-RAM inputs
   before adding chunk caching, prefetching, async reads, or stricter
   budgets.
-
-## Foundation
-
-- [x] Add an orientation-independent `MatrixShape` trait.
-  - Implement `nrows()` and `ncols()` for every backend matrix and for
-    `LazyMatrix`.
-  - Infer dimensions in `LazyMatrix` constructors instead of accepting caller
-    supplied dimensions that can disagree with the backend.
-  - Let generic consumers obtain dimensions from the operator.
-  - Test rectangular and zero-column matrices; caller/backend dimension
-    disagreement is eliminated by construction.
-
-- [x] Make standard-deviation calculations numerically stable.
-  - Replace `E[x^2] - E[x]^2` with a stable two-pass or combined-variance
-    calculation that accounts for implicit sparse zeros.
-  - Add a regression test using a large offset and small variation, such as
-    values near `1e12` whose true variance is nonzero.
-  - Apply the same algorithm and edge-case policy to every backend.
-
-- [x] Define the policy for empty matrices and nonfinite statistics.
-  - Allow normalization of matrices with zero rows. Undefined means and standard
-    deviations are `NaN`; zero L2 and max-absolute scales use the
-    degenerate-column convention below.
-  - Follow IEEE behavior for nonfinite values instead of rejecting them. Ensure
-    aggregations propagate `NaN` rather than accidentally masking it.
-  - Replace only exact computed zero scales with `1`, leaving nonfinite scales
-    untouched. Such degenerate columns are left unscaled.
-  - Document and test the behavior for every backend.
-
-- [x] Validate explicit normalization parameters.
-  - Reject exact zero scales, including negative zero, in `from_parts` and
-    `with_scales`. Panic with the column index, as for invalid dimensions.
-  - Preserve all other supplied values, including negative scales, tiny nonzero
-    scales, and nonfinite centers or scales. Reconstruction from `into_parts`
-    preserves parameters even when computed statistics are nonfinite.
-  - Keep zero-to-one replacement exclusive to computed normalization.
-  - Defer a fallible constructor until a consumer needs recoverable validation.
 
 ## Normalization methods
 
@@ -153,8 +19,8 @@ assuming full API or numerical parity.
 
 - [x] Add median centering and configurable quantile-range scaling.
   - Use exact linear quantiles, with the interquartile range as the default.
-    Reuse `ColumnNormalizationParams` and preserve sparse duplicates and implicit
-    zeros.
+    Reuse `ColumnNormalizationParams` and preserve sparse duplicates and
+    implicit zeros.
   - Dense and CSC fitting reuse one working column; CSR and Zarr use O(ncols)
     selection state and exact repeated scans without storage conversion.
     Document scan costs, workspace, and numerical differences from scikit-learn.
@@ -210,44 +76,6 @@ assuming full API or numerical parity.
   - Evaluate separate operators, adapters, or downstream implementations for
     these methods. Specify sparse-storage and bounded-workspace contracts rather
     than representing them only through column centers and scales.
-
-## Operator performance
-
-- [x] Investigate the performance regression in stable centered dense products.
-  - Profile forward and transpose products across faer, nalgebra, and ndarray,
-    including contiguous and strided layouts, to separate division costs from
-    traversal and vectorization costs.
-  - Evaluate bounded panels and moving scaling outside inner loops while
-    preserving centered accumulation, overflow, underflow, nonfinite values, and
-    the fused zero-coefficient contracts.
-  - Rerun product and consumer benchmarks before choosing an optimization.
-    Preserve the stable default and avoid a full normalized design copy.
-  - Results: [centered dense product
-    investigation](benches/dense_products/README.md).
-
-- [x] Avoid cloning the forward input when scaling is inactive.
-  - The default allocating hook borrows raw and center-only inputs and clones
-    coefficients only when scales are present. Backend overrides retain their
-    existing paths, and centering corrections run only after a successful
-    product.
-  - Regression tests cover clone counts, input preservation, and backend
-    failures. The benchmark retains the former cloning path for comparison with
-    the public operator. See [the
-    investigation](benches/forward_input/README.md).
-
-- [x] Add multiple-right-hand-side operator capabilities.
-  - `MatMat`, `MatTransposeMat`, and their reusable-output forms support every
-    backend release, fitted normalization, eager operators, and intercepts.
-    `MatrixRead` borrows dense inputs, and callers select allocating output
-    through `MatrixOwned`. Products remain independent of response and solver
-    types and never materialize a normalized design.
-  - The multiresponse least-squares example demonstrates batched predictions and
-    gradients. [Measurements](benches/batched_products/README.md) compare vector
-    and batch products, allocations, storage reads, and consumer updates. Dense
-    and Zarr consumers benefit on the measured fixture; sparse batching can be
-    slower despite fewer allocations.
-  - Batched submatrix products, fused `alpha`/`beta` forms, and explicit
-    workspace methods remain follow-up work.
 
 ## Operator algebra
 
@@ -369,26 +197,7 @@ assuming full API or numerical parity.
 - [ ] Expose submatrix selection in Python after defining indexing and
   ownership.
 
-## Tests and maintenance
-
-- [ ] Exercise the public scalar claim with shared `f32` tests.
-- [ ] Test explicit stored zeros and fully dense sparse columns/rows.
-- [ ] Test every new view through dense reconstruction and relevant algebraic
-  identities rather than solver convergence.
-- [ ] Consider sharing private CSC statistics helpers between backends to
-  prevent their numerical behavior from diverging.
-- [ ] Replace the ignored crate-level example with a small compiling doctest
-  once the shape-aware constructors settle.
-
 ## Surface ownership decisions
-
-- [x] Add named presets on `ColumnNormalization` for common recipes.
-  - `standardize()` selects mean centering and population SD scaling,
-    `min_max()` selects minimum centering and range scaling, and `robust()`
-    selects median centering and interquartile-range scaling.
-  - Keep `ColumnNormalization::new(center, scale)` for custom combinations and retain
-    no normalization as the default. Presets reuse the existing fitting and
-    operator machinery.
 
 - [ ] Revisit whole-operator logical reductions only with a concrete consumer.
   - Column sums and squared norms are already available through `LogicalColumn`;
@@ -403,9 +212,3 @@ assuming full API or numerical parity.
     proximal operations belong to backends or solver-facing crates.
   - Promote a vector primitive here only when it is required to implement a
     matrix capability across multiple backends.
-
-## Outreach targets
-
-- [x] RustyStats: <https://github.com/PricingFrontier/rustystats>
-- [x] anofox-regression: <https://github.com/sipemu/anofox-regression>
-- [x] Greeners: <https://github.com/sheep-farm/Greeners>
