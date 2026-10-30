@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/jolars/lazymatrix/compare/python-v0.2.0...python-v0.3.0) (2026-10-30)
+
+### Breaking changes
+
+- simplify normalization constructors ([`6e72816`](https://github.com/jolars/lazymatrix/commit/6e728168531acc3aa7f7e1758a98020343d78615))
+- unify normalization operators ([`5d12a79`](https://github.com/jolars/lazymatrix/commit/5d12a79d24a6e1e99c44b8c6d0453187ffc46b78))
+- name column normalization types explicitly ([`0fc8486`](https://github.com/jolars/lazymatrix/commit/0fc8486fc3a9de1fb03f0755dbd62f432fe69efc))
+
+### Features
+
+- **python:** expose normalization methods and parameters ([`c416f6d`](https://github.com/jolars/lazymatrix/commit/c416f6d8b50cd1c5d50ebc556037707239b883f4))
+
+### Dependencies
+
+- updated lazymatrix to v0.10.0
+
 ## [0.2.0](https://github.com/jolars/lazymatrix/compare/python-v0.1.1...python-v0.2.0) (2026-10-29)
 
 ### Breaking changes
