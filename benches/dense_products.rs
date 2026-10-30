@@ -4,8 +4,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use lazymatrix::{
-    ColumnNormalizationParams, DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVecInto,
-    MatVecInto, ScaledSubSlice, SubScalarAssign, SumEntries, VectorOwned, VectorViewMut,
+    DotSlice, ElemDivAssign, LazyMatrix, MatTransposeVecInto, MatVecInto, ScaledSubSlice,
+    SubScalarAssign, SumEntries, VectorOwned, VectorViewMut,
 };
 
 #[path = "../tests/common/backend_aliases.rs"]
@@ -175,14 +175,8 @@ fn bench_matrix<M, V>(
         ("centered", None),
         ("standardized", Some(scales.as_slice())),
     ] {
-        let lazy = LazyMatrix::from_normalization(
-            matrix,
-            ColumnNormalizationParams::from_parts(
-                columns,
-                Some(centers.clone()),
-                scales.map(<[_]>::to_vec),
-            ),
-        );
+        let lazy =
+            LazyMatrix::from_column_parts(matrix, Some(centers.clone()), scales.map(<[_]>::to_vec));
         for transpose in [false, true] {
             let direction = if transpose { "transpose" } else { "forward" };
             let name =

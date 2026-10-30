@@ -56,7 +56,18 @@ scales. Use `ColumnNormalization::min_max()` for min-max scaling to `[0, 1]` on
 fitted data or `ColumnNormalization::robust()` for median centering and
 interquartile-range scaling. `ColumnNormalization::new(center, scale)` accepts
 custom combinations, with centering and scaling independently optional. Reuse
-fitted parameters on new observations with `LazyMatrix::from_normalization`.
+fitted parameters on new observations with `LazyMatrix::from_parts`.
+
+Supply explicit vectors with `LazyMatrix::from_column_parts`; the column count
+comes from the matrix:
+
+```rust
+let lazy = LazyMatrix::from_column_parts(
+    x.view(),
+    Some(vec![1.0, 2.0]),
+    Some(vec![2.0, 4.0]),
+);
+```
 
 Fit on selected raw rows without copying the training matrix:
 
@@ -69,7 +80,7 @@ let training = LazyMatrix::new(
     IndexedRows::new(x.view(), &training_rows),
     ColumnNormalization::standardize(),
 )?;
-let validation = LazyMatrix::from_normalization(
+let validation = LazyMatrix::from_parts(
     IndexedRows::new(x.view(), &held_out_rows),
     training.normalization().clone(),
 );
@@ -118,17 +129,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Row normalization offers the same centering and scaling choices and common
 recipes as column normalization. Each parameter vector has one entry per row.
 Norm scaling leaves zero rows unchanged, and new samples need independently
-fitted row parameters. Construct `RowNormalizationParams::from_parts` for
-custom fitting, and use `LazyMatrix::from_normalization` to apply explicit or
-previously fitted parameters for the same rows.
+fitted row parameters. Use `LazyMatrix::from_row_parts(data, centers, scales)`
+for explicit vectors; the row count comes from the matrix. Use
+`LazyMatrix::from_parts(data, params)` to apply previously fitted parameters
+for the same rows.
 
 The parameter type identifies the axis and scalar:
 `LazyMatrix<M, ColumnNormalizationParams<f64>>` or
 `LazyMatrix<M, RowNormalizationParams<f64>>`. Column parameters with `f64` are
 the default, so column-only annotations can remain `LazyMatrix<M>`. Read centers
 and scales through `matrix.normalization()`. `matrix.into_parts()` returns the
-raw data and the fitted parameter object without copying. `EagerMatrix` uses
-the same typed metadata API for its already normalized data.
+raw data and the fitted parameter object without copying, and
+`LazyMatrix::from_parts(data, params)` rebuilds the lazy operator. `EagerMatrix`
+uses the same typed metadata API for its already normalized data.
 
 The initial row operator supports allocating and reusable forward and transpose
 vector products across every dense backend release, including strided views.

@@ -366,6 +366,9 @@ pub struct ColumnNormalizationParams<F = f64> {
 impl<F: crate::Scalar> ColumnNormalizationParams<F> {
     /// Construct validated explicit parameters.
     ///
+    /// To wrap a matrix directly and infer its column count, use
+    /// [`crate::LazyMatrix::from_column_parts`].
+    ///
     /// # Panics
     /// Panics if either vector has a different length from `ncols`, or if a
     /// scale is exact positive or negative zero.
@@ -415,6 +418,9 @@ pub struct RowNormalizationParams<F = f64> {
 
 impl<F: crate::Scalar> RowNormalizationParams<F> {
     /// Construct validated explicit parameters without changing their values.
+    ///
+    /// To wrap a matrix directly and infer its row count, use
+    /// [`crate::LazyMatrix::from_row_parts`].
     ///
     /// # Panics
     /// Panics if either vector has a different length from `nrows`, or if a

@@ -56,8 +56,8 @@ fn main() {
         Some(vec![1.0, 0.25, 1.5]),
         Some(vec![2.0, 1.5, 0.5]),
     );
-    let dense = LazyMatrix::from_normalization(dense, params.clone());
-    let sparse = LazyMatrix::from_normalization(sparse, params);
+    let dense = LazyMatrix::from_parts(dense, params.clone());
+    let sparse = LazyMatrix::from_parts(sparse, params);
     let residual = [1.0, -0.5, 2.0, 0.25];
     let weights = [0.5, 1.0, 1.5, 2.0];
 

@@ -1,5 +1,7 @@
 use crate::column::{LazyColumn, LazySparseColumn, SparseColumnRef};
-use crate::normalization::{ColumnNormalizationParams, NormalizationParams, NormalizationRecipe};
+use crate::normalization::{
+    ColumnNormalizationParams, NormalizationParams, NormalizationRecipe, RowNormalizationParams,
+};
 use crate::row::LazyRow;
 use crate::traits::{
     Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
@@ -23,6 +25,8 @@ mod row;
 ///
 /// Access centers and scales through [`Self::normalization`]. Each component is
 /// independently optional. Negative scales and nonfinite values are preserved.
+/// Supply explicit vectors with [`Self::from_column_parts`] or
+/// [`Self::from_row_parts`]; each constructor infers the dimension from `data`.
 ///
 /// ```
 /// # #[cfg(feature = "ndarray_v0_17")]
@@ -36,7 +40,7 @@ mod row;
 /// assert_eq!(columns.normalization().centers(), Some([5.5, 8.5].as_slice()));
 /// assert_eq!(rows.normalization().centers(), Some([2.0, 12.0].as_slice()));
 /// let (raw, params) = rows.into_parts();
-/// let rows = LazyMatrix::from_normalization(raw, params);
+/// let rows = LazyMatrix::from_parts(raw, params);
 /// # }
 /// ```
 #[derive(Clone, Debug)]
@@ -61,7 +65,7 @@ impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
         R: NormalizationRecipe<M, P>,
     {
         let normalization = recipe.fit(&data)?;
-        Ok(Self::from_normalization(data, normalization))
+        Ok(Self::from_parts(data, normalization))
     }
 
     /// Wrap raw data using explicit or previously fitted parameters.
@@ -69,11 +73,14 @@ impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
     /// Parameters are applied unchanged, without fitting or copying. Column
     /// parameters can be reused on new samples with the same column count. Row
     /// parameters describe particular rows; fit new samples independently.
+    /// This constructor reverses [`Self::into_parts`]. To supply center and
+    /// scale vectors directly, use [`Self::from_column_parts`] or
+    /// [`Self::from_row_parts`].
     ///
     /// # Panics
     /// Panics if the matrix dimension along the fitted axis differs from the
     /// parameter count. Constructing parameter objects rejects exact zero scales.
-    pub fn from_normalization(data: M, normalization: P) -> Self {
+    pub fn from_parts(data: M, normalization: P) -> Self {
         normalization.assert_shape(data.nrows(), data.ncols());
         Self {
             data,
@@ -94,6 +101,7 @@ impl<M, P> LazyMatrix<M, P> {
     }
 
     /// Recover the underlying matrix and fitted parameters without copying.
+    /// Rebuild the operator with [`Self::from_parts`].
     pub fn into_parts(self) -> (M, P) {
         (self.data, self.normalization)
     }
@@ -111,7 +119,37 @@ impl<M: MatrixShape, P> LazyMatrix<M, P> {
     }
 }
 
+impl<M: MatrixShape, F: Scalar> LazyMatrix<M, RowNormalizationParams<F>> {
+    /// Wrap raw data using explicit row centers and scales.
+    ///
+    /// The row count comes from `data`. Centers and scales are independently
+    /// optional and are preserved unchanged, without fitting or copying.
+    /// Negative scales and nonfinite values are allowed.
+    ///
+    /// # Panics
+    /// Panics if either vector has a different length from `data.nrows()`, or
+    /// if a scale is exact positive or negative zero.
+    pub fn from_row_parts(data: M, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
+        let normalization = RowNormalizationParams::from_parts(data.nrows(), centers, scales);
+        Self::from_parts(data, normalization)
+    }
+}
+
 impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
+    /// Wrap raw data using explicit column centers and scales.
+    ///
+    /// The column count comes from `data`. Centers and scales are independently
+    /// optional and are preserved unchanged, without fitting or copying.
+    /// Negative scales and nonfinite values are allowed.
+    ///
+    /// # Panics
+    /// Panics if either vector has a different length from `data.ncols()`, or
+    /// if a scale is exact positive or negative zero.
+    pub fn from_column_parts(data: M, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
+        let normalization = ColumnNormalizationParams::from_parts(data.ncols(), centers, scales);
+        Self::from_parts(data, normalization)
+    }
+
     /// Borrow one lazily normalized column without copying.
     pub fn column(&self, j: usize) -> LazyColumn<M::Column<'_>, F>
     where
@@ -149,15 +187,14 @@ impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
     /// ```
     /// # #[cfg(feature = "sprs_all")]
     /// # {
-    /// use lazymatrix::{ColumnNormalizationParams, LazyMatrix, SprsCsr};
+    /// use lazymatrix::{LazyMatrix, SprsCsr};
     /// use sprs::CsMat;
     ///
     /// let x = CsMat::new((1, 3), vec![0, 2], vec![0, 2], vec![1.0, 0.0]);
     /// let csr = SprsCsr::try_new(x.view()).unwrap();
-    /// let params = ColumnNormalizationParams::from_parts(
-    ///     3, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]),
+    /// let lazy = LazyMatrix::from_column_parts(
+    ///     csr, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]),
     /// );
-    /// let lazy = LazyMatrix::from_normalization(csr, params);
     /// let row = lazy.row(0);
     /// assert_eq!(row.len(), 3);
     /// assert_eq!(row.column_indices(), &[0, 2]);

@@ -10,7 +10,7 @@ indices panic.
 
 All supported in-memory backend releases provide dense, CSC, or CSR traversal.
 `LazyMatrix::new` fits only selected rows. Apply its parameters to held-out raw
-rows with `LazyMatrix::from_normalization`; selection never manages folds,
+rows with `LazyMatrix::from_parts`; selection never manages folds,
 scoring, solver state, or model selection.
 
 ## Allocation and traversal contracts

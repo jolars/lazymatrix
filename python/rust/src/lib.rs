@@ -41,7 +41,7 @@ where
                     "normalization column count must equal ncols",
                 ));
             }
-            Ok(LazyMatrix::from_normalization(raw, params.inner.clone()))
+            Ok(LazyMatrix::from_parts(raw, params.inner.clone()))
         }
         (Some((center, scale, df, (lower, upper))), None) => {
             let center = match center.as_str() {
@@ -203,7 +203,7 @@ impl Storage {
             )
         };
         // Normalize only the gathered row or column, preserving the core's IEEE semantics.
-        let (values, _) = LazyMatrix::from_normalization(raw, params)
+        let (values, _) = LazyMatrix::from_parts(raw, params)
             .into_eager()
             .into_parts();
         let len = if transpose { ncols } else { nrows };

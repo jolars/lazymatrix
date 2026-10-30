@@ -122,14 +122,7 @@ where
                 }
             }
         }
-        let lazy = LazyMatrix::from_normalization(
-            &matrix,
-            lazymatrix::ColumnNormalizationParams::from_parts(
-                p,
-                Some(vec![0.75; p]),
-                Some(vec![-2.; p]),
-            ),
-        );
+        let lazy = LazyMatrix::from_column_parts(&matrix, Some(vec![0.75; p]), Some(vec![-2.; p]));
         let normalized = materialize(
             &tm.dense,
             lazy.normalization().centers(),
@@ -191,15 +184,11 @@ where
             Some(f32::INFINITY),
             Some(f32::NAN),
         ] {
-            let lazy = {
-                let normalization_data = matrix;
-                let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
-                    lazymatrix::MatrixShape::ncols(&normalization_data),
-                    centers.clone(),
-                    scale.map(|s| vec![s; matrix.ncols()]),
-                );
-                LazyMatrix::from_normalization(normalization_data, normalization_params)
-            };
+            let lazy = LazyMatrix::from_column_parts(
+                matrix,
+                centers.clone(),
+                scale.map(|s| vec![s; matrix.ncols()]),
+            );
             let coefficients = [
                 f32::NAN,
                 0.,

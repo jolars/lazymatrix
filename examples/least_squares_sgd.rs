@@ -295,15 +295,7 @@ mod tests {
         .unwrap();
         for centers in [None, Some(vec![0.5, -1.0, 2.0])] {
             for scales in [None, Some(vec![2.0, -3.0, 1.0])] {
-                let matrix = {
-                    let normalization_data = &raw;
-                    let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
-                        lazymatrix::MatrixShape::ncols(&normalization_data),
-                        centers.clone(),
-                        scales,
-                    );
-                    LazyMatrix::from_normalization(normalization_data, normalization_params)
-                };
+                let matrix = LazyMatrix::from_column_parts(&raw, centers.clone(), scales);
                 let dense = matrix.to_eager::<faer::Mat<f64>>().unwrap();
                 let y = [1.0, -2.0, 0.5];
                 for batch_size in [1, 2, 3, 8] {

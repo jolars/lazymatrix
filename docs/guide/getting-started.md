@@ -132,8 +132,19 @@ Ordered composition with column normalization remains planned.
 `LazyMatrix<M, P>` stores its fitted parameter object as `P`. The default is
 `ColumnNormalizationParams<f64>`, so ordinary column-only type annotations can
 use `LazyMatrix<M>`. Inspect centers and scales through `normalization()`.
-For explicit parameters, construct `ColumnNormalizationParams::from_parts` or
-`RowNormalizationParams::from_parts` and use `LazyMatrix::from_normalization`.
+Supply explicit vectors with `LazyMatrix::from_column_parts(data, centers, scales)`
+or `LazyMatrix::from_row_parts(data, centers, scales)`. Each constructor infers
+the dimension from the matrix. Centers and scales are independently optional:
+
+```rust
+let explicit = LazyMatrix::from_column_parts(
+    x.view(),
+    Some(vec![1.0, 2.0]),
+    Some(vec![2.0, 4.0]),
+);
+let (data, params) = explicit.into_parts();
+let restored = LazyMatrix::from_parts(data, params);
+```
 
 ## Materialize explicitly
 
@@ -162,7 +173,7 @@ data again:
 
 ```rust
 let x_new = array![[2.0, 1.0], [0.0, 3.0]];
-let prediction = LazyMatrix::from_normalization(
+let prediction = LazyMatrix::from_parts(
     x_new.view(),
     eager.normalization().clone(),
 );

@@ -107,14 +107,7 @@ fn materialization_retains_parameters_without_applying_them_twice() {
     }
 
     let source = source();
-    let lazy = LazyMatrix::from_normalization(
-        &source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![2.0, 4.0]),
-            Some(vec![2.0, -2.0]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&source, Some(vec![2.0, 4.0]), Some(vec![2.0, -2.0]));
     let eager: EagerMatrix<Dense> = lazy.to_eager().unwrap();
     assert_eq!(eager.data().values, [0.0, -0.0, 2.0, -2.0]);
     assert_eq!(
@@ -127,7 +120,7 @@ fn materialization_retains_parameters_without_applying_them_twice() {
     );
     assert_eq!(forward(&eager, &vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
     assert_eq!(source.values, [2.0, 4.0, 6.0, 8.0]);
-    let prediction = LazyMatrix::from_normalization(&source, eager.normalization().clone());
+    let prediction = LazyMatrix::from_parts(&source, eager.normalization().clone());
     assert_eq!(prediction.matvec(&vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
 }
 
@@ -137,11 +130,7 @@ fn consuming_conversion_reuses_dense_storage() {
     let pointer = source.values.as_ptr();
     let centers = vec![2.0, 4.0];
     let center_ptr = centers.as_ptr();
-    let eager = LazyMatrix::from_normalization(
-        source,
-        ColumnNormalizationParams::from_parts(2, Some(centers), None),
-    )
-    .into_eager();
+    let eager = LazyMatrix::from_column_parts(source, Some(centers), None).into_eager();
     assert_eq!(eager.data().values.as_ptr(), pointer);
     assert_eq!(eager.data().values, [0.0, 0.0, 4.0, 4.0]);
     let (data, params) = eager.into_parts();
@@ -152,10 +141,7 @@ fn consuming_conversion_reuses_dense_storage() {
 
 #[test]
 fn reusable_output_provides_a_working_borrowed_operator() {
-    let lazy = LazyMatrix::from_normalization(
-        source(),
-        lazymatrix::ColumnNormalizationParams::from_parts(2, None, Some(vec![2.0, -2.0])),
-    );
+    let lazy = LazyMatrix::from_column_parts(source(), None, Some(vec![2.0, -2.0]));
     let mut destination = Dense::zeros(2, 2);
     let eager = lazy.to_eager_into(&mut destination).unwrap();
     assert_eq!(eager.matvec(&vec![1.0, 2.0]).unwrap(), [-3.0, -5.0]);
@@ -164,15 +150,7 @@ fn reusable_output_provides_a_working_borrowed_operator() {
 
 #[test]
 fn output_dimensions_are_checked_before_writing() {
-    let lazy = {
-        let normalization_data = source();
-        let normalization_params = lazymatrix::ColumnNormalizationParams::<f64>::from_parts(
-            lazymatrix::MatrixShape::ncols(&normalization_data),
-            None,
-            None,
-        );
-        LazyMatrix::from_normalization(normalization_data, normalization_params)
-    };
+    let lazy = LazyMatrix::<_>::from_column_parts(source(), None, None);
     let mut destination = Dense::zeros(1, 2);
     destination.values.fill(99.0);
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -185,19 +163,14 @@ fn output_dimensions_are_checked_before_writing() {
 #[test]
 fn fitted_parameters_check_shape_even_when_both_axes_are_inactive() {
     let params = ColumnNormalizationParams::<f64>::from_parts(3, None, None);
-    assert!(
-        std::panic::catch_unwind(|| { LazyMatrix::from_normalization(source(), params) }).is_err()
-    );
+    assert!(std::panic::catch_unwind(|| { LazyMatrix::from_parts(source(), params) }).is_err());
 }
 
 #[test]
 fn reusable_output_wrapper_outlives_its_source() {
     let mut destination = Dense::zeros(2, 2);
     let eager = {
-        let lazy = LazyMatrix::from_normalization(
-            source(),
-            lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![2.0, 4.0]), None),
-        );
+        let lazy = LazyMatrix::from_column_parts(source(), Some(vec![2.0, 4.0]), None);
         lazy.to_eager_into(&mut destination).unwrap()
     };
     assert_eq!(eager.matvec(&vec![1.0, 1.0]).unwrap(), [0.0, 8.0]);
@@ -211,14 +184,5 @@ fn allocating_conversion_checks_size_before_allocating_or_reading() {
         columns: 2,
         values: vec![],
     };
-    let _ = {
-        let normalization_data = source;
-        let normalization_params = lazymatrix::ColumnNormalizationParams::<f64>::from_parts(
-            lazymatrix::MatrixShape::ncols(&normalization_data),
-            None,
-            None,
-        );
-        LazyMatrix::from_normalization(normalization_data, normalization_params)
-    }
-    .to_eager::<Dense>();
+    let _ = LazyMatrix::<_>::from_column_parts(source, None, None).to_eager::<Dense>();
 }

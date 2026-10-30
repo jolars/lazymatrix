@@ -18,7 +18,7 @@ macro_rules! ndarray_suite {
             let x = ndarray::Array2::from_shape_fn((7, 6), |(i, j)| 1e12 + (i * 6 + j) as f64);
             let view = x.slice(ndarray::s![..;-2, ..;2]);
             let rows = lazymatrix::IndexedRows::new(view, &[0, 2]);
-            let lazy = lazymatrix::LazyMatrix::from_normalization(rows, lazymatrix::ColumnNormalizationParams::from_parts(3, Some(vec![1e12; 3]), None));
+            let lazy = lazymatrix::LazyMatrix::from_column_parts(rows, Some(vec![1e12; 3]), None);
             let expected = vec![114.0, 42.0];
             use lazymatrix::{MatVec, MatVecInto, MatTransposeVecInto};
             assert_eq!(lazy.matvec(&vec![1.0; 3]).unwrap(), expected);
@@ -287,10 +287,7 @@ fn dependency_light_sources_share_scans_and_forward_errors() {
             .is_err()
     );
     assert!(LazyMatrix::new(&selected, ColumnNormalization::standardize()).is_err());
-    let lazy = LazyMatrix::from_normalization(
-        &selected,
-        lazymatrix::ColumnNormalizationParams::from_parts(1, Some(vec![10.0]), None),
-    );
+    let lazy = LazyMatrix::from_column_parts(&selected, Some(vec![10.0]), None);
     let mut out = vec![99.0; 2];
     assert!(lazy.matvec_into(&vec![1.0], &mut out).is_err());
     assert_eq!(out[0], 1.0);

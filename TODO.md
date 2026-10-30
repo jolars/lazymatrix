@@ -90,8 +90,9 @@ assuming full API or numerical parity.
     runtime axis dispatch.
   - Store typed metadata in `LazyMatrix<M, P>` and `EagerMatrix<M, P>`. Inspect it
     with `normalization()` and recover `(data, params)` with `into_parts()`.
-    Explicit construction uses axis-specific parameter objects and
-    `LazyMatrix::from_normalization`.
+    Rebuild from those parts with `LazyMatrix::from_parts`. Supply explicit
+    vectors with `from_column_parts` or `from_row_parts`, inferring the
+    dimension from the matrix.
   - Migrate Rust consumers, Python's native extension, tests, and documentation
     together, preferring the consistent API over backward compatibility.
 
@@ -117,7 +118,7 @@ assuming full API or numerical parity.
 - [ ] Represent fitted parameters in the same order as their recipes.
   - Retain the axis-specific `RowNormalizationParams` and
     `ColumnNormalizationParams` types. Have `normalization()` expose the fitted
-    sequence and `from_normalization` apply it unchanged, without refitting.
+    sequence and `from_parts` apply it unchanged, without refitting.
   - Define an explicit path for new samples that fits their row stages at the
     correct points in the sequence while reusing fitted training column stages.
     Keep this distinct from applying frozen parameters to the same rows.

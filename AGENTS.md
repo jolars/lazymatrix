@@ -41,6 +41,9 @@ and vector products only. Select the axis through `ColumnNormalizationParams`
 or `RowNormalizationParams`, and inspect centers and scales through
 `normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`
 from `into_parts()`.
+`LazyMatrix::from_parts(data, params)` rebuilds the lazy operator. Supply
+explicit vectors with `from_column_parts` or `from_row_parts`; infer the
+dimension from the matrix.
 
 Centering and scaling are independently optional. Lazy operations must preserve
 sparse storage and never materialize the full normalized design matrix. Explicit

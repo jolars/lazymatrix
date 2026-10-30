@@ -45,10 +45,7 @@ fn normalization_does_not_correct_partial_outputs_after_errors() {
         }
     }
 
-    let lazy = LazyMatrix::from_normalization(
-        Failing,
-        lazymatrix::ColumnNormalizationParams::from_parts(1, Some(vec![1.0]), Some(vec![2.0])),
-    );
+    let lazy = LazyMatrix::from_column_parts(Failing, Some(vec![1.0]), Some(vec![2.0]));
     let mut scratch = vec![0.0];
     let mut out = vec![11.0, 13.0];
     assert!(
@@ -145,7 +142,7 @@ macro_rules! ndarray_suite {
             .unwrap();
         assert!(nonfinite[0].is_nan());
 
-        let lazy = LazyMatrix::from_normalization(a, lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, -1.0]), Some(vec![2.0, -2.0])));
+        let lazy = LazyMatrix::from_column_parts(a, Some(vec![1.0, -1.0]), Some(vec![2.0, -2.0]));
         let mut scratch = array![f64::NAN, f64::NAN];
         let mut out = array![10.0, 20.0, 30.0];
         lazy.matvec_scaled_with_workspace(2.0, &array![2.0, -2.0], -1.0, &mut out, &mut scratch)
@@ -234,14 +231,8 @@ mod sprs_tests {
                 .unwrap();
             assert_eq!(transpose, vec![0.0; 2]);
 
-            let lazy = LazyMatrix::from_normalization(
-                a,
-                lazymatrix::ColumnNormalizationParams::from_parts(
-                    2,
-                    Some(vec![1.0, -1.0]),
-                    Some(vec![2.0, -2.0]),
-                ),
-            );
+            let lazy =
+                LazyMatrix::from_column_parts(a, Some(vec![1.0, -1.0]), Some(vec![2.0, -2.0]));
             let mut scratch = vec![0.0; 2];
             let mut out = vec![10.0, 20.0, 30.0];
             lazy.matvec_scaled_with_workspace(2.0, &vec![2.0, -2.0], -1.0, &mut out, &mut scratch)

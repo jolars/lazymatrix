@@ -109,10 +109,7 @@ fn batched_products_preserve_f32_edges_and_sliced_outer_ranges() {
 fn sprs_weighted_norms_preserve_f32_implicit_contributions() {
     let matrix = CsMat::new_csc((3, 1), vec![0, 2], vec![0, 2], vec![1.0_f32, 1.0]);
     let matrix = SprsCsc::try_new(matrix.view()).unwrap();
-    let lazy = LazyMatrix::from_normalization(
-        matrix,
-        lazymatrix::ColumnNormalizationParams::from_parts(1, Some(vec![1.0_f32]), None),
-    );
+    let lazy = LazyMatrix::from_column_parts(matrix, Some(vec![1.0_f32]), None);
     let weights = [1e8_f32, 1.0, 1e8];
     approx::assert_abs_diff_eq!(lazy.column(0).weighted_norm_squared(&weights), 1.0);
     approx::assert_abs_diff_eq!(lazy.sparse_column(0).weighted_norm_squared(&weights), 1.0);
@@ -149,9 +146,10 @@ fn sprs_gram_accepts_sliced_columns_and_explicit_zeros() {
         vec![0, 0, 2, 1],
         vec![99.0, 0.0, 2.0, -1.0],
     );
-    let lazy = LazyMatrix::from_normalization(
+    let lazy = LazyMatrix::from_column_parts(
         SprsCsc::try_new(matrix.slice_outer(1..3)).unwrap(),
-        lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 2.0]), None),
+        Some(vec![1.0, 2.0]),
+        None,
     );
     let mut out = common::GramOutput(vec![vec![f64::NAN; 2]; 2]);
     lazy.weighted_gram_into(&[1.0, 2.0, 3.0], &mut out).unwrap();
@@ -170,10 +168,8 @@ fn sprs_sparse_centered_gram_keeps_implicit_rows_with_large_weights() {
     let n = 1_000;
     let p = 32;
     let matrix = CsMat::new_csc((n, p), (0..=p).collect(), vec![0; p], vec![1.0_f64; p]);
-    let lazy = LazyMatrix::from_normalization(
-        SprsCsc::try_new(matrix).unwrap(),
-        lazymatrix::ColumnNormalizationParams::from_parts(p, Some(vec![1.0; p]), None),
-    );
+    let lazy =
+        LazyMatrix::from_column_parts(SprsCsc::try_new(matrix).unwrap(), Some(vec![1.0; p]), None);
     let mut weights = vec![1.0_f64; n];
     weights[0] = 1e16;
     let mut out = common::GramOutput(vec![vec![f64::NAN; p]; p]);
@@ -202,10 +198,7 @@ fn sprs_centered_gram_matches_oracle_for_sparse_pairs() {
     let centers: Vec<_> = (0..p).map(|j| 0.1 + j as f64 / 100.0).collect();
     let weights: Vec<_> = (0..n).map(|i| 0.5 + (i % 11) as f64 / 11.0).collect();
     let matrix = SprsCsc::try_new(triplets.to_csc::<usize>()).unwrap();
-    let lazy = LazyMatrix::from_normalization(
-        matrix,
-        lazymatrix::ColumnNormalizationParams::from_parts(centers.len(), Some(centers), None),
-    );
+    let lazy = LazyMatrix::from_column_parts(matrix, Some(centers), None);
     let mut out = common::GramOutput(vec![vec![f64::NAN; p]; p]);
     lazy.weighted_gram_into(&weights, &mut out).unwrap();
     common::assert_gram(
@@ -237,14 +230,7 @@ fn sprs_csr_wrapper_checks_orientation_and_borrows_sliced_rows() {
     assert_eq!(values.as_ptr(), matrix.data()[1..].as_ptr());
     assert_eq!(wrapped.as_inner().rows(), 2);
     assert_eq!(wrapped.sparse_row(1), (&[2][..], &[-1.0][..]));
-    let lazy = LazyMatrix::from_normalization(
-        &wrapped,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            4,
-            Some(vec![0.5; 4]),
-            Some(vec![-2.0; 4]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&wrapped, Some(vec![0.5; 4]), Some(vec![-2.0; 4]));
     let row = lazy.row(0);
     assert_eq!(row.column_indices().as_ptr(), columns.as_ptr());
     assert_eq!(row.values().as_ptr(), values.as_ptr());
@@ -256,15 +242,7 @@ fn sprs_csr_wrapper_checks_orientation_and_borrows_sliced_rows() {
 
     let wrapped = SprsCsr::try_new(matrix.view_mut()).unwrap();
     assert_eq!(wrapped.sparse_row(0).1.as_ptr(), data_ptr);
-    let lazy = {
-        let normalization_data = &wrapped;
-        let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
-            lazymatrix::MatrixShape::ncols(&normalization_data),
-            None,
-            None,
-        );
-        LazyMatrix::from_normalization(normalization_data, normalization_params)
-    };
+    let lazy = LazyMatrix::from_column_parts(&wrapped, None, None);
     assert_eq!(lazy.row(0).values().as_ptr(), data_ptr);
     let mut recovered = wrapped.into_inner();
     recovered.data_mut()[0] = 7.0;

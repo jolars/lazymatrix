@@ -45,8 +45,11 @@
 //! with `f64`, so column-only annotations can use `LazyMatrix<M>`. Read centers
 //! and scales through [`LazyMatrix::normalization`]. Consuming a wrapper with
 //! [`LazyMatrix::into_parts`] returns raw data and the fitted parameter object
-//! without copying. [`EagerMatrix`] uses the same typed metadata API, with its
-//! retained parameters already applied to the data.
+//! without copying; [`LazyMatrix::from_parts`] rebuilds the lazy operator from
+//! those parts. Supply explicit vectors with [`LazyMatrix::from_column_parts`]
+//! or [`LazyMatrix::from_row_parts`], which infer the dimension from the matrix.
+//! [`EagerMatrix`] uses the same typed metadata API, with its retained parameters
+//! already applied to the data.
 //!
 //! # Multiple right-hand sides
 //!
@@ -89,7 +92,7 @@
 //! [`IndexedRows::new`] selects strictly increasing, unique raw row indices.
 //! Pass a borrowed matrix or backend view to avoid copying a training design.
 //! [`LazyMatrix::new`] then fits only those rows, excluding unselected outliers.
-//! Use [`LazyMatrix::from_normalization`] to apply the fitted parameters to a
+//! Use [`LazyMatrix::from_parts`] to apply the fitted parameters to a
 //! second selection without refitting. Products use local row coordinates.
 //! Dense, CSC, and CSR sources from every supported in-memory backend release
 //! implement [`IndexedRowSource`]. See [`IndexedRows`] for allocation and scan costs.
@@ -115,7 +118,7 @@
 //!
 //! Eager operations use the already normalized backend data. Original fitted
 //! centers and scales remain available through [`EagerMatrix::normalization`]
-//! and can be reused with [`LazyMatrix::from_normalization`] for prediction.
+//! and can be reused with [`LazyMatrix::from_parts`] for prediction.
 //! Conversion does not recompute statistics. Sparse and Zarr materialization
 //! requires O(nrows * ncols) dense output storage; the lazy path remains the
 //! default. Arithmetic order changes, so rounding and nonfinite product results
@@ -319,7 +322,7 @@
 //!
 //! let x = array![[1.0], [3.0]];
 //! let params = ColumnNormalizationParams::from_parts(1, Some(vec![2.0]), None);
-//! let predictors = LazyMatrix::from_normalization(x.view(), params);
+//! let predictors = LazyMatrix::from_parts(x.view(), params);
 //! let design = WithIntercept::new(&predictors);
 //! assert_eq!(design.matvec(&array![3.0, 2.0]).unwrap(), array![1.0, 5.0]);
 //! # }

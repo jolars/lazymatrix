@@ -146,14 +146,7 @@ fn allocating_and_reusable_products_apply_fitted_parameters_once() {
     let rhs = Dense::new(2, 2, &[2., -1., -1., 3.]);
     let input = rhs.clone();
     let u = Dense::new(3, 2, &[1., 2., -2., 0., 3., -1.]);
-    let lazy = LazyMatrix::from_normalization(
-        &source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1., 2.]),
-            Some(vec![2., 4.]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
     let expected = Dense::new(3, 2, &[-0.5, 1.5, 0., 2.5, 1., 4.5]);
     let actual: Dense = lazy.matmat(&rhs).unwrap();
     assert_eq!(actual, expected);
@@ -164,14 +157,7 @@ fn allocating_and_reusable_products_apply_fitted_parameters_once() {
     lazy.matmat_into(&rhs, &mut out).unwrap();
     assert_eq!(out, expected);
     assert_eq!(rhs, input);
-    let lazy = LazyMatrix::from_normalization(
-        &mut source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1., 2.]),
-            Some(vec![2., 4.]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&mut source, Some(vec![1., 2.]), Some(vec![2., 4.]));
     lazy.matmat_into(&rhs, &mut out).unwrap();
     assert_eq!(out, expected);
 }
@@ -180,21 +166,11 @@ fn allocating_and_reusable_products_apply_fitted_parameters_once() {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn normalization_of_a_transpose_uses_its_own_columns() {
     let source = source();
-    let lazy = LazyMatrix::from_normalization(
-        &source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1., 2.]),
-            Some(vec![2., 4.]),
-        ),
-    );
-    let outer = LazyMatrix::from_normalization(
+    let lazy = LazyMatrix::from_column_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
+    let outer = LazyMatrix::from_column_parts(
         Transpose::new(&lazy),
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            3,
-            Some(vec![1., 2., 3.]),
-            Some(vec![2., -1., 4.]),
-        ),
+        Some(vec![1., 2., 3.]),
+        Some(vec![2., -1., 4.]),
     );
     let forward: Dense = outer.matmat(&Dense::new(3, 1, &[2., -1., 4.])).unwrap();
     assert_eq!(forward, Dense::new(2, 1, &[-4., -2.5]));
@@ -208,14 +184,7 @@ fn normalization_of_a_transpose_uses_its_own_columns() {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn intercept_uses_borrowed_predictor_rows_and_a_leading_output_row() {
     let source = source();
-    let lazy = LazyMatrix::from_normalization(
-        &source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1., 2.]),
-            Some(vec![2., 4.]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
     let augmented = WithIntercept::new(lazy);
     let rhs = DenseBlock::new(&[10., 20., 2., -1., -1., 3.], 3, 2);
     let actual: Dense = augmented.matmat(&rhs).unwrap();
@@ -230,14 +199,7 @@ fn intercept_uses_borrowed_predictor_rows_and_a_leading_output_row() {
 fn failed_products_skip_normalization_and_intercept_corrections() {
     let source = source();
     source.fail.set(true);
-    let lazy = LazyMatrix::from_normalization(
-        &source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1., 2.]),
-            Some(vec![2., 4.]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
     let mut out = Dense::new(3, 2, &[999.; 6]);
     let rhs = DenseBlock::new(&[2., 2., 4., 4.], 2, 2);
     assert_eq!(lazy.matmat_into(&rhs, &mut out), Err(ReadError));
@@ -278,14 +240,7 @@ fn failed_products_skip_normalization_and_intercept_corrections() {
 fn validation_precedes_writes_and_empty_batches_skip_backend_calls() {
     use std::panic::{AssertUnwindSafe, catch_unwind};
     let source = source();
-    let lazy = LazyMatrix::from_normalization(
-        &source,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1., 2.]),
-            Some(vec![2., 4.]),
-        ),
-    );
+    let lazy = LazyMatrix::from_column_parts(&source, Some(vec![1., 2.]), Some(vec![2., 4.]));
     let rhs = Dense::zeros(2, 0);
     let out: Dense = lazy.matmat(&rhs).unwrap();
     assert_eq!((out.rows, out.cols), (3, 0));

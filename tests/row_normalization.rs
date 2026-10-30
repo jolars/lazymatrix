@@ -66,7 +66,7 @@ fn generic_recipe_selects_row_parameters_without_column_statistics() {
     assert_eq!(params.centers().unwrap(), &[3.0_f32, 14.0]);
     let (data, params) = rows.into_parts();
     let restored: LazyMatrix<Dense<f32>, RowNormalizationParams<f32>> =
-        LazyMatrix::from_normalization(data, params);
+        LazyMatrix::from_parts(data, params);
     assert_eq!((restored.nrows(), restored.ncols()), (2, 3));
 }
 
@@ -118,7 +118,7 @@ fn new_samples_refit_instead_of_reusing_training_rows() {
     .unwrap();
     let source = Dense::new(1, 2, vec![10.0, 14.0]);
     let fitted = LazyMatrix::new(&source, RowNormalization::standardize()).unwrap();
-    let reused = LazyMatrix::from_normalization(&source, training.normalization().clone());
+    let reused = LazyMatrix::from_parts(&source, training.normalization().clone());
     assert_eq!(fitted.matvec(&vec![1.0, 1.0]).unwrap(), [0.0]);
     assert_eq!(reused.matvec(&vec![1.0, 1.0]).unwrap(), [20.0]);
 }
@@ -143,8 +143,11 @@ fn explicit_parameters_preserve_bits_and_round_trip_without_copying() {
         RowNormalizationParams::from_parts(4, Some(centers.clone()), Some(scales.clone()));
     assert_eq!(parameters.nrows(), 4);
     let source = Dense::new(4, 1, vec![1.0; 4]);
-    let normalized = LazyMatrix::from_normalization(&source, parameters.clone());
+    let normalized =
+        LazyMatrix::from_row_parts(&source, Some(centers.clone()), Some(scales.clone()));
     assert_eq!((normalized.nrows(), normalized.ncols()), (4, 1));
+    assert_eq!(normalized.normalization().nrows(), 4);
+    assert_eq!(source.reads.get(), 0);
     assert!(std::ptr::eq(*normalized.data(), &source));
     assert_eq!(
         bits(normalized.normalization().centers().unwrap()),
@@ -160,7 +163,7 @@ fn explicit_parameters_preserve_bits_and_round_trip_without_copying() {
     assert!(std::ptr::eq(data, &source));
     assert_eq!(recovered.centers().unwrap().as_ptr(), center_ptr);
     assert_eq!(recovered.scales().unwrap().as_ptr(), scale_ptr);
-    let restored = LazyMatrix::from_normalization(data, recovered);
+    let restored = LazyMatrix::from_parts(data, recovered);
     assert_eq!(
         bits(restored.normalization().centers().unwrap()),
         bits(&centers)
@@ -172,26 +175,20 @@ fn explicit_parameters_preserve_bits_and_round_trip_without_copying() {
     let (recovered_centers, recovered_scales) = parameters.into_parts();
     assert_eq!(bits(recovered_centers.as_ref().unwrap()), bits(&centers));
     assert_eq!(bits(recovered_scales.as_ref().unwrap()), bits(&scales));
-    let centered = LazyMatrix::from_normalization(
-        &source,
-        RowNormalizationParams::from_parts(centers.len(), Some(centers.clone()), None),
-    );
+    let centered = LazyMatrix::from_row_parts(&source, Some(centers.clone()), None);
     assert_eq!(
         bits(centered.normalization().centers().unwrap()),
         bits(&centers)
     );
     assert!(centered.normalization().scales().is_none());
-    let scaled = LazyMatrix::from_normalization(
-        &source,
-        RowNormalizationParams::from_parts(scales.len(), None, Some(scales.clone())),
-    );
+    let scaled = LazyMatrix::from_row_parts(&source, None, Some(scales.clone()));
     assert_eq!(
         bits(scaled.normalization().scales().unwrap()),
         bits(&scales)
     );
     assert!(scaled.normalization().centers().is_none());
     let wider = Dense::new(4, 3, vec![1.0; 12]);
-    let reused = LazyMatrix::from_normalization(wider, restored.normalization().clone());
+    let reused = LazyMatrix::from_parts(wider, restored.normalization().clone());
     assert_eq!(reused.ncols(), 3);
     assert_eq!(
         bits(reused.normalization().scales().unwrap()),
@@ -205,22 +202,18 @@ fn explicit_parameters_validate_rows_and_report_zero_scale_index() {
     let source = Dense::new(2, 3, vec![1.0; 6]);
     for (centers, scales) in [(Some(vec![1.0; 3]), None), (None, Some(vec![1.0; 3]))] {
         assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                let normalization_data = &source;
-                let normalization_params = RowNormalizationParams::from_parts(
-                    lazymatrix::MatrixShape::nrows(&normalization_data),
-                    centers,
-                    scales,
-                );
-                LazyMatrix::from_normalization(normalization_data, normalization_params)
-            }))
+            catch_unwind(AssertUnwindSafe(|| LazyMatrix::from_row_parts(
+                &source, centers, scales
+            )))
             .is_err()
         );
     }
     for zero in [0.0, -0.0] {
-        let panic =
-            catch_unwind(|| RowNormalizationParams::from_parts(2, None, Some(vec![1.0, zero])))
-                .unwrap_err();
+        let panic = catch_unwind(AssertUnwindSafe(|| {
+            LazyMatrix::from_row_parts(&source, None, Some(vec![1.0, zero]))
+        }))
+        .err()
+        .expect("explicit zero scales must panic");
         let message = panic
             .downcast_ref::<String>()
             .map(String::as_str)
@@ -229,12 +222,7 @@ fn explicit_parameters_validate_rows_and_report_zero_scale_index() {
         assert!(message.contains("row 1"), "{message}");
     }
     let wrong = RowNormalizationParams::<f64>::from_parts(3, None, None);
-    assert!(
-        catch_unwind(AssertUnwindSafe(|| LazyMatrix::from_normalization(
-            &source, wrong
-        )))
-        .is_err()
-    );
+    assert!(catch_unwind(AssertUnwindSafe(|| LazyMatrix::from_parts(&source, wrong))).is_err());
     assert_eq!(source.reads.get(), 0);
 }
 
@@ -242,10 +230,7 @@ fn explicit_parameters_validate_rows_and_report_zero_scale_index() {
 fn dimension_panics_precede_reads_and_output_writes() {
     use std::panic::{AssertUnwindSafe, catch_unwind};
     let source = Dense::new(2, 3, vec![1.0; 6]);
-    let normalized = LazyMatrix::from_normalization(
-        &source,
-        RowNormalizationParams::from_parts(2, Some(vec![0.5; 2]), Some(vec![2.0; 2])),
-    );
+    let normalized = LazyMatrix::from_row_parts(&source, Some(vec![0.5; 2]), Some(vec![2.0; 2]));
     for (forward, input_len, output_len) in
         [(true, 2, 2), (true, 3, 3), (false, 3, 3), (false, 2, 2)]
     {
@@ -307,17 +292,11 @@ fn empty_shapes_need_no_reads_or_full_design_workspace() {
 #[test]
 fn f32_products_scale_entries_before_accumulation() {
     let source = Dense::new(2, 1, vec![f32::MAX; 2]);
-    let normalized = LazyMatrix::from_normalization(
-        source,
-        RowNormalizationParams::from_parts(2, None, Some(vec![f32::MAX; 2])),
-    );
+    let normalized = LazyMatrix::from_row_parts(source, None, Some(vec![f32::MAX; 2]));
     assert_eq!(normalized.matvec(&vec![2.0]).unwrap(), [2.0; 2]);
     assert_eq!(normalized.mat_transpose_vec(&vec![2.0; 2]).unwrap(), [4.0]);
     let source = Dense::new(1, 1, vec![1e-30_f32]);
-    let normalized = LazyMatrix::from_normalization(
-        source,
-        RowNormalizationParams::from_parts(1, None, Some(vec![1e-30])),
-    );
+    let normalized = LazyMatrix::from_row_parts(source, None, Some(vec![1e-30]));
     assert_eq!(normalized.matvec(&vec![1e-30]).unwrap(), [1e-30]);
     assert_eq!(normalized.mat_transpose_vec(&vec![1e-30]).unwrap(), [1e-30]);
 }

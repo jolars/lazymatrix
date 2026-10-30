@@ -36,8 +36,8 @@ pub fn check() {
             .matvec(&DVector::from_column_slice(&[2.0, -1.0]))
             .unwrap();
         assert!((result[2] + 1.5).abs() < 1e-12);
-        let eager = LazyMatrix::from_normalization(dense.clone(), eager.normalization().clone())
-            .into_eager();
+        let eager =
+            LazyMatrix::from_parts(dense.clone(), eager.normalization().clone()).into_eager();
         assert!(
             (eager
                 .matvec(&DVector::from_column_slice(&[2.0, -1.0]))

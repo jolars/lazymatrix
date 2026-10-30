@@ -78,14 +78,8 @@ fn gram_forwards_normalization_and_preserves_partial_output_on_error() {
         calls: Cell::new(0),
     };
     let borrowed = &source;
-    let lazy = LazyMatrix::from_normalization(
-        &borrowed,
-        lazymatrix::ColumnNormalizationParams::from_parts(
-            2,
-            Some(vec![1.0, 2.0]),
-            Some(vec![2.0, -4.0]),
-        ),
-    );
+    let lazy =
+        LazyMatrix::from_column_parts(&borrowed, Some(vec![1.0, 2.0]), Some(vec![2.0, -4.0]));
     let mut out = Output([[99.0; 2]; 2]);
     assert_eq!(lazy.weighted_gram_into(&[3.0], &mut out), Err(ReadError));
     assert_eq!(out.0, [[17.0, 99.0], [99.0, 99.0]]);

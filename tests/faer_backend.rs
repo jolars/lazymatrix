@@ -58,13 +58,10 @@ macro_rules! backend_suite {
                 common::check_transpose_products(matrix, dense, &to_col, &from_col);
                 common::check_fused_operator(matrix, dense, matrix.ncols(), &to_col);
                 common::batched::check_batched(matrix, dense);
-                let lazy = LazyMatrix::from_normalization(
+                let lazy = LazyMatrix::from_column_parts(
                     matrix,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        matrix.ncols(),
-                        Some(vec![0.75; matrix.ncols()]),
-                        Some(vec![-2.0; matrix.ncols()]),
-                    ),
+                    Some(vec![0.75; matrix.ncols()]),
+                    Some(vec![-2.0; matrix.ncols()]),
                 );
                 common::batched::check_batched(
                     &lazy,
@@ -267,14 +264,8 @@ macro_rules! backend_suite {
                 common::batched::check_batched(&matrix.as_ref(), &tm.dense);
                 common::batched::check_batched(&matrix.rb_mut(), &tm.dense);
                 let matrix = build(&tm);
-                let lazy = LazyMatrix::from_normalization(
-                    &matrix,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        3,
-                        Some(vec![1.; 3]),
-                        Some(vec![-2.; 3]),
-                    ),
-                );
+                let lazy =
+                    LazyMatrix::from_column_parts(&matrix, Some(vec![1.; 3]), Some(vec![-2.; 3]));
                 let eager = lazy.to_eager::<Mat<f64>>().unwrap();
                 common::batched::check_batched(
                     &eager,
@@ -297,10 +288,7 @@ macro_rules! backend_suite {
                 let values: Vec<Vec<_>> = (0..2)
                     .map(|i| (0..3).map(|j| raw[(i, j)] - 1e12).collect())
                     .collect();
-                let centered = LazyMatrix::from_normalization(
-                    raw,
-                    lazymatrix::ColumnNormalizationParams::from_parts(3, Some(vec![1e12; 3]), None),
-                );
+                let centered = LazyMatrix::from_column_parts(raw, Some(vec![1e12; 3]), None);
                 common::batched::check_batched(&centered, &values);
                 let rhs = Mat::from_fn(3, 2, |i, j| (i + j) as f64);
                 let expected: Mat<f64> = centered.matmat(&rhs.as_ref().reverse_cols()).unwrap();
@@ -488,27 +476,12 @@ macro_rules! backend_suite {
                     &[0.5],
                     0.0,
                 );
-                let raw = {
-                    let normalization_data = &matrix;
-                    let normalization_params =
-                        lazymatrix::ColumnNormalizationParams::<f64>::from_parts(
-                            lazymatrix::MatrixShape::ncols(&normalization_data),
-                            None,
-                            None,
-                        );
-                    LazyMatrix::from_normalization(normalization_data, normalization_params)
-                }
-                .to_eager::<Mat<f64>>()
-                .unwrap();
+                let raw = LazyMatrix::<_>::from_column_parts(&matrix, None, None)
+                    .to_eager::<Mat<f64>>()
+                    .unwrap();
                 assert_eq!(raw.data()[(0, 0)].to_bits(), (-0.0_f64).to_bits());
-                let lazy = LazyMatrix::from_normalization(
-                    &matrix,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        1,
-                        Some(vec![1.0]),
-                        Some(vec![-2.0]),
-                    ),
-                );
+                let lazy =
+                    LazyMatrix::from_column_parts(&matrix, Some(vec![1.0]), Some(vec![-2.0]));
                 let eager = lazy.to_eager::<Mat<f64>>().unwrap();
                 assert_eq!(
                     eager.matvec(&Col::from_fn(1, |_| 1.0)).unwrap().as_ref()[0],
@@ -537,38 +510,18 @@ macro_rules! backend_suite {
                 use lazymatrix::MatVec;
                 let dense = Mat::from_fn(2, 2, |i, j| (2 * i + j + 1) as f64);
                 let pointer = dense.as_ref().col(0).as_ptr();
-                let eager = LazyMatrix::from_normalization(
-                    dense,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        2,
-                        Some(vec![1.0, 2.0]),
-                        None,
-                    ),
-                )
-                .into_eager();
+                let eager =
+                    LazyMatrix::from_column_parts(dense, Some(vec![1.0, 2.0]), None).into_eager();
                 assert_eq!(eager.data().as_ref().col(0).as_ptr(), pointer);
                 let mut storage = Mat::full(4, 4, 99.0);
                 {
                     let mut view = storage.as_mut().submatrix_mut(1, 1, 2, 2);
-                    let lazy = LazyMatrix::from_normalization(
-                        eager.data(),
-                        lazymatrix::ColumnNormalizationParams::from_parts(
-                            2,
-                            Some(vec![1.0, 1.0]),
-                            None,
-                        ),
-                    );
+                    let lazy =
+                        LazyMatrix::from_column_parts(eager.data(), Some(vec![1.0, 1.0]), None);
                     let borrowed = lazy.to_eager_into(&mut view).unwrap();
                     assert_eq!(borrowed.matvec(&Col::from_fn(2, |_| 1.0)).unwrap()[0], -2.0);
-                    let inplace = LazyMatrix::from_normalization(
-                        view,
-                        lazymatrix::ColumnNormalizationParams::from_parts(
-                            2,
-                            None,
-                            Some(vec![2.0, 2.0]),
-                        ),
-                    )
-                    .into_eager();
+                    let inplace = LazyMatrix::from_column_parts(view, None, Some(vec![2.0, 2.0]))
+                        .into_eager();
                     assert_eq!(inplace.matvec(&Col::from_fn(2, |_| 1.0)).unwrap()[0], -1.0);
                 }
                 assert_eq!(storage[(0, 0)], 99.0);
@@ -720,13 +673,10 @@ macro_rules! backend_suite {
                         },
                     );
                 let weights = weight_storage.row(1).transpose().reverse_rows();
-                let lazy = LazyMatrix::from_normalization(
+                let lazy = LazyMatrix::from_column_parts(
                     design,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        37,
-                        Some(vec![1e12; 37]),
-                        Some(vec![-2.0; 37]),
-                    ),
+                    Some(vec![1e12; 37]),
+                    Some(vec![-2.0; 37]),
                 );
                 let mut output = Mat::full(39, 39, -99.0);
                 {
@@ -785,13 +735,10 @@ macro_rules! backend_suite {
                     .transpose_mut()
                     .reverse_rows_mut()
                     .reverse_cols_mut();
-                let lazy = LazyMatrix::from_normalization(
+                let lazy = LazyMatrix::from_column_parts(
                     design,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        37,
-                        Some(vec![1e12; 37]),
-                        Some(vec![-2.0; 37]),
-                    ),
+                    Some(vec![1e12; 37]),
+                    Some(vec![-2.0; 37]),
                 );
                 let mut actual = common::GramOutput(vec![vec![f64::NAN; 38]; 38]);
                 WithIntercept::new(&lazy)
@@ -823,13 +770,10 @@ macro_rules! backend_suite {
                     raw,
                     Mat::from_fn(2, 2, |i, j| [[-2.0_f32, -6.0], [-6.0, -9.0]][i][j])
                 );
-                let lazy = LazyMatrix::from_normalization(
+                let lazy = LazyMatrix::from_column_parts(
                     dense,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        2,
-                        Some(vec![0.5, 1.0]),
-                        Some(vec![-2.0, 4.0]),
-                    ),
+                    Some(vec![0.5, 1.0]),
+                    Some(vec![-2.0, 4.0]),
                 );
                 let eager = lazy.to_eager::<Mat<f32>>().unwrap();
                 let mut expected = Mat::full(3, 3, f32::NAN);
@@ -866,14 +810,8 @@ macro_rules! backend_suite {
                     vec![2, 0, 2, 99],
                 );
                 let matrix = SparseColMat::new(symbolic, vec![0.25, 1.0, 0.75, 99.0]);
-                let lazy = LazyMatrix::from_normalization(
-                    &matrix,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        1,
-                        Some(vec![1.0]),
-                        Some(vec![-2.0]),
-                    ),
-                );
+                let lazy =
+                    LazyMatrix::from_column_parts(&matrix, Some(vec![1.0]), Some(vec![-2.0]));
                 let restricted = lazy.submatrix(0..3, 0..1);
                 let column = restricted.sparse_column(0);
                 assert_eq!(
@@ -913,13 +851,10 @@ macro_rules! backend_suite {
                     matrix.sparse_column(0),
                     (&[2, 0, 2][..], &[1.0, 0.0, -2.0][..])
                 );
-                let lazy = LazyMatrix::from_normalization(
+                let lazy = LazyMatrix::from_column_parts(
                     &matrix,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        2,
-                        Some(vec![1.0, 2.0]),
-                        Some(vec![2.0, -1.0]),
-                    ),
+                    Some(vec![1.0, 2.0]),
+                    Some(vec![2.0, -1.0]),
                 );
                 let mut out = Mat::full(2, 2, f64::NAN);
                 lazy.weighted_gram_into(&[0.5, 2.0, -1.0], &mut out.as_mut())
@@ -1001,13 +936,10 @@ macro_rules! backend_suite {
                     assert_eq!(values.as_ptr(), values_ptr);
                     assert_eq!(rows.sparse_row(1), (&[][..], &[][..]));
                     assert_eq!(rows.sparse_row(2), (&[1][..], &[-2.0][..]));
-                    let lazy = LazyMatrix::from_normalization(
+                    let lazy = LazyMatrix::from_column_parts(
                         rows,
-                        lazymatrix::ColumnNormalizationParams::from_parts(
-                            4,
-                            Some(vec![0.5; 4]),
-                            Some(vec![-2.0; 4]),
-                        ),
+                        Some(vec![0.5; 4]),
+                        Some(vec![-2.0; 4]),
                     );
                     let row = lazy.row(0);
                     assert_eq!(row.column_indices().as_ptr(), indices_ptr);
@@ -1026,15 +958,7 @@ macro_rules! backend_suite {
 
                 let csc = build(&common::random_matrix(76, 5, 3, 0.5));
                 let transposed = csc.as_ref().transpose();
-                let lazy = {
-                    let normalization_data = transposed;
-                    let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
-                        lazymatrix::MatrixShape::ncols(&normalization_data),
-                        None,
-                        None,
-                    );
-                    LazyMatrix::from_normalization(normalization_data, normalization_params)
-                };
+                let lazy = LazyMatrix::from_column_parts(transposed, None, None);
                 assert_eq!(MatrixShape::nrows(&transposed), 3);
                 assert_eq!(MatrixShape::ncols(&transposed), 5);
                 for i in 0..3 {
@@ -1063,13 +987,10 @@ macro_rules! backend_suite {
                 assert_eq!(values, &[1.0, 0.0, -2.0]);
                 assert_eq!(columns.as_ptr(), matrix.col_idx().as_ptr());
                 assert_eq!(values.as_ptr(), matrix.val().as_ptr());
-                let lazy = LazyMatrix::from_normalization(
+                let lazy = LazyMatrix::from_column_parts(
                     matrix,
-                    lazymatrix::ColumnNormalizationParams::from_parts(
-                        3,
-                        Some(vec![0.5, -1.0, 2.0]),
-                        Some(vec![2.0, -4.0, 0.5]),
-                    ),
+                    Some(vec![0.5, -1.0, 2.0]),
+                    Some(vec![2.0, -4.0, 0.5]),
                 );
                 let row = lazy.row(0);
                 assert_eq!(row.column_indices(), &[2, 0, 2]);
