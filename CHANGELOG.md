@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.0](https://github.com/jolars/lazymatrix/compare/v0.9.0...v0.10.0) (2026-10-30)
+
+### Breaking changes
+
+- simplify normalization constructors ([`6e72816`](https://github.com/jolars/lazymatrix/commit/6e728168531acc3aa7f7e1758a98020343d78615))
+- unify normalization operators ([`5d12a79`](https://github.com/jolars/lazymatrix/commit/5d12a79d24a6e1e99c44b8c6d0453187ffc46b78))
+- name column normalization types explicitly ([`0fc8486`](https://github.com/jolars/lazymatrix/commit/0fc8486fc3a9de1fb03f0755dbd62f432fe69efc))
+
+### Features
+
+- add dense row normalization ([`6bd0e0d`](https://github.com/jolars/lazymatrix/commit/6bd0e0db48adb1ea0af8ef7f0050f412f861d342))
+- **python:** expose normalization methods and parameters ([`c416f6d`](https://github.com/jolars/lazymatrix/commit/c416f6d8b50cd1c5d50ebc556037707239b883f4))
+- add raw indexed row selections ([`7d406a2`](https://github.com/jolars/lazymatrix/commit/7d406a25ec1fcb81da85316e42dcf54e7982a6b5))
+- support borrowed faer CSC views ([`ae3a867`](https://github.com/jolars/lazymatrix/commit/ae3a867dd62c86a1b6b9eccbebd4c87f55aa4061))
+
 ## [0.9.0](https://github.com/jolars/lazymatrix/compare/v0.8.1...v0.9.0) (2026-10-29)
 
 ### Breaking changes
