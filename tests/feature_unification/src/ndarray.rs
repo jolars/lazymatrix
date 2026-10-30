@@ -13,7 +13,7 @@ pub fn check() {
         )
         .unwrap();
         let eager = lazy.to_eager::<ndarray::Array2<f64>>().unwrap();
-        assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
+        assert_eq!(eager.normalization().centers(), Some(&[1.0, 3.0][..]));
         let result = eager.matvec(&array![2.0, -1.0]).unwrap();
         assert!((result[0] - 0.5).abs() < 1e-12);
         let mut destination = <ndarray::Array2<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);

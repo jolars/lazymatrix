@@ -147,18 +147,29 @@ fn allocating_forward_products_borrow_inputs_without_scaling() {
                 values: vec![2.0, 4.0],
                 counts: &counts,
             };
-            let lazy = LazyMatrix::from_parts(&source, centers.clone(), scales);
+            let lazy = {
+                let normalization_data = &source;
+                let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    centers.clone(),
+                    scales,
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let expected = common::dense_matvec(
                 &common::materialize(
                     &[vec![1.0, 2.0], vec![3.0, 4.0]],
-                    lazy.centers(),
-                    lazy.scales(),
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
                 ),
                 &x.values,
             );
             assert_eq!(lazy.matvec(&x).unwrap().values, expected);
             assert_eq!(x.values, [2.0, 4.0]);
-            assert_eq!(counts.clones.get(), usize::from(lazy.scales().is_some()));
+            assert_eq!(
+                counts.clones.get(),
+                usize::from(lazy.normalization().scales().is_some())
+            );
             assert_eq!(counts.dots.get(), usize::from(centers.is_some()));
             assert_eq!(counts.corrections.get(), usize::from(centers.is_some()));
         }
@@ -177,10 +188,16 @@ fn allocating_forward_errors_skip_centering_with_or_without_scaling() {
             values: vec![2.0, 4.0],
             counts: &counts,
         };
-        let lazy = LazyMatrix::from_parts(&source, Some(vec![1.0, 2.0]), scales);
+        let lazy = LazyMatrix::from_normalization(
+            &source,
+            lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 2.0]), scales),
+        );
         assert!(matches!(lazy.matvec(&x), Err(ReadError)));
         assert_eq!(x.values, [2.0, 4.0]);
-        assert_eq!(counts.clones.get(), usize::from(lazy.scales().is_some()));
+        assert_eq!(
+            counts.clones.get(),
+            usize::from(lazy.normalization().scales().is_some())
+        );
         assert_eq!(counts.dots.get(), 0);
         assert_eq!(counts.corrections.get(), 0);
     }
@@ -234,8 +251,11 @@ fn normalization_uses_borrowed_fused_hook_and_preserves_scale_policy() {
     let spec = ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 });
     let lazy = LazyMatrix::new(&source, spec).unwrap();
     assert_eq!(source.fused_calls.get(), 1);
-    assert_eq!(lazy.centers(), Some([1.0, 2.0].as_slice()));
-    assert_eq!(lazy.scales(), Some([1.0, f64::INFINITY].as_slice()));
+    assert_eq!(lazy.normalization().centers(), Some([1.0, 2.0].as_slice()));
+    assert_eq!(
+        lazy.normalization().scales(),
+        Some([1.0, f64::INFINITY].as_slice())
+    );
     source.fail.set(true);
     assert!(matches!(LazyMatrix::new(&source, spec), Err(ReadError)));
 }
@@ -246,7 +266,14 @@ fn product_errors_propagate_before_normalization_and_retry_overwrites() {
         fail: Cell::new(true),
         fused_calls: Cell::new(0),
     };
-    let lazy = LazyMatrix::from_parts(&source, Some(vec![1.0, 2.0]), Some(vec![2.0, 4.0]));
+    let lazy = LazyMatrix::from_normalization(
+        &source,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            2,
+            Some(vec![1.0, 2.0]),
+            Some(vec![2.0, 4.0]),
+        ),
+    );
     let x = vec![2.0, 4.0];
     let mut out = vec![99.0; 2];
     assert_eq!(lazy.matvec_into(&x, &mut out), Err(ReadError));

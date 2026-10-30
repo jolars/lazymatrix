@@ -113,13 +113,28 @@ where
                             .unwrap();
                     check_batched(
                         &lazy,
-                        &materialize(&tm.dense, lazy.centers(), lazy.scales()),
+                        &materialize(
+                            &tm.dense,
+                            lazy.normalization().centers(),
+                            lazy.normalization().scales(),
+                        ),
                     );
                 }
             }
         }
-        let lazy = LazyMatrix::from_parts(&matrix, Some(vec![0.75; p]), Some(vec![-2.; p]));
-        let normalized = materialize(&tm.dense, lazy.centers(), lazy.scales());
+        let lazy = LazyMatrix::from_normalization(
+            &matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                p,
+                Some(vec![0.75; p]),
+                Some(vec![-2.; p]),
+            ),
+        );
+        let normalized = materialize(
+            &tm.dense,
+            lazy.normalization().centers(),
+            lazy.normalization().scales(),
+        );
         check_batched(&lazy, &normalized);
         let augmented: Vec<Vec<f64>> = normalized
             .iter()
@@ -176,11 +191,15 @@ where
             Some(f32::INFINITY),
             Some(f32::NAN),
         ] {
-            let lazy = LazyMatrix::from_parts(
-                matrix,
-                centers.clone(),
-                scale.map(|s| vec![s; matrix.ncols()]),
-            );
+            let lazy = {
+                let normalization_data = matrix;
+                let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    centers.clone(),
+                    scale.map(|s| vec![s; matrix.ncols()]),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let coefficients = [
                 f32::NAN,
                 0.,

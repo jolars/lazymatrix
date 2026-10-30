@@ -41,11 +41,22 @@ macro_rules! backend_suite {
                 common::batched::check_batched(&build(&panels), &panels.dense);
                 let tm = common::random_matrix(73, 7, 3, 0.5);
                 let matrix = build(&tm);
-                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; 3]), Some(vec![-2.; 3]));
+                let lazy = LazyMatrix::from_normalization(
+                    &matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        3,
+                        Some(vec![1.; 3]),
+                        Some(vec![-2.; 3]),
+                    ),
+                );
                 let eager = lazy.to_eager::<DMatrix<f64>>().unwrap();
                 common::batched::check_batched(
                     &eager,
-                    &common::materialize(&tm.dense, lazy.centers(), lazy.scales()),
+                    &common::materialize(
+                        &tm.dense,
+                        lazy.normalization().centers(),
+                        lazy.normalization().scales(),
+                    ),
                 );
                 let rhs = DMatrix::from_fn(3, 2, |i, j| (i + j) as f64);
                 let view: DMatrixView<'_, f64> = rhs.as_view();
@@ -61,7 +72,10 @@ macro_rules! backend_suite {
                 let values: Vec<Vec<_>> = (0..3)
                     .map(|i| (0..2).map(|j| raw[(i, j)] - 1e12).collect())
                     .collect();
-                let centered = LazyMatrix::with_centers(raw, vec![1e12; 2]);
+                let centered = LazyMatrix::from_normalization(
+                    raw,
+                    lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1e12; 2]), None),
+                );
                 common::batched::check_batched(&centered, &values);
                 let rhs = DMatrix::from_fn(4, 4, |i, j| (i + j) as f64);
                 let input = rhs.view_with_steps((0, 0), (2, 2), (1, 1));
@@ -146,19 +160,42 @@ macro_rules! backend_suite {
                 common::check_materialize_f32(&matrix, &[2.0, 0.0, 0.0, 4.0]);
                 let dense = DMatrix::from_row_slice(2, 2, &[1.0, 2.0, 3.0, 4.0]);
                 let pointer = dense.as_ptr();
-                let eager = LazyMatrix::with_centers(dense, vec![1.0, 2.0]).into_eager();
+                let eager = LazyMatrix::from_normalization(
+                    dense,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![1.0, 2.0]),
+                        None,
+                    ),
+                )
+                .into_eager();
                 assert_eq!(eager.data().as_ptr(), pointer);
                 let mut storage = DMatrix::from_element(4, 4, 99.0);
                 {
                     let mut view = storage.view_mut((1, 1), (2, 2));
-                    let borrowed = LazyMatrix::with_centers(eager.data(), vec![1.0, 1.0])
-                        .to_eager_into(&mut view)
-                        .unwrap();
+                    let borrowed = LazyMatrix::from_normalization(
+                        eager.data(),
+                        lazymatrix::ColumnNormalizationParams::from_parts(
+                            2,
+                            Some(vec![1.0, 1.0]),
+                            None,
+                        ),
+                    )
+                    .to_eager_into(&mut view)
+                    .unwrap();
                     assert_eq!(
                         borrowed.matvec(&DVector::from_element(2, 1.0)).unwrap()[0],
                         -2.0
                     );
-                    let inplace = LazyMatrix::with_scales(view, vec![2.0, 2.0]).into_eager();
+                    let inplace = LazyMatrix::from_normalization(
+                        view,
+                        lazymatrix::ColumnNormalizationParams::from_parts(
+                            2,
+                            None,
+                            Some(vec![2.0, 2.0]),
+                        ),
+                    )
+                    .into_eager();
                     assert_eq!(
                         inplace.matvec(&DVector::from_element(2, 1.0)).unwrap()[0],
                         -1.0
@@ -250,7 +287,7 @@ macro_rules! backend_suite {
                     &storage.view_with_steps_mut((0, 0), (7, 3), (1, 1)),
                     to_dvec,
                 );
-                let normalized = lazymatrix::RowNormalizedMatrix::new(
+                let normalized = lazymatrix::LazyMatrix::new(
                     storage.view_with_steps((0, 0), (3, 2), (1, 1)),
                     lazymatrix::RowNormalization::standardize(),
                 )
@@ -361,7 +398,14 @@ macro_rules! backend_suite {
                 assert_eq!(values, &[0.0, -2.0]);
                 assert_eq!(columns.as_ptr(), matrix.col_indices()[1..].as_ptr());
                 assert_eq!(values.as_ptr(), matrix.values()[1..].as_ptr());
-                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![0.5; 4]), Some(vec![-2.0; 4]));
+                let lazy = LazyMatrix::from_normalization(
+                    &matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        4,
+                        Some(vec![0.5; 4]),
+                        Some(vec![-2.0; 4]),
+                    ),
+                );
                 let row = lazy.row(1);
                 assert_eq!(row.column_indices().as_ptr(), columns.as_ptr());
                 assert_eq!(row.values().as_ptr(), values.as_ptr());

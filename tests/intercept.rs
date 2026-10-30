@@ -364,7 +364,14 @@ impl MatrixWrite<f64> for Output {
 #[test]
 fn products_preserve_intercept_after_normalization_and_forward_errors() {
     let source = Source::new(2, 2, vec![1.0, 2.0, 3.0, 4.0]);
-    let lazy = LazyMatrix::from_parts(&source, Some(vec![1.0, 2.0]), Some(vec![2.0, 4.0]));
+    let lazy = LazyMatrix::from_normalization(
+        &source,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            2,
+            Some(vec![1.0, 2.0]),
+            Some(vec![2.0, 4.0]),
+        ),
+    );
     let matrix = WithIntercept::new(&lazy);
     assert_eq!((matrix.nrows(), matrix.ncols()), (2, 3));
     assert!(std::ptr::eq(*matrix.as_inner(), &lazy));
@@ -428,7 +435,10 @@ fn invalid_dimensions_panic_before_backend_calls_or_writes() {
 #[test]
 fn gram_preserves_intercept_until_both_predictor_operations_succeed() {
     let source = Source::new(2, 2, vec![1.0, 2.0, 3.0, 4.0]);
-    let matrix = WithIntercept::new(LazyMatrix::from_parts(&source, Some(vec![1.0, 2.0]), None));
+    let matrix = WithIntercept::new(LazyMatrix::from_normalization(
+        &source,
+        lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 2.0]), None),
+    ));
     let mut out = Output([[99.0; 3]; 3]);
     source.fail.set(true);
     assert_eq!(

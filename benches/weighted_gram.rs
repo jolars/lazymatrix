@@ -2,8 +2,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lazymatrix::{
-    ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc, WeightedColumnSumsInto,
-    WeightedGramInto, WithIntercept,
+    ColumnNormalizationParams, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc,
+    WeightedColumnSumsInto, WeightedGramInto, WithIntercept,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -41,12 +41,24 @@ fn benchmark_gram(c: &mut Criterion) {
             let faer_weights = faer::Col::from_fn(n, |i| weights[i]);
             for centered in [false, true] {
                 let centers = centered.then(|| matrix.col_means().unwrap());
-                let dense = LazyMatrix::from_parts(matrix.view(), centers.clone(), None);
-                let sparse = LazyMatrix::from_parts(
-                    SprsCsc::try_new(csc.view()).unwrap(),
-                    centers.clone(),
-                    None,
-                );
+                let dense = {
+                    let normalization_data = matrix.view();
+                    let normalization_params = ColumnNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::ncols(&normalization_data),
+                        centers.clone(),
+                        None,
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
+                let sparse = {
+                    let normalization_data = SprsCsc::try_new(csc.view()).unwrap();
+                    let normalization_params = ColumnNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::ncols(&normalization_data),
+                        centers.clone(),
+                        None,
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
                 let case = format!("{n}x{p}/density_{density}/centered_{centered}");
                 let mut out = Array2::zeros((p, p));
                 group.bench_function(BenchmarkId::new("dense", &case), |b| {
@@ -73,7 +85,15 @@ fn benchmark_gram(c: &mut Criterion) {
                 });
                 #[cfg(feature = "faer_all")]
                 {
-                    let dense = LazyMatrix::from_parts(faer_matrix.as_ref(), centers.clone(), None);
+                    let dense = {
+                        let normalization_data = faer_matrix.as_ref();
+                        let normalization_params = ColumnNormalizationParams::from_parts(
+                            lazymatrix::MatrixShape::ncols(&normalization_data),
+                            centers.clone(),
+                            None,
+                        );
+                        LazyMatrix::from_normalization(normalization_data, normalization_params)
+                    };
                     let mut out = faer::Mat::zeros(p, p);
                     group.bench_function(BenchmarkId::new("faer_dense", &case), |b| {
                         b.iter(|| {

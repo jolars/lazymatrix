@@ -1,90 +1,105 @@
 use crate::column::{LazyColumn, LazySparseColumn, SparseColumnRef};
-use crate::normalization::{ColumnNormalization, ColumnNormalizationParams};
+use crate::normalization::{ColumnNormalizationParams, NormalizationParams, NormalizationRecipe};
 use crate::row::LazyRow;
 use crate::traits::{
-    ColumnStats, Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
+    Columns, DotSlice, ElemDivAssign, MatTransposeVec, MatTransposeVecInto,
     MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto, MatrixShape, RawColumns,
     Scalar, ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SumEntries, VectorOwned,
     VectorView, VectorViewMut,
 };
 
-/// A matrix presented with lazy column normalization `X̃ = (X − 1cᵀ)S⁻¹`.
+mod row;
+
+/// A matrix presented with lazy row or column normalization.
 ///
 /// The underlying matrix `data` is never modified or densified; the centers and
 /// scales are folded into the matrix–vector products on the fly. See the
 /// [crate-level documentation](crate) for the math.
 ///
-/// `centers` and `scales` are each `None` when that axis of normalization is
-/// inactive. When present, each has length `ncols`, and no scale equals zero.
-/// Negative scales and nonfinite normalization parameters are allowed.
+/// The fitted parameter type selects the axis and scalar. Column normalization
+/// retains the backend's existing operator capabilities. Row fitting and vector
+/// products require [`crate::MatrixRead`] and currently support dense storage
+/// only. See [`crate::RowNormalization`] for the row capability limits.
+///
+/// Access centers and scales through [`Self::normalization`]. Each component is
+/// independently optional. Negative scales and nonfinite values are preserved.
+///
+/// ```
+/// # #[cfg(feature = "ndarray_v0_17")]
+/// # {
+/// use lazymatrix::{ColumnNormalization, LazyMatrix, RowNormalization};
+/// use ndarray::array;
+///
+/// let data = array![[1.0, 3.0], [10.0, 14.0]];
+/// let columns = LazyMatrix::new(data.view(), ColumnNormalization::standardize()).unwrap();
+/// let rows = LazyMatrix::new(data.view(), RowNormalization::standardize()).unwrap();
+/// assert_eq!(columns.normalization().centers(), Some([5.5, 8.5].as_slice()));
+/// assert_eq!(rows.normalization().centers(), Some([2.0, 12.0].as_slice()));
+/// let (raw, params) = rows.into_parts();
+/// let rows = LazyMatrix::from_normalization(raw, params);
+/// # }
+/// ```
 #[derive(Clone, Debug)]
-pub struct LazyMatrix<M, F = f64> {
+pub struct LazyMatrix<M, P = ColumnNormalizationParams<f64>> {
     data: M,
-    normalization: ColumnNormalizationParams<F>,
+    normalization: P,
 }
 
-impl<M, F: Scalar> LazyMatrix<M, F>
-where
-    M: MatrixShape,
-{
-    /// Construct from an explicit center and/or scale vector.
+impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
+    /// Fit row or column parameters according to the recipe.
     ///
-    /// Parameters are preserved unchanged, including negative scales and
-    /// nonfinite values. Unlike [`Self::new`], this constructor rejects exact
-    /// zero scales rather than replacing them with one.
+    /// Scales use centered values when centering is active. Exact computed zero
+    /// scales become one; negative and nonfinite values are preserved. Column
+    /// recipes use [`crate::ColumnStats`], while row recipes require dense
+    /// indexed access through [`crate::MatrixRead`].
     ///
-    /// # Panics
-    /// Panics if a provided `centers`/`scales` vector does not have length
-    /// `ncols`, or if a scale is `+0.0` or `-0.0`. The zero-scale panic reports
-    /// the zero-based column index.
-    pub fn from_parts(data: M, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
-        let normalization = ColumnNormalizationParams::from_parts(data.ncols(), centers, scales);
-        Self::from_normalization(data, normalization)
+    /// # Errors
+    /// Returns the backend error if computing normalization statistics fails.
+    pub fn new<R>(data: M, recipe: R) -> Result<Self, M::Error>
+    where
+        M: crate::MatrixErrorType,
+        R: NormalizationRecipe<M, P>,
+    {
+        let normalization = recipe.fit(&data)?;
+        Ok(Self::from_normalization(data, normalization))
     }
 
-    /// Wrap raw data using previously fitted parameters.
+    /// Wrap raw data using explicit or previously fitted parameters.
+    ///
+    /// Parameters are applied unchanged, without fitting or copying. Column
+    /// parameters can be reused on new samples with the same column count. Row
+    /// parameters describe particular rows; fit new samples independently.
     ///
     /// # Panics
-    /// Panics if the matrix column count differs from the fitted column count.
-    pub fn from_normalization(data: M, normalization: ColumnNormalizationParams<F>) -> Self {
-        assert_eq!(
-            data.ncols(),
-            normalization.ncols(),
-            "normalization column count must equal ncols"
-        );
+    /// Panics if the matrix dimension along the fitted axis differs from the
+    /// parameter count. Constructing parameter objects rejects exact zero scales.
+    pub fn from_normalization(data: M, normalization: P) -> Self {
+        normalization.assert_shape(data.nrows(), data.ncols());
         Self {
             data,
             normalization,
         }
     }
+}
 
-    /// Borrow fitted parameters for reuse on prediction data.
-    pub fn normalization(&self) -> &ColumnNormalizationParams<F> {
+impl<M, P> LazyMatrix<M, P> {
+    /// Borrow the fitted parameters without copying.
+    pub fn normalization(&self) -> &P {
         &self.normalization
     }
 
-    /// Wrap a matrix with column centering only.
-    ///
-    /// Centers are preserved unchanged, including nonfinite values.
-    ///
-    /// # Panics
-    /// Panics if `centers.len() != ncols`.
-    pub fn with_centers(data: M, centers: Vec<F>) -> Self {
-        Self::from_parts(data, Some(centers), None)
+    /// Borrow the underlying unnormalized matrix.
+    pub fn data(&self) -> &M {
+        &self.data
     }
 
-    /// Wrap a matrix with column scaling only.
-    ///
-    /// Scales are preserved unchanged, including negative and nonfinite values.
-    /// Exact zero scales are rejected, as in [`Self::from_parts`].
-    ///
-    /// # Panics
-    /// Panics if `scales.len() != ncols`, or if a scale is `+0.0` or `-0.0`.
-    /// The zero-scale panic reports the zero-based column index.
-    pub fn with_scales(data: M, scales: Vec<F>) -> Self {
-        Self::from_parts(data, None, Some(scales))
+    /// Recover the underlying matrix and fitted parameters without copying.
+    pub fn into_parts(self) -> (M, P) {
+        (self.data, self.normalization)
     }
+}
 
+impl<M: MatrixShape, P> LazyMatrix<M, P> {
     /// Number of rows of the logical normalized matrix.
     pub fn nrows(&self) -> usize {
         self.data.nrows()
@@ -94,22 +109,9 @@ where
     pub fn ncols(&self) -> usize {
         self.data.ncols()
     }
+}
 
-    /// The column centers `c`, if centering is active.
-    pub fn centers(&self) -> Option<&[F]> {
-        self.normalization.centers.as_deref()
-    }
-
-    /// The column scales `s`, if scaling is active.
-    pub fn scales(&self) -> Option<&[F]> {
-        self.normalization.scales.as_deref()
-    }
-
-    /// Borrow the underlying (un-normalized) matrix.
-    pub fn data(&self) -> &M {
-        &self.data
-    }
-
+impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
     /// Borrow one lazily normalized column without copying.
     pub fn column(&self, j: usize) -> LazyColumn<M::Column<'_>, F>
     where
@@ -118,14 +120,8 @@ where
         assert!(j < self.ncols(), "column index out of bounds");
         LazyColumn::new(
             self.data.raw_column(j),
-            self.normalization
-                .centers
-                .as_ref()
-                .map_or_else(F::zero, |c| c[j]),
-            self.normalization
-                .scales
-                .as_ref()
-                .map_or_else(F::one, |s| s[j]),
+            self.normalization.centers().map_or_else(F::zero, |c| c[j]),
+            self.normalization.scales().map_or_else(F::one, |s| s[j]),
         )
     }
 
@@ -138,14 +134,8 @@ where
         let (row_indices, values) = self.data.sparse_column(j);
         LazyColumn::new(
             SparseColumnRef::new(row_indices, values, self.nrows()),
-            self.normalization
-                .centers
-                .as_ref()
-                .map_or_else(F::zero, |c| c[j]),
-            self.normalization
-                .scales
-                .as_ref()
-                .map_or_else(F::one, |s| s[j]),
+            self.normalization.centers().map_or_else(F::zero, |c| c[j]),
+            self.normalization.scales().map_or_else(F::one, |s| s[j]),
         )
     }
 
@@ -159,12 +149,15 @@ where
     /// ```
     /// # #[cfg(feature = "sprs_all")]
     /// # {
-    /// use lazymatrix::{LazyMatrix, SprsCsr};
+    /// use lazymatrix::{ColumnNormalizationParams, LazyMatrix, SprsCsr};
     /// use sprs::CsMat;
     ///
     /// let x = CsMat::new((1, 3), vec![0, 2], vec![0, 2], vec![1.0, 0.0]);
     /// let csr = SprsCsr::try_new(x.view()).unwrap();
-    /// let lazy = LazyMatrix::from_parts(csr, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]));
+    /// let params = ColumnNormalizationParams::from_parts(
+    ///     3, Some(vec![0.5, -1.0, 2.0]), Some(vec![2.0; 3]),
+    /// );
+    /// let lazy = LazyMatrix::from_normalization(csr, params);
     /// let row = lazy.row(0);
     /// assert_eq!(row.len(), 3);
     /// assert_eq!(row.column_indices(), &[0, 2]);
@@ -197,52 +190,13 @@ where
             column_indices,
             values,
             self.ncols(),
-            self.centers(),
-            self.scales(),
-        )
-    }
-
-    /// Consume the wrapper, returning the underlying matrix and the
-    /// center/scale vectors.
-    pub fn into_parts(self) -> (M, Option<Vec<F>>, Option<Vec<F>>) {
-        (
-            self.data,
-            self.normalization.centers,
-            self.normalization.scales,
+            self.normalization.centers(),
+            self.normalization.scales(),
         )
     }
 }
 
-impl<M, F: Scalar> LazyMatrix<M, F>
-where
-    M: ColumnStats<F> + MatrixShape,
-{
-    /// Construct by **computing** the centers and scales from `data` according
-    /// to `spec`.
-    ///
-    /// When both centering and scaling are requested, scales are computed from
-    /// the *centered* columns. Standard deviation, range, and quantile range are
-    /// centering-invariant; `L1`, `L2`, and `MaxAbs` use sparse closed-form
-    /// centered variants.
-    ///
-    /// An exact zero scale (e.g. a constant column whose standard deviation is
-    /// zero) is replaced with `1`, so the resulting operator never divides by
-    /// zero. Nonfinite statistics retain their IEEE values and propagate through
-    /// subsequent operations.
-    ///
-    /// # Errors
-    /// Returns the backend error if computing normalization statistics fails.
-    pub fn new(data: M, spec: ColumnNormalization) -> Result<Self, M::Error> {
-        let (centers, scales) = data.normalization_stats(spec)?;
-        Ok(Self::from_parts(
-            data,
-            centers,
-            scales.map(replace_zero_scales),
-        ))
-    }
-}
-
-impl<M, F> MatrixShape for LazyMatrix<M, F>
+impl<M, P> MatrixShape for LazyMatrix<M, P>
 where
     M: MatrixShape,
 {
@@ -255,7 +209,7 @@ where
     }
 }
 
-impl<M, F> Columns<F> for LazyMatrix<M, F>
+impl<M, F> Columns<F> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: RawColumns<F>,
@@ -270,24 +224,7 @@ where
     }
 }
 
-/// Replace exact zero entries with `1`, leaving nonfinite values untouched.
-///
-/// Mirrors the zero-variance guard used in standard penalized-regression
-/// preprocessing: a constant column has scale `0`, which would otherwise produce
-/// a division by zero; replacing it with `1` makes that column a no-op under
-/// scaling.
-fn replace_zero_scales<F: Scalar>(mut scales: Vec<F>) -> Vec<F> {
-    let one = F::one();
-    let zero = F::zero();
-    for s in &mut scales {
-        if *s == zero {
-            *s = one;
-        }
-    }
-    scales
-}
-
-impl<M, V, F> MatVec<V> for LazyMatrix<M, F>
+impl<M, V, F> MatVec<V> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: MatVec<V>,
@@ -296,11 +233,11 @@ where
     /// `X̃ v = X (S⁻¹ v) − 1 · (cᵀ S⁻¹ v)`.
     fn matvec(&self, v: &V) -> Result<V, Self::Error> {
         self.data
-            .matvec_normalized(v, self.centers(), self.scales())
+            .matvec_normalized(v, self.normalization.centers(), self.normalization.scales())
     }
 }
 
-impl<M, X, Y, F> MatVecInto<X, Y> for LazyMatrix<M, F>
+impl<M, X, Y, F> MatVecInto<X, Y> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: MatVecInto<X, Y>,
@@ -309,12 +246,16 @@ where
 {
     /// `out = X̃ v = X (S⁻¹ v) − 1 · (cᵀ S⁻¹ v)`.
     fn matvec_into(&self, v: &X, out: &mut Y) -> Result<(), Self::Error> {
-        self.data
-            .matvec_normalized_into(v, self.centers(), self.scales(), out)
+        self.data.matvec_normalized_into(
+            v,
+            self.normalization.centers(),
+            self.normalization.scales(),
+            out,
+        )
     }
 }
 
-impl<M, V, F> MatTransposeVec<V> for LazyMatrix<M, F>
+impl<M, V, F> MatTransposeVec<V> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: MatTransposeVec<V>,
@@ -322,12 +263,15 @@ where
 {
     /// `X̃ᵀ u = S⁻¹ (Xᵀ u − c · Σu)`.
     fn mat_transpose_vec(&self, u: &V) -> Result<V, Self::Error> {
-        self.data
-            .mat_transpose_vec_normalized(u, self.centers(), self.scales())
+        self.data.mat_transpose_vec_normalized(
+            u,
+            self.normalization.centers(),
+            self.normalization.scales(),
+        )
     }
 }
 
-impl<M, X, Y, F> MatTransposeVecInto<X, Y> for LazyMatrix<M, F>
+impl<M, X, Y, F> MatTransposeVecInto<X, Y> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: MatTransposeVecInto<X, Y>,
@@ -336,12 +280,16 @@ where
 {
     /// `out = X̃ᵀ u = S⁻¹ (Xᵀ u − c · Σu)`.
     fn mat_transpose_vec_into(&self, u: &X, out: &mut Y) -> Result<(), Self::Error> {
-        self.data
-            .mat_transpose_vec_normalized_into(u, self.centers(), self.scales(), out)
+        self.data.mat_transpose_vec_normalized_into(
+            u,
+            self.normalization.centers(),
+            self.normalization.scales(),
+            out,
+        )
     }
 }
 
-impl<M, F: Scalar> LazyMatrix<M, F>
+impl<M, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     M: MatrixShape,
 {
@@ -381,8 +329,8 @@ where
             alpha,
             x,
             beta,
-            self.centers(),
-            self.scales(),
+            self.normalization.centers(),
+            self.normalization.scales(),
             out,
         ) {
             return result;
@@ -457,8 +405,8 @@ where
             alpha,
             x,
             beta,
-            self.centers(),
-            self.scales(),
+            self.normalization.centers(),
+            self.normalization.scales(),
             out,
         ) {
             return result;
@@ -511,7 +459,7 @@ where
     }
 }
 
-impl<M, X, Y, F> MatVecScaledInto<X, Y, F> for LazyMatrix<M, F>
+impl<M, X, Y, F> MatVecScaledInto<X, Y, F> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     X: VectorOwned<F>,
@@ -533,8 +481,8 @@ where
             alpha,
             x,
             beta,
-            self.centers(),
-            self.scales(),
+            self.normalization.centers(),
+            self.normalization.scales(),
             out,
         ) {
             return result;
@@ -560,7 +508,7 @@ where
     }
 }
 
-impl<M, X, Y, F> MatTransposeVecScaledInto<X, Y, F> for LazyMatrix<M, F>
+impl<M, X, Y, F> MatTransposeVecScaledInto<X, Y, F> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     X: VectorView<F>,
@@ -588,8 +536,8 @@ where
             alpha,
             x,
             beta,
-            self.centers(),
-            self.scales(),
+            self.normalization.centers(),
+            self.normalization.scales(),
             out,
         ) {
             return result;
@@ -616,11 +564,11 @@ where
     }
 }
 
-impl<M: crate::MatrixErrorType, F> crate::MatrixErrorType for LazyMatrix<M, F> {
+impl<M: crate::MatrixErrorType, P> crate::MatrixErrorType for LazyMatrix<M, P> {
     type Error = M::Error;
 }
 
-impl<M, F> crate::WeightedGramInto<F> for LazyMatrix<M, F>
+impl<M, F> crate::WeightedGramInto<F> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: crate::WeightedGramKernel<F>,
@@ -634,16 +582,20 @@ where
             self.nrows(),
             self.ncols(),
             weights,
-            self.centers(),
-            self.scales(),
+            self.normalization.centers(),
+            self.normalization.scales(),
             out,
         );
-        self.data
-            .weighted_gram_normalized_into(weights, self.centers(), self.scales(), out)
+        self.data.weighted_gram_normalized_into(
+            weights,
+            self.normalization.centers(),
+            self.normalization.scales(),
+            out,
+        )
     }
 }
 
-impl<M, F> crate::WeightedColumnSumsInto<F> for LazyMatrix<M, F>
+impl<M, F> crate::WeightedColumnSumsInto<F> for LazyMatrix<M, ColumnNormalizationParams<F>>
 where
     F: Scalar,
     M: crate::WeightedColumnSumsKernel<F>,
@@ -657,16 +609,20 @@ where
             self.nrows(),
             self.ncols(),
             weights,
-            self.centers(),
-            self.scales(),
+            self.normalization.centers(),
+            self.normalization.scales(),
             out,
         );
-        self.data
-            .weighted_column_sums_normalized_into(weights, self.centers(), self.scales(), out)
+        self.data.weighted_column_sums_normalized_into(
+            weights,
+            self.normalization.centers(),
+            self.normalization.scales(),
+            out,
+        )
     }
 }
 
-impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, F> {
+impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
     /// Allocate normalized dense storage in the selected backend.
     ///
     /// Sparse and storage-backed inputs are explicitly materialized. Fitted
@@ -676,12 +632,22 @@ impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, F> {
     ///
     /// # Errors
     /// Returns the source error if reading the matrix fails.
-    pub fn to_eager<D: crate::MatrixOwned<F>>(&self) -> Result<crate::EagerMatrix<D, F>, M::Error> {
+    pub fn to_eager<D: crate::MatrixOwned<F>>(
+        &self,
+    ) -> Result<crate::EagerMatrix<D, ColumnNormalizationParams<F>>, M::Error> {
         crate::materialize::validate_allocation::<F>(self.nrows(), self.ncols());
         let mut data = D::zeros(self.nrows(), self.ncols());
-        crate::materialize::validate_output(self, &data, self.centers(), self.scales());
-        self.data
-            .materialize_normalized_into(self.centers(), self.scales(), &mut data)?;
+        crate::materialize::validate_output(
+            self,
+            &data,
+            self.normalization.centers(),
+            self.normalization.scales(),
+        );
+        self.data.materialize_normalized_into(
+            self.normalization.centers(),
+            self.normalization.scales(),
+            &mut data,
+        )?;
         Ok(crate::EagerMatrix::from_normalized(
             data,
             self.normalization.clone(),
@@ -714,10 +680,18 @@ impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, F> {
     pub fn to_eager_into<'a, D: crate::MatrixWrite<F> + ?Sized>(
         &self,
         out: &'a mut D,
-    ) -> Result<crate::EagerMatrix<&'a mut D, F>, M::Error> {
-        crate::materialize::validate_output(self, out, self.centers(), self.scales());
-        self.data
-            .materialize_normalized_into(self.centers(), self.scales(), out)?;
+    ) -> Result<crate::EagerMatrix<&'a mut D, ColumnNormalizationParams<F>>, M::Error> {
+        crate::materialize::validate_output(
+            self,
+            out,
+            self.normalization.centers(),
+            self.normalization.scales(),
+        );
+        self.data.materialize_normalized_into(
+            self.normalization.centers(),
+            self.normalization.scales(),
+            out,
+        )?;
         Ok(crate::EagerMatrix::from_normalized(
             out,
             self.normalization.clone(),
@@ -725,7 +699,7 @@ impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, F> {
     }
 }
 
-impl<M: crate::DenseNormalize<F>, F: Scalar> LazyMatrix<M, F> {
+impl<M: crate::DenseNormalize<F>, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
     /// Consume writable dense data, normalizing it in its existing allocation.
     ///
     /// Mutable views modify their borrowed storage. All statistics have already
@@ -739,7 +713,7 @@ impl<M: crate::DenseNormalize<F>, F: Scalar> LazyMatrix<M, F> {
     ///     let _ = matrix.into_eager();
     /// }
     /// ```
-    pub fn into_eager(mut self) -> crate::EagerMatrix<M, F> {
+    pub fn into_eager(mut self) -> crate::EagerMatrix<M, ColumnNormalizationParams<F>> {
         self.data
             .normalize_in_place(self.normalization.centers(), self.normalization.scales());
         crate::EagerMatrix::from_normalized(self.data, self.normalization)

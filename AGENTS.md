@@ -27,13 +27,20 @@ solver state, and update rules outside the library and its correctness suites.
 
 ## Normalization and Numerical Invariants
 
-`LazyMatrix` represents a normalized design matrix as a linear operator:
+`LazyMatrix<M, P>` stores raw data and typed fitted parameters. Column
+normalization represents the design matrix as a linear operator:
 
 ```text
 X_tilde = (X - 1c^T) S^-1
 X_tilde v = X(S^-1 v) - 1(c^T S^-1 v)
 X_tilde^T u = S^-1(X^T u - c sum(u))
 ```
+
+Row normalization uses `D^-1(X - r1^T)` and currently supports dense fitting
+and vector products only. Select the axis through `ColumnNormalizationParams`
+or `RowNormalizationParams`, and inspect centers and scales through
+`normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`
+from `into_parts()`.
 
 Centering and scaling are independently optional. Lazy operations must preserve
 sparse storage and never materialize the full normalized design matrix. Explicit

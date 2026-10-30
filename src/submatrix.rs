@@ -56,7 +56,7 @@ use crate::{
 /// ```
 #[derive(Debug)]
 pub struct Submatrix<'a, M, F = f64> {
-    parent: &'a LazyMatrix<M, F>,
+    parent: &'a LazyMatrix<M, ColumnNormalizationParams<F>>,
     rows: Range<usize>,
     columns: Range<usize>,
 }
@@ -86,7 +86,7 @@ pub(crate) fn validate_ranges(
     );
 }
 
-impl<M: MatrixShape, F: Scalar> LazyMatrix<M, F> {
+impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
     /// Borrow a rectangle of this normalized matrix without refitting parameters.
     ///
     /// Empty ranges are allowed. Construction reads no entries and allocates
@@ -116,11 +116,17 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
     }
     /// Borrow the selected columns' original centers.
     pub fn centers(&self) -> Option<&'a [F]> {
-        self.parent.centers().map(|v| &v[self.columns.clone()])
+        self.parent
+            .normalization()
+            .centers()
+            .map(|v| &v[self.columns.clone()])
     }
     /// Borrow the selected columns' original scales.
     pub fn scales(&self) -> Option<&'a [F]> {
-        self.parent.scales().map(|v| &v[self.columns.clone()])
+        self.parent
+            .normalization()
+            .scales()
+            .map(|v| &v[self.columns.clone()])
     }
     /// Select a rectangle using coordinates relative to this view.
     ///
@@ -265,7 +271,9 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
     /// Requires O(selected rows * selected columns) output storage. Only the
     /// selected fitted parameters are cloned; no statistics are recomputed.
     /// Returns the source error on failure.
-    pub fn to_eager<D: MatrixOwned<F>>(&self) -> Result<EagerMatrix<D, F>, M::Error> {
+    pub fn to_eager<D: MatrixOwned<F>>(
+        &self,
+    ) -> Result<EagerMatrix<D, ColumnNormalizationParams<F>>, M::Error> {
         crate::materialize::validate_allocation::<F>(self.nrows(), self.ncols());
         let mut data = D::zeros(self.nrows(), self.ncols());
         self.parent.data().materialize_submatrix_into(
@@ -288,7 +296,7 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
     pub fn to_eager_into<'b, D: MatrixWrite<F> + ?Sized>(
         &self,
         out: &'b mut D,
-    ) -> Result<EagerMatrix<&'b mut D, F>, M::Error> {
+    ) -> Result<EagerMatrix<&'b mut D, ColumnNormalizationParams<F>>, M::Error> {
         crate::materialize::validate_output(self, out, self.centers(), self.scales());
         self.parent.data().materialize_submatrix_into(
             self.rows.clone(),

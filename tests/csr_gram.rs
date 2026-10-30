@@ -30,7 +30,15 @@ fn check(
     weights: &[f64],
 ) {
     let csr = SprsCsr::try_new(matrix.view()).unwrap();
-    let lazy = LazyMatrix::from_parts(csr, centers.clone(), scales.clone());
+    let lazy = {
+        let normalization_data = csr;
+        let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            centers.clone(),
+            scales.clone(),
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let p = matrix.cols();
     let mut out = Output {
         size: p,
@@ -127,7 +135,10 @@ fn csr_gram_accepts_sliced_views_and_validates_before_writing() {
         vec![9.0, 2.0, 3.0, 7.0],
     );
     let csr = SprsCsr::try_new(matrix.slice_outer(1..3)).unwrap();
-    let lazy = LazyMatrix::from_parts(csr, Some(vec![1.0, 2.0]), None);
+    let lazy = LazyMatrix::from_normalization(
+        csr,
+        lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 2.0]), None),
+    );
     let mut out = Output {
         size: 2,
         values: vec![99.0; 4],

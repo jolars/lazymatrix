@@ -2,8 +2,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use lazymatrix::{
-    Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto,
-    Scaling, SprsCsc,
+    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnStats, LazyMatrix,
+    MatTransposeVecInto, MatVecInto, Scaling, SprsCsc,
 };
 
 #[path = "../tests/common/backend_aliases.rs"]
@@ -62,7 +62,10 @@ fn benchmark_weighted_norms(c: &mut Criterion) {
         let matrix = sprs::CsMat::new_csc((nrows, 1), vec![0, rows.len()], rows, values);
         let matrix = SprsCsc::try_new(matrix.view()).unwrap();
         for center in [0.0, 0.5] {
-            let lazy = LazyMatrix::from_parts(&matrix, Some(vec![center]), Some(vec![2.0]));
+            let lazy = LazyMatrix::from_normalization(
+                &matrix,
+                ColumnNormalizationParams::from_parts(1, Some(vec![center]), Some(vec![2.0])),
+            );
             let column = lazy.column(0);
             let case = format!("stride_{stride}_center_{center}");
             group.bench_function(BenchmarkId::new("direct", &case), |b| {

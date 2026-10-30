@@ -203,7 +203,7 @@ impl Storage {
             )
         };
         // Normalize only the gathered row or column, preserving the core's IEEE semantics.
-        let (values, _, _) = LazyMatrix::from_normalization(raw, params)
+        let (values, _) = LazyMatrix::from_normalization(raw, params)
             .into_eager()
             .into_parts();
         let len = if transpose { ncols } else { nrows };

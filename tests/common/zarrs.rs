@@ -46,7 +46,14 @@ fn batched_products_scan_once_and_discard_failed_normalization() {
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);
         let (n, p) = (matrix.nrows(), matrix.ncols());
-        let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; p]), Some(vec![2.; p]));
+        let lazy = LazyMatrix::from_normalization(
+            &matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                p,
+                Some(vec![1.; p]),
+                Some(vec![2.; p]),
+            ),
+        );
         store.reset();
         let view = Transpose::new(&lazy);
         assert_scans(&store, &matrix, 0);
@@ -145,7 +152,10 @@ fn batched_products_preserve_nonzero_fill_and_exclude_edge_padding() {
         .build(Arc::new(MemoryStore::new()), "/batched-fill")
         .unwrap();
     let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
-    let lazy = LazyMatrix::from_parts(matrix, Some(vec![1.; 2]), Some(vec![2.; 2]));
+    let lazy = LazyMatrix::from_normalization(
+        matrix,
+        lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.; 2]), Some(vec![2.; 2])),
+    );
     let rhs = DenseBlock::new(&[1.; 8], 2, 4);
     let out: common::MaterializeOutput = lazy.matmat(&rhs).unwrap();
     assert!(out.values.iter().all(|&v| v == 4.));
@@ -272,10 +282,13 @@ fn submatrices_read_only_intersecting_chunks_and_inherit_parameters() {
     use lazymatrix::{MatrixOwned, WeightedColumnSumsInto, WeightedGramInto};
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);
-        let lazy = LazyMatrix::from_parts(
+        let lazy = LazyMatrix::from_normalization(
             &matrix,
-            Some(vec![f64::NAN, f64::NAN, 3.0]),
-            Some(vec![f64::NAN, f64::NAN, -2.0]),
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                3,
+                Some(vec![f64::NAN, f64::NAN, 3.0]),
+                Some(vec![f64::NAN, f64::NAN, -2.0]),
+            ),
         );
         let view = lazy.submatrix(1..5, 1..3).submatrix(2..4, 1..2);
         assert!(store.keys.lock().unwrap().is_empty());
@@ -300,8 +313,8 @@ fn submatrices_read_only_intersecting_chunks_and_inherit_parameters() {
         );
         let eager = check_reads!(view.to_eager::<common::MaterializeOutput>().unwrap());
         assert_eq!(eager.data().values, [-4.5, -6.0]);
-        assert_eq!(eager.centers().unwrap(), &[3.0]);
-        assert_eq!(eager.scales().unwrap(), &[-2.0]);
+        assert_eq!(eager.normalization().centers().unwrap(), &[3.0]);
+        assert_eq!(eager.normalization().scales().unwrap(), &[-2.0]);
         let mut sums = [f64::NAN];
         check_reads!(
             view.weighted_column_sums_into(&[-1.0, 2.0], &mut sums)
@@ -319,7 +332,14 @@ fn submatrix_failures_stop_reads_and_outputs_can_be_reused() {
     use lazymatrix::{MatrixOwned, WeightedColumnSumsInto, WeightedGramInto};
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);
-        let lazy = LazyMatrix::from_parts(&matrix, Some(vec![3.0; 3]), Some(vec![-2.0; 3]));
+        let lazy = LazyMatrix::from_normalization(
+            &matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                3,
+                Some(vec![3.0; 3]),
+                Some(vec![-2.0; 3]),
+            ),
+        );
         let view = lazy.submatrix(3..5, 2..3);
         macro_rules! fail_read {
             ($operation:expr) => {{
@@ -371,7 +391,14 @@ fn submatrix_empty_ranges_and_zero_alpha_skip_failing_storage() {
         WeightedGramInto,
     };
     let (matrix, store) = tracked(false);
-    let lazy = LazyMatrix::from_parts(&matrix, Some(vec![f64::NAN; 3]), Some(vec![f64::NAN; 3]));
+    let lazy = LazyMatrix::from_normalization(
+        &matrix,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f64::NAN; 3]),
+            Some(vec![f64::NAN; 3]),
+        ),
+    );
     store.fail_after.store(0, Ordering::Relaxed);
     for (rows, cols) in [(5..5, 0..3), (0..5, 3..3), (5..5, 3..3)] {
         let view = lazy.submatrix(rows, cols);
@@ -514,10 +541,13 @@ fn submatrices_preserve_f32_fill_and_ignore_nonfinite_padding() {
         .unwrap();
     store_chunk(&array, &[1, 1], &[3.0_f32, f32::NAN, f32::NAN, f32::NAN]).unwrap();
     let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         matrix,
-        Some(vec![f32::NAN, 2.0, 3.0]),
-        Some(vec![f32::NAN, 4.0, 2.0]),
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f32::NAN, 2.0, 3.0]),
+            Some(vec![f32::NAN, 4.0, 2.0]),
+        ),
     );
     let view = lazy.submatrix(1..3, 1..3);
     assert_eq!(view.matvec(&vec![1.0; 2]).unwrap(), [3.25, 1.25]);
@@ -586,7 +616,15 @@ fn fused_products_preserve_scan_counts_and_skip_reads_for_zero_alpha() {
         exercise(&matrix, &matrix, &store);
         for center in [None, Some(vec![2.0; 3])] {
             for scale in [None, Some(vec![-4.0; 3])] {
-                let lazy = LazyMatrix::from_parts(&matrix, center.clone(), scale);
+                let lazy = {
+                    let normalization_data = &matrix;
+                    let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::ncols(&normalization_data),
+                        center.clone(),
+                        scale,
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
                 exercise(&lazy, &matrix, &store);
                 exercise(&WithIntercept::new(&lazy), &matrix, &store);
             }
@@ -598,7 +636,14 @@ fn fused_products_preserve_scan_counts_and_skip_reads_for_zero_alpha() {
 fn fused_read_failures_do_not_apply_normalization_or_intercept_corrections() {
     use lazymatrix::{MatVecScaledInto, WithIntercept};
     let (matrix, store) = tracked(false);
-    let lazy = LazyMatrix::from_parts(&matrix, Some(vec![2.0; 3]), Some(vec![4.0; 3]));
+    let lazy = LazyMatrix::from_normalization(
+        &matrix,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![2.0; 3]),
+            Some(vec![4.0; 3]),
+        ),
+    );
     let mut raw = vec![11.0; 5];
     let mut normalized = raw.clone();
     store.fail_after.store(2, Ordering::Relaxed);
@@ -792,8 +837,8 @@ fn quantile_fitting_shares_scans_and_propagates_later_failures() {
             Scaling::QuantileRange(QuantileRange::default()),
         );
         let lazy = LazyMatrix::new(&matrix, spec).unwrap();
-        assert_eq!(lazy.centers().unwrap(), [7.0, 8.0, 9.0]);
-        assert_eq!(lazy.scales().unwrap(), [6.0; 3]);
+        assert_eq!(lazy.normalization().centers().unwrap(), [7.0, 8.0, 9.0]);
+        assert_eq!(lazy.normalization().scales().unwrap(), [6.0; 3]);
         assert_scans(&store, &matrix, 3);
         store.reset();
         assert_eq!(matrix.col_medians().unwrap(), [7.0, 8.0, 9.0]);
@@ -817,7 +862,11 @@ fn quantile_fitting_shares_scans_and_propagates_later_failures() {
         }
         store.reset();
         assert_eq!(
-            LazyMatrix::new(&matrix, spec).unwrap().scales().unwrap(),
+            LazyMatrix::new(&matrix, spec)
+                .unwrap()
+                .normalization()
+                .scales()
+                .unwrap(),
             [6.0; 3]
         );
         assert_scans(&store, &matrix, 3);
@@ -843,13 +892,24 @@ fn quantile_scans_preserve_fill_values_and_ignore_padding() {
         ColumnNormalization::new(Centering::Median, Scaling::L2),
     )
     .unwrap();
-    approx::assert_abs_diff_eq!(lazy.scales().unwrap()[0], 29.0_f64.sqrt(), epsilon = 1e-12);
+    approx::assert_abs_diff_eq!(
+        lazy.normalization().scales().unwrap()[0],
+        29.0_f64.sqrt(),
+        epsilon = 1e-12
+    );
 }
 
 #[test]
 fn read_errors_stop_the_scan_and_output_can_be_reused() {
     let (matrix, store) = tracked(false);
-    let lazy = LazyMatrix::from_parts(&matrix, Some(vec![2.0; 3]), Some(vec![4.0; 3]));
+    let lazy = LazyMatrix::from_normalization(
+        &matrix,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![2.0; 3]),
+            Some(vec![4.0; 3]),
+        ),
+    );
     let mut forward = vec![f64::NAN; 5];
     let mut transpose = vec![f64::NAN; 3];
     store.fail_after.store(2, Ordering::Relaxed);
@@ -913,7 +973,7 @@ fn f32_normalization_and_products_match_known_values() {
         ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
-    assert_eq!(lazy.centers().unwrap(), [2.0, 4.0]);
+    assert_eq!(lazy.normalization().centers().unwrap(), [2.0, 4.0]);
     let root = (1.5f32).sqrt();
     let forward = lazy.matvec(&vec![1.0, 2.0]).unwrap();
     for (got, expected) in forward.into_iter().zip([-3.0 * root, 0.0, 3.0 * root]) {
@@ -968,7 +1028,15 @@ fn oversized_chunks_fail_before_reading_or_allocating_them() {
         matrix.read_block(0..1, 0..1, &mut [0.0]),
         Err(ZarrMatrixError::SizeOverflow)
     ));
-    let lazy = LazyMatrix::from_parts(&matrix, None, None);
+    let lazy = {
+        let normalization_data = &matrix;
+        let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let view = lazy.submatrix(0..1, 0..1);
     assert!(matches!(
         view.matvec(&vec![1.0]),
@@ -1023,16 +1091,16 @@ macro_rules! ndarray_suite {
                         let spec = ColumnNormalization::new(center, scale);
                         let chunked = LazyMatrix::new(&matrix, spec).unwrap();
                         let resident = LazyMatrix::new(&dense, spec).unwrap();
-                        assert_eq!(chunked.centers().is_some(), resident.centers().is_some());
-                        assert_eq!(chunked.scales().is_some(), resident.scales().is_some());
+                        assert_eq!(chunked.normalization().centers().is_some(), resident.normalization().centers().is_some());
+                        assert_eq!(chunked.normalization().scales().is_some(), resident.normalization().scales().is_some());
                         common::assert_close(
-                            chunked.centers().unwrap_or(&[]),
-                            resident.centers().unwrap_or(&[]),
+                            chunked.normalization().centers().unwrap_or(&[]),
+                            resident.normalization().centers().unwrap_or(&[]),
                             1e-12,
                         );
                         common::assert_close(
-                            chunked.scales().unwrap_or(&[]),
-                            resident.scales().unwrap_or(&[]),
+                            chunked.normalization().scales().unwrap_or(&[]),
+                            resident.normalization().scales().unwrap_or(&[]),
                             1e-12,
                         );
                     }
@@ -1056,7 +1124,7 @@ macro_rules! ndarray_suite {
                 );
                 assert!(output.slice(s![..;2]).iter().all(|&x| x == -99.0));
 
-                let lazy = LazyMatrix::from_parts(matrix, Some(vec![2.0, 3.0, 4.0]), Some(vec![1.0, 2.0, 4.0]));
+                let lazy = LazyMatrix::from_normalization(matrix, lazymatrix::ColumnNormalizationParams::from_parts(3, Some(vec![2.0, 3.0, 4.0]), Some(vec![1.0, 2.0, 4.0])));
                 lazy.matvec_into(&input.to_owned(), &mut output.slice_mut(s![..;-2]))
                     .unwrap();
                 assert_eq!(output.slice(s![..;-2]), array![-3.0, 6.0, 15.0, 24.0, 33.0]);
@@ -1087,7 +1155,14 @@ ndarray_suite!(ndarray_0_17, ndarray_0_17);
 fn intercept_adds_no_storage_reads_and_forwards_failures() {
     use lazymatrix::WithIntercept;
     let (matrix, store) = tracked(false);
-    let lazy = LazyMatrix::from_parts(&matrix, Some(vec![2.0; 3]), Some(vec![4.0; 3]));
+    let lazy = LazyMatrix::from_normalization(
+        &matrix,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![2.0; 3]),
+            Some(vec![4.0; 3]),
+        ),
+    );
     let augmented = WithIntercept::new(&lazy);
     assert!(store.keys.lock().unwrap().is_empty());
     let mut forward = vec![f64::NAN; 5];

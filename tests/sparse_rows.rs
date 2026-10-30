@@ -59,10 +59,13 @@ fn lazy_rows_borrow_storage_and_nonfinite_parameters_from_trait_objects() {
         values: &values,
     };
     let erased: &dyn SparseRows<f32> = &matrix;
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         erased,
-        Some(vec![f32::NEG_INFINITY, -0.0, f32::NAN]),
-        Some(vec![f32::INFINITY, -2.0, f32::NAN]),
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f32::NEG_INFINITY, -0.0, f32::NAN]),
+            Some(vec![f32::INFINITY, -2.0, f32::NAN]),
+        ),
     );
     let row = lazy.row(1);
     assert_eq!(row.len(), 3);
@@ -73,11 +76,11 @@ fn lazy_rows_borrow_storage_and_nonfinite_parameters_from_trait_objects() {
     assert_eq!(row.values()[1].to_bits(), (-0.0_f32).to_bits());
     assert_eq!(
         row.centers().unwrap().as_ptr(),
-        lazy.centers().unwrap().as_ptr()
+        lazy.normalization().centers().unwrap().as_ptr()
     );
     assert_eq!(
         row.scales().unwrap().as_ptr(),
-        lazy.scales().unwrap().as_ptr()
+        lazy.normalization().scales().unwrap().as_ptr()
     );
     assert_eq!(row.center(1).to_bits(), (-0.0_f32).to_bits());
     assert_eq!(row.scale(1), -2.0);
@@ -99,10 +102,13 @@ fn lazy_rows_preserve_unsorted_duplicates_and_affine_structure() {
         columns: &[2, 0, 2],
         values: &[1.0, 0.0, -2.0],
     };
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         matrix,
-        Some(vec![0.5, -1.0, 2.0]),
-        Some(vec![2.0, -4.0, 0.5]),
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![0.5, -1.0, 2.0]),
+            Some(vec![2.0, -4.0, 0.5]),
+        ),
     );
     let row = lazy.row(0);
     assert_eq!(row.column_indices(), &[2, 0, 2]);
@@ -135,7 +141,15 @@ fn lazy_row_helpers_check_column_bounds_without_normalization() {
         columns: &[],
         values: &[] as &[f64],
     };
-    let lazy = LazyMatrix::from_parts(matrix, None, None);
+    let lazy = {
+        let normalization_data = matrix;
+        let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let row = lazy.row(0);
     assert_eq!(row.centers(), None);
     assert_eq!(row.scales(), None);
@@ -158,7 +172,10 @@ fn lazy_rows_handle_zero_dimensions() {
             columns: &[],
             values: &[] as &[f64],
         };
-        let lazy = LazyMatrix::from_parts(matrix, Some(vec![]), Some(vec![]));
+        let lazy = LazyMatrix::from_normalization(
+            matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(0, Some(vec![]), Some(vec![])),
+        );
         for i in 0..nrows {
             let row = lazy.row(i);
             assert_eq!(row.len(), 0);
@@ -184,7 +201,10 @@ fn affine_row_parts_can_overflow_when_direct_normalization_is_finite() {
         columns: &[0],
         values: &[f32::MAX],
     };
-    let lazy = LazyMatrix::from_parts(matrix, Some(vec![f32::MAX]), Some(vec![0.5]));
+    let lazy = LazyMatrix::from_normalization(
+        matrix,
+        lazymatrix::ColumnNormalizationParams::from_parts(1, Some(vec![f32::MAX]), Some(vec![0.5])),
+    );
     let row = lazy.row(0);
     let direct = (row.values()[0] - row.center(0)) / row.scale(0);
     assert_eq!(direct, 0.0);

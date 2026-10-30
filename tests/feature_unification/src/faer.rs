@@ -22,8 +22,14 @@ pub fn check() {
     let rows = Col::from_fn(3, |i| [1.0, 2.0, -1.0][i]);
     {
         use lazymatrix::{LazyMatrix, WeightedColumnSumsInto, WeightedGramInto, WithIntercept};
-        let lazy =
-            LazyMatrix::from_parts(dense.as_ref(), Some(vec![1.0, 3.0]), Some(vec![2.0, 3.0]));
+        let lazy = LazyMatrix::from_normalization(
+            dense.as_ref(),
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                2,
+                Some(vec![1.0, 3.0]),
+                Some(vec![2.0, 3.0]),
+            ),
+        );
         let mut expected = Mat::full(3, 3, f64::NAN);
         WithIntercept::new(&lazy)
             .weighted_gram_into(&rows, &mut expected)
@@ -46,8 +52,14 @@ pub fn check() {
             .unwrap();
         assert_eq!(sums[0], expected[(0, 1)]);
         assert_eq!(sums[1], expected[(0, 2)]);
-        let lazy =
-            LazyMatrix::from_parts(dense.as_mut(), Some(vec![1.0, 3.0]), Some(vec![2.0, 3.0]));
+        let lazy = LazyMatrix::from_normalization(
+            dense.as_mut(),
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                2,
+                Some(vec![1.0, 3.0]),
+                Some(vec![2.0, 3.0]),
+            ),
+        );
         WithIntercept::new(&lazy)
             .weighted_gram_into(&rows, &mut actual.as_mut())
             .unwrap();
@@ -61,7 +73,7 @@ pub fn check() {
         )
         .unwrap();
         let eager = lazy.to_eager::<Mat<f64>>().unwrap();
-        assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
+        assert_eq!(eager.normalization().centers(), Some(&[1.0, 3.0][..]));
         let result = eager.matvec(&Col::from_fn(2, |i| [2.0, -1.0][i])).unwrap();
         assert!((result[0] - 0.5).abs() < 1e-12);
         let mut destination = <Mat<f64> as lazymatrix::MatrixOwned<f64>>::zeros(3, 2);

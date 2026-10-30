@@ -98,16 +98,16 @@ cargo run --locked --example coordinate_descent --features faer
 
 ## Row normalization
 
-Fit dense rows independently with `RowNormalization` and `RowNormalizedMatrix`:
+Fit dense rows independently with `RowNormalization` and `LazyMatrix`:
 
 ```rust
-use lazymatrix::{Centering, MatVec, RowNormalization, RowNormalizedMatrix, Scaling};
+use lazymatrix::{Centering, LazyMatrix, MatVec, RowNormalization, Scaling};
 use ndarray::array;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let x = array![[3.0, 4.0], [0.0, 0.0]];
     let spec = RowNormalization::new(Centering::None, Scaling::L2);
-    let normalized = RowNormalizedMatrix::new(x.view(), spec)?;
+    let normalized = LazyMatrix::new(x.view(), spec)?;
 
     let y = normalized.matvec(&array![1.0, 1.0])?;
     assert_eq!(y, array![1.4, 0.0]);
@@ -118,8 +118,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Row normalization offers the same centering and scaling choices and common
 recipes as column normalization. Each parameter vector has one entry per row.
 Norm scaling leaves zero rows unchanged, and new samples need independently
-fitted row parameters. `from_parts` accepts explicit parameters for custom
-fitting, and `from_normalization` reapplies parameters for the same rows.
+fitted row parameters. Construct `RowNormalizationParams::from_parts` for
+custom fitting, and use `LazyMatrix::from_normalization` to apply explicit or
+previously fitted parameters for the same rows.
+
+The parameter type identifies the axis and scalar:
+`LazyMatrix<M, ColumnNormalizationParams<f64>>` or
+`LazyMatrix<M, RowNormalizationParams<f64>>`. Column parameters with `f64` are
+the default, so column-only annotations can remain `LazyMatrix<M>`. Read centers
+and scales through `matrix.normalization()`. `matrix.into_parts()` returns the
+raw data and the fitted parameter object without copying. `EagerMatrix` uses
+the same typed metadata API for its already normalized data.
 
 The initial row operator supports allocating and reusable forward and transpose
 vector products across every dense backend release, including strided views.

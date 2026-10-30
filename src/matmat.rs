@@ -355,24 +355,36 @@ where
     Ok(())
 }
 
-impl<M: MatMatInto<F>, F: Scalar> MatMatInto<F> for LazyMatrix<M, F> {
+impl<M: MatMatInto<F>, F: Scalar> MatMatInto<F>
+    for LazyMatrix<M, crate::ColumnNormalizationParams<F>>
+{
     fn matmat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
     where
         R: MatrixRead<F> + ?Sized,
         O: MatrixRead<F> + MatrixWrite<F> + ?Sized,
     {
-        self.data()
-            .matmat_normalized_into(rhs, self.centers(), self.scales(), out)
+        self.data().matmat_normalized_into(
+            rhs,
+            self.normalization().centers(),
+            self.normalization().scales(),
+            out,
+        )
     }
 }
-impl<M: MatTransposeMatInto<F>, F: Scalar> MatTransposeMatInto<F> for LazyMatrix<M, F> {
+impl<M: MatTransposeMatInto<F>, F: Scalar> MatTransposeMatInto<F>
+    for LazyMatrix<M, crate::ColumnNormalizationParams<F>>
+{
     fn mat_transpose_mat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
     where
         R: MatrixRead<F> + ?Sized,
         O: MatrixRead<F> + MatrixWrite<F> + ?Sized,
     {
-        self.data()
-            .mat_transpose_mat_normalized_into(rhs, self.centers(), self.scales(), out)
+        self.data().mat_transpose_mat_normalized_into(
+            rhs,
+            self.normalization().centers(),
+            self.normalization().scales(),
+            out,
+        )
     }
 }
 

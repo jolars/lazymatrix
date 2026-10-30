@@ -25,7 +25,7 @@ pub fn check() {
         )
         .unwrap();
         let eager = lazy.to_eager::<DMatrix<f64>>().unwrap();
-        assert_eq!(eager.centers(), Some(&[1.0, 3.0][..]));
+        assert_eq!(eager.normalization().centers(), Some(&[1.0, 3.0][..]));
         let result = eager
             .matvec(&DVector::from_column_slice(&[2.0, -1.0]))
             .unwrap();

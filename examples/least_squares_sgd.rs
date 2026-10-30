@@ -44,11 +44,17 @@ struct DeferredCoefficients {
 }
 
 impl DeferredCoefficients {
-    fn new<M: SparseRows<f64>>(matrix: &LazyMatrix<M, f64>) -> Self {
+    fn new<M: SparseRows<f64>>(matrix: &LazyMatrix<M>) -> Self {
         let background: Vec<_> = (0..matrix.ncols())
             .map(|j| {
-                -matrix.centers().map_or(0.0, |centers| centers[j])
-                    / matrix.scales().map_or(1.0, |scales| scales[j])
+                -matrix
+                    .normalization()
+                    .centers()
+                    .map_or(0.0, |centers| centers[j])
+                    / matrix
+                        .normalization()
+                        .scales()
+                        .map_or(1.0, |scales| scales[j])
             })
             .collect();
         Self {
@@ -73,7 +79,7 @@ impl DeferredCoefficients {
 
     fn update_batch<M: SparseRows<f64>>(
         &mut self,
-        matrix: &LazyMatrix<M, f64>,
+        matrix: &LazyMatrix<M>,
         y: &[f64],
         observations: &[usize],
         step: f64,
@@ -144,7 +150,7 @@ struct Fit {
 }
 
 fn stochastic_gradient_descent<M, E>(
-    matrix: &LazyMatrix<M, f64>,
+    matrix: &LazyMatrix<M>,
     y: &[f64],
     config: SgdConfig,
     mut evaluate: impl FnMut(&[f64]) -> Result<Diagnostics, E>,
@@ -289,7 +295,15 @@ mod tests {
         .unwrap();
         for centers in [None, Some(vec![0.5, -1.0, 2.0])] {
             for scales in [None, Some(vec![2.0, -3.0, 1.0])] {
-                let matrix = LazyMatrix::from_parts(&raw, centers.clone(), scales);
+                let matrix = {
+                    let normalization_data = &raw;
+                    let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::ncols(&normalization_data),
+                        centers.clone(),
+                        scales,
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
                 let dense = matrix.to_eager::<faer::Mat<f64>>().unwrap();
                 let y = [1.0, -2.0, 0.5];
                 for batch_size in [1, 2, 3, 8] {

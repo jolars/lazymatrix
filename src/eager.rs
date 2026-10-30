@@ -1,5 +1,5 @@
 use crate::traits::*;
-use crate::{ColumnNormalizationParams, LazyColumn};
+use crate::{ColumnNormalizationParams, LazyColumn, NormalizationParams};
 
 /// An eagerly normalized dense matrix with its original fitted parameters.
 ///
@@ -10,52 +10,52 @@ use crate::{ColumnNormalizationParams, LazyColumn};
 /// and operational errors come from the selected dense backend, rather than
 /// the original input. Statistics describe the normalized data.
 #[derive(Clone, Debug)]
-pub struct EagerMatrix<M, F = f64> {
+pub struct EagerMatrix<M, P = ColumnNormalizationParams<f64>> {
     data: M,
-    normalization: ColumnNormalizationParams<F>,
+    normalization: P,
 }
 
-impl<M: MatrixShape, F: Scalar> EagerMatrix<M, F> {
-    pub(crate) fn from_normalized(data: M, normalization: ColumnNormalizationParams<F>) -> Self {
+impl<M, P> EagerMatrix<M, P> {
+    pub(crate) fn from_normalized(data: M, normalization: P) -> Self {
         Self {
             data,
             normalization,
         }
     }
 
-    /// Number of rows of the normalized matrix.
-    pub fn nrows(&self) -> usize {
-        self.data.nrows()
-    }
-    /// Number of columns of the normalized matrix.
-    pub fn ncols(&self) -> usize {
-        self.data.ncols()
-    }
     /// Borrow the already normalized backend data.
     pub fn data(&self) -> &M {
         &self.data
     }
-    /// Borrow the original fitted normalization, for example for prediction.
-    pub fn normalization(&self) -> &ColumnNormalizationParams<F> {
+
+    /// Borrow the original fitted parameters, already applied to the data.
+    pub fn normalization(&self) -> &P {
         &self.normalization
     }
-    /// Original fitted centers, already applied to the data.
-    pub fn centers(&self) -> Option<&[F]> {
-        self.normalization.centers()
+
+    /// Recover normalized data and original fitted parameters without copying.
+    pub fn into_parts(self) -> (M, P) {
+        (self.data, self.normalization)
     }
-    /// Original fitted scales, already applied to the data.
-    pub fn scales(&self) -> Option<&[F]> {
-        self.normalization.scales()
+}
+
+impl<M: MatrixShape, P> EagerMatrix<M, P> {
+    /// Number of rows of the normalized matrix.
+    pub fn nrows(&self) -> usize {
+        self.data.nrows()
     }
-    /// Recover normalized data and original fitted center and scale vectors.
-    pub fn into_parts(self) -> (M, Option<Vec<F>>, Option<Vec<F>>) {
-        let (centers, scales) = self.normalization.into_parts();
-        (self.data, centers, scales)
+
+    /// Number of columns of the normalized matrix.
+    pub fn ncols(&self) -> usize {
+        self.data.ncols()
     }
+}
+
+impl<M: MatrixShape, P: NormalizationParams<Scalar = F>, F: Scalar> EagerMatrix<M, P> {
     /// Borrow a logical column of the already normalized data.
     ///
-    /// Its center and scale are zero and one, respectively. The fitted
-    /// parameters returned by the matrix accessors are metadata only.
+    /// Its center and scale are zero and one, respectively. The retained fitted
+    /// parameters are metadata only.
     pub fn column(&self, j: usize) -> LazyColumn<M::Column<'_>, F>
     where
         M: RawColumns<F>,
@@ -65,11 +65,17 @@ impl<M: MatrixShape, F: Scalar> EagerMatrix<M, F> {
     }
 }
 
-impl<M: RawColumns<F>, F: Scalar> Columns<F> for EagerMatrix<M, F> {
+impl<M, P, F> Columns<F> for EagerMatrix<M, P>
+where
+    M: RawColumns<F>,
+    P: NormalizationParams<Scalar = F>,
+    F: Scalar,
+{
     type Column<'a>
         = LazyColumn<M::Column<'a>, F>
     where
         Self: 'a;
+
     fn column(&self, j: usize) -> Self::Column<'_> {
         EagerMatrix::column(self, j)
     }

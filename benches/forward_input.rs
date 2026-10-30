@@ -76,7 +76,7 @@ fn count<T>(run: impl FnOnce() -> T) -> (T, usize, usize) {
 }
 
 fn cloned_reference<const DEFAULT_HOOK: bool, M, V>(
-    lazy: &LazyMatrix<M, f64>,
+    lazy: &LazyMatrix<M>,
     x: &V,
 ) -> Result<V, M::Error>
 where
@@ -86,16 +86,18 @@ where
     // Retain the former default so the public operator's allocation saving stays
     // measurable. Dense overrides must preserve directly centered arithmetic.
     if !DEFAULT_HOOK {
-        return lazy
-            .data()
-            .matvec_normalized(x, lazy.centers(), lazy.scales());
+        return lazy.data().matvec_normalized(
+            x,
+            lazy.normalization().centers(),
+            lazy.normalization().scales(),
+        );
     }
     let mut coefficients = x.clone();
-    if let Some(scales) = lazy.scales() {
+    if let Some(scales) = lazy.normalization().scales() {
         coefficients.elem_div_assign(scales);
     }
     let mut out = lazy.data().matvec(&coefficients)?;
-    if let Some(centers) = lazy.centers() {
+    if let Some(centers) = lazy.normalization().centers() {
         out.sub_scalar_assign(coefficients.dot_slice(centers));
     }
     Ok(out)
@@ -146,7 +148,11 @@ fn bench_matrix<const DEFAULT_HOOK: bool, M, V>(
     ] {
         let lazy = LazyMatrix::new(matrix, normalization).unwrap();
         let expected = common::dense_matvec(
-            &common::materialize(&fixture.dense, lazy.centers(), lazy.scales()),
+            &common::materialize(
+                &fixture.dense,
+                lazy.normalization().centers(),
+                lazy.normalization().scales(),
+            ),
             &input,
         );
         let name = format!("forward_input/{label}/{mode}");
@@ -186,7 +192,7 @@ fn bench_matrix<const DEFAULT_HOOK: bool, M, V>(
             .find(|a| a.0 == "cloned_reference")
             .unwrap();
         let borrowed = allocations.iter().find(|a| a.0 == "operator").unwrap();
-        let saves_clone = usize::from(DEFAULT_HOOK && lazy.scales().is_none());
+        let saves_clone = usize::from(DEFAULT_HOOK && lazy.normalization().scales().is_none());
         assert_eq!(cloned.1, borrowed.1 + saves_clone, "{name}");
         assert_eq!(
             cloned.2,

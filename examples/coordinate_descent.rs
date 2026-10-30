@@ -99,7 +99,7 @@ fn soft_threshold(value: f64, lambda: f64) -> f64 {
 }
 
 fn kkt_violation<M>(
-    matrix: &LazyMatrix<M, f64>,
+    matrix: &LazyMatrix<M>,
     beta: &[f64],
     residual: &OffsetResidual,
     summaries: &[ColumnSummary],
@@ -123,7 +123,7 @@ where
 }
 
 fn coordinate_descent<M>(
-    matrix: &LazyMatrix<M, f64>,
+    matrix: &LazyMatrix<M>,
     y: &[f64],
     lambda: f64,
     tolerance: f64,

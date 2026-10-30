@@ -2,7 +2,8 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use lazymatrix::{
-    LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc, WeightedColumnSumsInto, WeightedGramInto,
+    ColumnNormalizationParams, LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc,
+    WeightedColumnSumsInto, WeightedGramInto,
 };
 use std::hint::black_box;
 use std::ops::Range;
@@ -63,11 +64,13 @@ fn benchmark(c: &mut Criterion) {
         }
     }
     let csc = triplets.to_csc();
-    let dense = LazyMatrix::from_parts(raw.view(), Some(vec![1.0; p]), Some(vec![2.0; p]));
-    let sparse = LazyMatrix::from_parts(
+    let dense = LazyMatrix::from_normalization(
+        raw.view(),
+        ColumnNormalizationParams::from_parts(p, Some(vec![1.0; p]), Some(vec![2.0; p])),
+    );
+    let sparse = LazyMatrix::from_normalization(
         SprsCsc::try_new(csc.view()).unwrap(),
-        Some(vec![1.0; p]),
-        Some(vec![2.0; p]),
+        ColumnNormalizationParams::from_parts(p, Some(vec![1.0; p]), Some(vec![2.0; p])),
     );
     #[cfg(feature = "zarrs_all")]
     let chunked = {
@@ -85,10 +88,9 @@ fn benchmark(c: &mut Criterion) {
         )
         .unwrap();
         zarrs_compat::store_subset(&array, raw.as_slice().unwrap()).unwrap();
-        LazyMatrix::from_parts(
+        LazyMatrix::from_normalization(
             lazymatrix::ZarrMatrix::<_, f64>::try_new(array).unwrap(),
-            Some(vec![1.0; p]),
-            Some(vec![2.0; p]),
+            ColumnNormalizationParams::from_parts(p, Some(vec![1.0; p]), Some(vec![2.0; p])),
         )
     };
     eprintln!("rows,columns,operation,peak_workspace_bytes");
@@ -99,10 +101,9 @@ fn benchmark(c: &mut Criterion) {
         let selected_sparse = sparse.submatrix(rows.clone(), columns.clone());
         #[cfg(feature = "zarrs_all")]
         let selected_chunked = chunked.submatrix(rows.clone(), columns.clone());
-        let native = LazyMatrix::from_parts(
+        let native = LazyMatrix::from_normalization(
             raw.slice(s![rows.clone(), columns.clone()]),
-            Some(vec![1.0; nc]),
-            Some(vec![2.0; nc]),
+            ColumnNormalizationParams::from_parts(nc, Some(vec![1.0; nc]), Some(vec![2.0; nc])),
         );
         let x = Array1::from_shape_fn(nc, |j| j as f64 / nc as f64);
         let u = Array1::from_shape_fn(nr, |i| i as f64 / nr as f64);

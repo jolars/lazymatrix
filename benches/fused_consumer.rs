@@ -92,7 +92,7 @@ impl<V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>> InterceptWorkspace<V> 
 
     fn forward<M>(
         &mut self,
-        matrix: &LazyMatrix<M, f64>,
+        matrix: &LazyMatrix<M>,
         alpha: f64,
         x: &V,
         beta: f64,
@@ -129,7 +129,7 @@ impl<V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>> InterceptWorkspace<V> 
 
     fn transpose<M>(
         &mut self,
-        matrix: &LazyMatrix<M, f64>,
+        matrix: &LazyMatrix<M>,
         alpha: f64,
         x: &V,
         beta: f64,
@@ -480,7 +480,7 @@ where
     ] {
         let lazy = LazyMatrix::new(matrix, spec).unwrap();
         // The Frobenius bound gives every representation the same stable step.
-        let norms = match lazy.centers() {
+        let norms = match lazy.normalization().centers() {
             Some(centers) => matrix.col_l2_centered(centers),
             None => matrix.col_l2(),
         }
@@ -489,7 +489,7 @@ where
             .iter()
             .enumerate()
             .map(|(j, n)| {
-                let scale = lazy.scales().map_or(1.0, |s| s[j]);
+                let scale = lazy.normalization().scales().map_or(1.0, |s| s[j]);
                 (n / scale).powi(2)
             })
             .sum();

@@ -1,8 +1,8 @@
 //! Lazy normalized design matrices.
 //!
-//! A [`LazyMatrix`] wraps an underlying (typically sparse) matrix `X` together
-//! with optional column **centers** `c` and column **scales** `s`, and presents
-//! the *normalized* matrix
+//! A [`LazyMatrix`] wraps a matrix `X` with fitted row or column parameters.
+//! Column normalization combines optional **centers** `c` and **scales** `s`
+//! and presents the *normalized* matrix
 //!
 //! ```text
 //! X̃ = (X − 1cᵀ) S⁻¹,   S = diag(s)
@@ -29,7 +29,8 @@
 //! # Dense row normalization
 //!
 //! [`RowNormalization`] offers the same independent centering and scaling
-//! choices as [`ColumnNormalization`]. [`RowNormalizedMatrix`] presents
+//! choices as [`ColumnNormalization`]. [`LazyMatrix::new`] accepts either
+//! recipe, and row normalization presents
 //! `D⁻¹(X − r1ᵀ)` with one center and scale per row. It supports allocating and
 //! reusable forward and transpose vector products over all dense backends and
 //! their borrowed, potentially strided views through [`MatrixRead`]. Fitting
@@ -37,6 +38,15 @@
 //! accumulation without materializing the design. New samples need independently
 //! fitted row parameters. Sparse and Zarr support, composition with column
 //! normalization, and additional operator capabilities remain future work.
+//!
+//! The fitted parameter type selects the axis and scalar:
+//! `LazyMatrix<M, ColumnNormalizationParams<F>>` or
+//! `LazyMatrix<M, RowNormalizationParams<F>>`. The default is column parameters
+//! with `f64`, so column-only annotations can use `LazyMatrix<M>`. Read centers
+//! and scales through [`LazyMatrix::normalization`]. Consuming a wrapper with
+//! [`LazyMatrix::into_parts`] returns raw data and the fitted parameter object
+//! without copying. [`EagerMatrix`] uses the same typed metadata API, with its
+//! retained parameters already applied to the data.
 //!
 //! # Multiple right-hand sides
 //!
@@ -304,11 +314,12 @@
 //! # use ndarray_0_15 as ndarray;
 //! # #[cfg(all(feature = "ndarray_v0_16", not(feature = "ndarray_v0_17")))]
 //! # use ndarray_0_16 as ndarray;
-//! use lazymatrix::{LazyMatrix, MatVec, WithIntercept};
+//! use lazymatrix::{ColumnNormalizationParams, LazyMatrix, MatVec, WithIntercept};
 //! use ndarray::array;
 //!
 //! let x = array![[1.0], [3.0]];
-//! let predictors = LazyMatrix::with_centers(x.view(), vec![2.0]);
+//! let params = ColumnNormalizationParams::from_parts(1, Some(vec![2.0]), None);
+//! let predictors = LazyMatrix::from_normalization(x.view(), params);
 //! let design = WithIntercept::new(&predictors);
 //! assert_eq!(design.matvec(&array![3.0, 2.0]).unwrap(), array![1.0, 5.0]);
 //! # }
@@ -346,8 +357,9 @@
 //! successful product. Borrowed views and explicit normalization parameters do
 //! not require I/O and retain their infallible APIs.
 //!
-//! [`LazyMatrix::from_parts`] and [`LazyMatrix::with_scales`] panic on explicit
-//! zero scales, including negative zero. Explicit parameters are otherwise
+//! [`ColumnNormalizationParams::from_parts`] and
+//! [`RowNormalizationParams::from_parts`] panic on explicit zero scales,
+//! including negative zero. Explicit parameters are otherwise
 //! preserved unchanged, including negative scales and nonfinite centers or
 //! scales. Computed normalization through [`LazyMatrix::new`] replaces exact
 //! zero scales with one while preserving nonfinite statistics.
@@ -513,7 +525,6 @@ mod matrix;
 mod normalization;
 mod quantiles;
 mod row;
-mod row_matrix;
 mod submatrix;
 #[cfg(any(
     feature = "faer_all",
@@ -538,10 +549,10 @@ pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationStats,
-    QuantileRange, RowNormalization, RowNormalizationParams, RowNormalizationStats, Scaling,
+    NormalizationParams, NormalizationRecipe, QuantileRange, RowNormalization,
+    RowNormalizationParams, RowNormalizationStats, Scaling,
 };
 pub use row::LazyRow;
-pub use row_matrix::RowNormalizedMatrix;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};
 pub use traits::{
     ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign,

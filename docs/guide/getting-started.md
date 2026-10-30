@@ -113,6 +113,28 @@ O(ncols) selection state and repeated scans whose count depends on the values.
 They preserve implicit zeros and sparse storage. See [how it works](/guide/how-it-works#quantile-fitting)
 for memory, numerical behavior, and fitting costs.
 
+## Normalize dense rows
+
+Use the same constructor with a row recipe:
+
+```rust
+use lazymatrix::RowNormalization;
+
+let rows = LazyMatrix::new(x.view(), RowNormalization::standardize()).unwrap();
+let row_scales = rows.normalization().scales().unwrap();
+```
+
+The fitted type is `RowNormalizationParams<f64>`, with one center and scale per
+row. Row normalization supports dense fitting and forward and transpose vector
+products, including strided views. Fit new samples' row parameters independently.
+Ordered composition with column normalization remains planned.
+
+`LazyMatrix<M, P>` stores its fitted parameter object as `P`. The default is
+`ColumnNormalizationParams<f64>`, so ordinary column-only type annotations can
+use `LazyMatrix<M>`. Inspect centers and scales through `normalization()`.
+For explicit parameters, construct `ColumnNormalizationParams::from_parts` or
+`RowNormalizationParams::from_parts` and use `LazyMatrix::from_normalization`.
+
 ## Materialize explicitly
 
 Choose an eager representation when dense storage and repeated operations suit
@@ -129,10 +151,13 @@ let y = eager.matvec(&array![1.0, -1.0]).unwrap();
 dense destination. For owned writable dense inputs, `into_eager` normalizes the
 existing storage in place. An eager operator retains the fitted parameters and
 uses its normalized values directly.
+`EagerMatrix<M, P>` retains the same fitted parameter type. Both wrappers expose
+it through `normalization()`, and `into_parts()` returns `(data, params)` without
+copying. Eager data already contains normalized values; lazy data remains raw.
 
 ## Reuse fitted parameters
 
-Apply training parameters to new observations rather than fitting the prediction
+Apply training column parameters to new observations rather than fitting the prediction
 data again:
 
 ```rust

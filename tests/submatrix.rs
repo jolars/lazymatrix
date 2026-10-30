@@ -7,12 +7,19 @@ fn selection_inherits_fitted_parameters_and_nests_locally() {
     use backend_aliases::ndarray::array;
     use lazymatrix::{LazyMatrix, MatTransposeVec, MatVec};
     let data = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
-    let lazy = LazyMatrix::from_parts(data, Some(vec![1.0, 2.0, 3.0]), Some(vec![2.0; 3]));
+    let lazy = LazyMatrix::from_normalization(
+        data,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![1.0, 2.0, 3.0]),
+            Some(vec![2.0; 3]),
+        ),
+    );
     let view = lazy.submatrix(1..3, 1..3);
     assert_eq!(view.centers(), Some([2.0, 3.0].as_slice()));
     assert_eq!(
         view.centers().unwrap().as_ptr(),
-        lazy.centers().unwrap()[1..].as_ptr()
+        lazy.normalization().centers().unwrap()[1..].as_ptr()
     );
     assert_eq!(view.matvec(&vec![1.0, 2.0]).unwrap(), vec![4.5, 9.0]);
     assert_eq!(
@@ -93,7 +100,14 @@ fn invalid_ranges_and_zero_alpha_never_evaluate_the_source() {
     let source = FailingSource {
         calls: Cell::new(0),
     };
-    let lazy = LazyMatrix::from_parts(source, Some(vec![f64::NAN; 3]), Some(vec![-2.0; 3]));
+    let lazy = LazyMatrix::from_normalization(
+        source,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f64::NAN; 3]),
+            Some(vec![-2.0; 3]),
+        ),
+    );
     let view = lazy.submatrix(1..3, 1..3);
     let mut out = vec![f64::NAN; 2];
     view.matvec_scaled_into(0.0, &vec![f64::NAN; 2], 0.0, &mut out)
@@ -141,12 +155,15 @@ fn invalid_ranges_and_zero_alpha_never_evaluate_the_source() {
 #[test]
 fn product_errors_preserve_source_type_without_postprocessing() {
     use lazymatrix::{MatTransposeVecInto, MatVecInto};
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         FailingSource {
             calls: Cell::new(0),
         },
-        Some(vec![1.0; 3]),
-        Some(vec![2.0; 3]),
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![1.0; 3]),
+            Some(vec![2.0; 3]),
+        ),
     );
     let view = lazy.submatrix(1..3, 1..3);
     let mut out = vec![99.0; 2];
@@ -172,10 +189,13 @@ fn selected_dense_entries_exclude_nonfinite_values_and_preserve_small_variations
         [f64::NAN, 1e12 + 0.25, 1e12 + 0.5],
         [f64::NAN, 1e12 + 0.75, 1e12 + 1.0]
     ];
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         data.slice(s![..;-1, ..]),
-        Some(vec![f64::NAN, 1e12, 1e12]),
-        None,
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f64::NAN, 1e12, 1e12]),
+            None,
+        ),
     );
     let view = lazy.submatrix(0..2, 1..3);
     assert_eq!(view.matvec(&vec![1.0, 2.0]).unwrap(), vec![2.75, 1.25]);
@@ -211,12 +231,15 @@ fn selected_dense_entries_exclude_nonfinite_values_and_preserve_small_variations
 #[test]
 fn weighted_operations_validate_before_reads_and_preserve_the_error_type() {
     use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto};
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         FailingSource {
             calls: Cell::new(0),
         },
-        Some(vec![1.0; 3]),
-        Some(vec![-2.0; 3]),
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![1.0; 3]),
+            Some(vec![-2.0; 3]),
+        ),
     );
     let view = lazy.submatrix(1..3, 1..3);
     let mut sums = [99.0; 2];
@@ -414,12 +437,11 @@ impl MatrixWrite<f64> for Output {
 
 #[test]
 fn materialization_validates_output_before_source_reads_and_preserves_errors() {
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         FailingSource {
             calls: Cell::new(0),
         },
-        Some(vec![1.0; 3]),
-        None,
+        lazymatrix::ColumnNormalizationParams::from_parts(3, Some(vec![1.0; 3]), None),
     );
     let view = lazy.submatrix(1..3, 1..3).clone();
     let mut out = Output {
@@ -465,10 +487,13 @@ fn sparse_submatrices_support_alternate_indices_and_exclude_nonfinite_entries() 
     let wrapped_csc = SprsCsc::try_new(csc.view()).unwrap();
     let wrapped_csr = SprsCsr::try_new(csr.view()).unwrap();
     fn check<M: SubmatrixKernel<f64>>(matrix: M) {
-        let lazy = LazyMatrix::from_parts(
+        let lazy = LazyMatrix::from_normalization(
             matrix,
-            Some(vec![f64::NAN, 1.0, 2.0]),
-            Some(vec![f64::NAN, 2.0, -2.0]),
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                3,
+                Some(vec![f64::NAN, 1.0, 2.0]),
+                Some(vec![f64::NAN, 2.0, -2.0]),
+            ),
         );
         let view = lazy.submatrix(1..3, 1..3);
         assert_eq!(view.matvec(&vec![1.0, 2.0]).unwrap(), vec![3.5, -4.5]);

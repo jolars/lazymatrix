@@ -60,9 +60,16 @@ macro_rules! faer_adapter {
                     ],
                 )
                 .unwrap();
-                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
-                    .to_eager_into(out)
-                    .unwrap();
+                LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![1.0, 3.0]),
+                        Some(vec![2.0, 6.0]),
+                    ),
+                )
+                .to_eager_into(out)
+                .unwrap();
             }
             pub(super) fn products(
                 tm: &TestMatrix,
@@ -137,18 +144,27 @@ macro_rules! faer_adapter {
                     ],
                 )
                 .unwrap();
-                let lazy =
-                    LazyMatrix::from_parts(matrix, Some(vec![0.5, 1.0]), Some(vec![-2.0, 3.0]));
+                let lazy = LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![0.5, 1.0]),
+                        Some(vec![-2.0, 3.0]),
+                    ),
+                );
                 lazy.weighted_gram_into(&[2.0_f32, -1.0], out).unwrap();
             }
             #[cfg(feature = "ndarray_all")]
             pub(super) fn dense_gram<O: lazymatrix::MatrixWrite<f32>>(out: &mut O) {
                 use lazymatrix::WeightedGramInto;
                 let matrix = faer::Mat::from_fn(2, 2, |i, j| [[1.0_f32, 0.0], [2.0, 3.0]][i][j]);
-                let lazy = LazyMatrix::from_parts(
+                let lazy = LazyMatrix::from_normalization(
                     matrix.as_ref(),
-                    Some(vec![0.5, 1.0]),
-                    Some(vec![-2.0, 3.0]),
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![0.5, 1.0]),
+                        Some(vec![-2.0, 3.0]),
+                    ),
                 );
                 lazy.weighted_gram_into(&[2.0_f32, -1.0], out).unwrap();
             }
@@ -178,9 +194,16 @@ macro_rules! nalgebra_adapter {
                     vec![1.0, 2.0, 3.0, 6.0],
                 )
                 .unwrap();
-                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
-                    .to_eager_into(out)
-                    .unwrap();
+                LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![1.0, 3.0]),
+                        Some(vec![2.0, 6.0]),
+                    ),
+                )
+                .to_eager_into(out)
+                .unwrap();
             }
             pub(super) fn products(
                 tm: &TestMatrix,
@@ -253,8 +276,14 @@ macro_rules! nalgebra_adapter {
                     vec![1.0_f32, 2.0, 3.0],
                 )
                 .unwrap();
-                let lazy =
-                    LazyMatrix::from_parts(matrix, Some(vec![0.5, 1.0]), Some(vec![-2.0, 3.0]));
+                let lazy = LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![0.5, 1.0]),
+                        Some(vec![-2.0, 3.0]),
+                    ),
+                );
                 lazy.weighted_gram_into(&[2.0_f32, -1.0], out).unwrap();
             }
         }
@@ -277,9 +306,16 @@ macro_rules! ndarray_adapter {
             use crate::backend_aliases::$backend as ndarray;
             pub(super) fn materialized<O: lazymatrix::MatrixWrite<f64>>(out: &mut O) {
                 let matrix = ndarray::array![[1.0, 0.0], [2.0, 3.0], [0.0, 6.0]];
-                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
-                    .to_eager_into(out)
-                    .unwrap();
+                LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![1.0, 3.0]),
+                        Some(vec![2.0, 6.0]),
+                    ),
+                )
+                .to_eager_into(out)
+                .unwrap();
             }
             pub(super) fn products(
                 tm: &TestMatrix,
@@ -307,8 +343,14 @@ macro_rules! ndarray_adapter {
             pub(super) fn gram<O: lazymatrix::MatrixWrite<f32>>(out: &mut O) {
                 use lazymatrix::WeightedGramInto;
                 let matrix = ndarray::array![[1.0_f32, 0.0], [2.0, 3.0]];
-                let lazy =
-                    LazyMatrix::from_parts(matrix, Some(vec![0.5, 1.0]), Some(vec![-2.0, 3.0]));
+                let lazy = LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![0.5, 1.0]),
+                        Some(vec![-2.0, 3.0]),
+                    ),
+                );
                 lazy.weighted_gram_into(&[2.0_f32, -1.0], out).unwrap();
             }
         }
@@ -338,9 +380,16 @@ mod sprs {
             vec![1.0, 2.0, 3.0, 6.0],
         );
         for matrix in [&matrix, &matrix.to_csr()] {
-            LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
-                .to_eager_into(out)
-                .unwrap();
+            LazyMatrix::from_normalization(
+                matrix,
+                lazymatrix::ColumnNormalizationParams::from_parts(
+                    2,
+                    Some(vec![1.0, 3.0]),
+                    Some(vec![2.0, 6.0]),
+                ),
+            )
+            .to_eager_into(out)
+            .unwrap();
         }
     }
     pub(super) fn products(
@@ -374,7 +423,14 @@ mod sprs {
             vec![1.0_f32, 2.0, 3.0],
         ))
         .unwrap();
-        let lazy = LazyMatrix::from_parts(matrix, Some(vec![0.5, 1.0]), Some(vec![-2.0, 3.0]));
+        let lazy = LazyMatrix::from_normalization(
+            matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                2,
+                Some(vec![0.5, 1.0]),
+                Some(vec![-2.0, 3.0]),
+            ),
+        );
         lazy.weighted_gram_into(&[2.0_f32, -1.0], out).unwrap();
     }
 }
@@ -434,9 +490,16 @@ macro_rules! zarrs_adapter {
                     dense: vec![vec![1.0, 0.0], vec![2.0, 3.0], vec![0.0, 6.0]],
                     triplets: vec![],
                 });
-                LazyMatrix::from_parts(matrix, Some(vec![1.0, 3.0]), Some(vec![2.0, 6.0]))
-                    .to_eager_into(out)
-                    .unwrap();
+                LazyMatrix::from_normalization(
+                    matrix,
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![1.0, 3.0]),
+                        Some(vec![2.0, 6.0]),
+                    ),
+                )
+                .to_eager_into(out)
+                .unwrap();
             }
         }
     };
@@ -538,10 +601,13 @@ macro_rules! gram_output_suite {
             fn every_release_writes_grams_into_ndarray() {
                 use lazymatrix::WeightedGramInto;
                 let dense = ndarray::array![[1.0_f32, 0.0], [2.0, 3.0]];
-                let lazy = LazyMatrix::from_parts(
+                let lazy = LazyMatrix::from_normalization(
                     dense.view(),
-                    Some(vec![0.5, 1.0]),
-                    Some(vec![-2.0, 3.0]),
+                    lazymatrix::ColumnNormalizationParams::from_parts(
+                        2,
+                        Some(vec![0.5, 1.0]),
+                        Some(vec![-2.0, 3.0]),
+                    ),
                 );
                 let mut expected = ndarray::Array2::zeros((2, 2));
                 lazy.weighted_gram_into(&[2.0_f32, -1.0], &mut expected.view_mut())

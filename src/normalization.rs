@@ -1,3 +1,44 @@
+mod row;
+
+mod private {
+    pub trait Params {
+        fn assert_shape(&self, nrows: usize, ncols: usize);
+    }
+
+    pub trait Recipe<M: crate::MatrixErrorType, P> {
+        fn fit(self, data: &M) -> Result<P, M::Error>;
+    }
+}
+
+/// Fitted normalization metadata supported by [`crate::LazyMatrix`].
+///
+/// The parameter type identifies the axis and scalar. This trait is sealed;
+/// use [`ColumnNormalizationParams`] or [`RowNormalizationParams`] to supply
+/// custom fitted values.
+pub trait NormalizationParams: private::Params {
+    /// Scalar used by the fitted centers and scales.
+    type Scalar: crate::Scalar;
+}
+
+/// A normalization recipe supported by a backend and fitted parameter type.
+///
+/// [`crate::LazyMatrix::new`] selects fitting through this sealed trait. Column
+/// recipes require [`crate::ColumnStats`]; row recipes require dense indexed
+/// access through [`crate::MatrixRead`]. Implementing those capabilities enables
+/// fitting for a downstream backend without implementing this trait directly.
+pub trait NormalizationRecipe<M: crate::MatrixErrorType, P: NormalizationParams>:
+    private::Recipe<M, P>
+{
+}
+
+impl<M, P, R> NormalizationRecipe<M, P> for R
+where
+    M: crate::MatrixErrorType,
+    P: NormalizationParams,
+    R: private::Recipe<M, P>,
+{
+}
+
 /// Computed column centers and raw scales, respectively.
 ///
 /// An inactive normalization component is `None`. Present vectors have one
@@ -8,7 +49,7 @@ pub type ColumnNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 /// Computed row centers and raw scales, respectively.
 ///
 /// An inactive component is `None`. Present vectors have one entry per row.
-/// [`crate::RowNormalizedMatrix::new`] replaces exact zero scales with one
+/// [`crate::LazyMatrix::new`] replaces exact zero scales with one
 /// while preserving nonfinite values.
 pub type RowNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 
@@ -163,7 +204,100 @@ impl ColumnNormalization {
 /// The default performs no centering or scaling. Norms (`L1`, `L2`, and
 /// `MaxAbs`) are fitted to centered rows when centering is active. Standard
 /// deviations, ranges, and quantile ranges are translation-invariant.
-/// Use [`crate::RowNormalizedMatrix::new`] to fit each row independently.
+/// Use [`crate::LazyMatrix::new`] to fit each row independently. Fitting requires
+/// [`crate::MatrixRead`] and takes O(nrows * ncols) time, or
+/// O(nrows * ncols * log(ncols)) when sorting for exact linear quantiles. It uses
+/// O(nrows + ncols) storage at most, including one working row for quantiles.
+/// Standard deviations use a two-pass calculation with `ncols - df` as divisor.
+/// Empty rows have undefined means, standard deviations, minima, and ranges
+/// (`NaN`), and zero norms, matching column fitting along the other axis.
+///
+/// Row-normalized operators support allocating and reusable forward and
+/// transpose vector products on dense matrices and strided views. Products
+/// normalize entries before accumulating and use O(1) additional workspace
+/// beyond their output. Sparse and storage-backed fitting, fused and batched
+/// products, borrowed logical views, weighted operations, and eager conversion
+/// are not yet supported. New samples require independently fitted row
+/// parameters. [`crate::Transpose`] transposes the fitted operator without
+/// refitting.
+///
+/// ```
+/// # #[cfg(feature = "ndarray_v0_17")]
+/// # {
+/// use lazymatrix::{Centering, LazyMatrix, MatVec, RowNormalization, Scaling};
+/// use ndarray::array;
+///
+/// let x = array![[3.0, 4.0], [0.0, 0.0]];
+/// let recipe = RowNormalization::new(Centering::None, Scaling::L2);
+/// let normalized = LazyMatrix::new(x.view(), recipe).unwrap();
+/// let product = normalized.matvec(&array![1.0, 1.0]).unwrap();
+/// assert_eq!(product, array![1.4, 0.0]);
+/// assert_eq!(normalized.normalization().scales(), Some([5.0, 1.0].as_slice()));
+/// # }
+/// ```
+///
+/// Computed row normalization requires dense indexed access:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatrixErrorType, MatrixShape, RowNormalization};
+/// fn without_dense_access<M: MatrixShape + MatrixErrorType>(matrix: M) {
+///     let _ = LazyMatrix::new(matrix, RowNormalization::standardize());
+/// }
+/// ```
+///
+/// Row normalization does not grant fused products, even if raw storage has them:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatVecScaledInto, MatrixRead, RowNormalizationParams};
+/// fn fused<M: MatrixRead<f64> + MatVecScaledInto<Vec<f64>, Vec<f64>, f64>>(
+///     rows: &LazyMatrix<M, RowNormalizationParams>, x: &Vec<f64>, out: &mut Vec<f64>,
+/// ) {
+///     rows.matvec_scaled_into(1.0, x, 0.0, out).unwrap();
+/// }
+/// ```
+///
+/// Batched products remain unavailable:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatMatInto, MatrixRead, MatrixWrite, RowNormalizationParams};
+/// fn batched<M: MatrixRead<f64> + MatMatInto<f64>, D: MatrixRead<f64> + MatrixWrite<f64>>(
+///     rows: &LazyMatrix<M, RowNormalizationParams>, rhs: &D, out: &mut D,
+/// ) {
+///     rows.matmat_into(rhs, out).unwrap();
+/// }
+/// ```
+///
+/// Natural raw columns do not grant logical column borrowing:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatrixRead, RawColumns, RowNormalizationParams};
+/// fn columns<M: MatrixRead<f64> + RawColumns<f64>>(rows: &LazyMatrix<M, RowNormalizationParams>) {
+///     let _ = rows.column(0);
+/// }
+/// ```
+///
+/// Weighted operations remain unavailable:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatrixRead, MatrixWrite, RowNormalizationParams,
+///                  WeightedGramInto, WeightedGramKernel};
+/// fn gram<M: MatrixRead<f64> + WeightedGramKernel<f64>, D: MatrixWrite<f64>>(
+///     rows: &LazyMatrix<M, RowNormalizationParams>, weights: &Vec<f64>, out: &mut D,
+/// ) {
+///     rows.weighted_gram_into(weights, out).unwrap();
+/// }
+/// ```
+///
+/// Eager conversion is currently available for column normalization only:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MaterializeDense, MatrixRead, MatrixWrite, RowNormalizationParams};
+/// fn eager<M: MatrixRead<f64> + MaterializeDense<f64>, D: MatrixWrite<f64>>(
+///     rows: &LazyMatrix<M, RowNormalizationParams>, out: &mut D,
+/// ) {
+///     let _ = rows.to_eager_into(out);
+/// }
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RowNormalization {
     /// How to center each row.
@@ -322,6 +456,67 @@ impl<F: crate::Scalar> RowNormalizationParams<F> {
     pub fn into_parts(self) -> RowNormalizationStats<F> {
         (self.centers, self.scales)
     }
+}
+
+impl<F: crate::Scalar> NormalizationParams for ColumnNormalizationParams<F> {
+    type Scalar = F;
+}
+
+impl<F: crate::Scalar> private::Params for ColumnNormalizationParams<F> {
+    fn assert_shape(&self, _nrows: usize, ncols: usize) {
+        assert_eq!(
+            ncols, self.ncols,
+            "normalization column count must equal ncols"
+        );
+    }
+}
+
+impl<F: crate::Scalar> NormalizationParams for RowNormalizationParams<F> {
+    type Scalar = F;
+}
+
+impl<F: crate::Scalar> private::Params for RowNormalizationParams<F> {
+    fn assert_shape(&self, nrows: usize, _ncols: usize) {
+        assert_eq!(
+            nrows, self.nrows,
+            "normalization row count must equal nrows"
+        );
+    }
+}
+
+impl<M: crate::ColumnStats<F> + crate::MatrixShape, F: crate::Scalar>
+    private::Recipe<M, ColumnNormalizationParams<F>> for ColumnNormalization
+{
+    fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, M::Error> {
+        let (centers, scales) = data.normalization_stats(self)?;
+        Ok(ColumnNormalizationParams::from_parts(
+            data.ncols(),
+            centers,
+            scales.map(replace_zero_scales),
+        ))
+    }
+}
+
+impl<M: crate::MatrixRead<F> + crate::MatrixErrorType, F: crate::Scalar>
+    private::Recipe<M, RowNormalizationParams<F>> for RowNormalization
+{
+    fn fit(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error> {
+        let (centers, scales) = row::fit(data, self);
+        Ok(RowNormalizationParams::from_parts(
+            data.nrows(),
+            centers,
+            scales,
+        ))
+    }
+}
+
+fn replace_zero_scales<F: crate::Scalar>(mut scales: Vec<F>) -> Vec<F> {
+    for scale in &mut scales {
+        if *scale == F::zero() {
+            *scale = F::one();
+        }
+    }
+    scales
 }
 
 #[cfg(test)]

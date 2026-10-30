@@ -117,7 +117,14 @@ mod tests {
         let scales = vec![value(2.), value(4.)];
         let mut out = vec![F::nan(); 3];
         let mut transpose_out = vec![F::nan(); 2];
-        let lazy = LazyMatrix::from_parts(&matrix, Some(centers.clone()), Some(scales.clone()));
+        let lazy = LazyMatrix::from_normalization(
+            &matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                centers.len(),
+                Some(centers.clone()),
+                Some(scales.clone()),
+            ),
+        );
         lazy.matvec_into(&vec![value(2.), value(-1.)], &mut out)
             .unwrap();
         lazy.mat_transpose_vec_into(&vec![value(1.), value(-2.), value(3.)], &mut transpose_out)
@@ -126,7 +133,14 @@ mod tests {
         assert_eq!(transpose_out, vec![value(3.5), value(4.5)]);
         assert_eq!(matrix.products.get(), 2);
 
-        let lazy = LazyMatrix::from_parts(&mut matrix, Some(centers), Some(scales));
+        let lazy = LazyMatrix::from_normalization(
+            &mut matrix,
+            lazymatrix::ColumnNormalizationParams::from_parts(
+                centers.len(),
+                Some(centers),
+                Some(scales),
+            ),
+        );
         lazy.matvec_into(&vec![value(2.), value(-1.)], &mut out)
             .unwrap();
         lazy.mat_transpose_vec_into(&vec![value(1.), value(-2.), value(3.)], &mut transpose_out)

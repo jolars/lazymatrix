@@ -8,7 +8,7 @@ use backend_aliases::*;
 
 use faer::Mat;
 use faer::sparse::{SparseColMat, Triplet};
-use lazymatrix::{Columns, LazyMatrix, LogicalColumn};
+use lazymatrix::{ColumnNormalizationParams, Columns, LazyMatrix, LogicalColumn};
 
 fn coordinate_derivatives<X: Columns<f64>>(
     matrix: &X,
@@ -51,10 +51,13 @@ fn main() {
         Triplet::new(2, 2, 4.0),
     ];
     let sparse = SparseColMat::try_new_from_triplets(4, 3, &triplets).unwrap();
-    let centers = Some(vec![1.0, 0.25, 1.5]);
-    let scales = Some(vec![2.0, 1.5, 0.5]);
-    let dense = LazyMatrix::from_parts(dense, centers.clone(), scales.clone());
-    let sparse = LazyMatrix::from_parts(sparse, centers, scales);
+    let params = ColumnNormalizationParams::from_parts(
+        3,
+        Some(vec![1.0, 0.25, 1.5]),
+        Some(vec![2.0, 1.5, 0.5]),
+    );
+    let dense = LazyMatrix::from_normalization(dense, params.clone());
+    let sparse = LazyMatrix::from_normalization(sparse, params);
     let residual = [1.0, -0.5, 2.0, 0.25];
     let weights = [0.5, 1.0, 1.5, 2.0];
 

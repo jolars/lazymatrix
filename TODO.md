@@ -74,25 +74,29 @@ assuming full API or numerical parity.
   - `RowNormalization` offers independent centering and scaling choices matching
     `ColumnNormalization`, including standardization, min-max, and robust
     recipes. L1, L2, and maximum-absolute scaling leave zero rows unchanged.
-  - `RowNormalizedMatrix` supports fitted and explicit parameters, allocating
+  - `LazyMatrix` supports fitted and explicit row parameters, allocating
     and reusable forward and transpose vector products, and dense views across
     every supported backend release. Explicit parameters permit custom fitting.
   - Fit new samples' row parameters independently. Exact quantiles reuse one
     working row; products normalize entries before accumulation without
     materializing the design.
 
-- [ ] Unify row and column normalization under `LazyMatrix`.
-  - Accept either axis's recipe or an ordered recipe chain in `LazyMatrix::new`,
-    and remove the separate `RowNormalizedMatrix` wrapper.
+- [x] Unify row and column normalization under `LazyMatrix`.
+  - Accept either axis's recipe in `LazyMatrix::new`, and select capabilities
+    through the fitted parameter type. Remove the separate row wrapper.
   - Keep column-only use concise:
     `LazyMatrix::new(data, ColumnNormalization::standardize())?`.
     Retain specialized column-only kernels without row-parameter allocations or
     runtime axis dispatch.
-  - Prefer consistent constructors, generic parameters, and accessors over
-    backward compatibility. Update Rust consumers, Python bindings, tests, and
-    documentation together.
+  - Store typed metadata in `LazyMatrix<M, P>` and `EagerMatrix<M, P>`. Inspect it
+    with `normalization()` and recover `(data, params)` with `into_parts()`.
+    Explicit construction uses axis-specific parameter objects and
+    `LazyMatrix::from_normalization`.
+  - Migrate Rust consumers, Python's native extension, tests, and documentation
+    together, preferring the consistent API over backward compatibility.
 
 - [ ] Compose normalization recipes with `.then()`, read from left to right.
+  - Accept an ordered recipe chain in `LazyMatrix::new`.
   - Support row-then-column standardization for the Duke breast-cancer
     preprocessing order:
 
@@ -143,7 +147,6 @@ assuming full API or numerical parity.
 
 - [ ] Benchmark row fitting and products across storage layouts and document
   scan counts, workspace, and tradeoffs against eager normalization.
-  Check column-only performance when unifying the wrappers.
 
 ## Operator algebra
 

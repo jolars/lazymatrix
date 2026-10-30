@@ -10,7 +10,7 @@ where
         + ColumnStats<f64>
         + lazymatrix::MatMatInto<f64>
         + lazymatrix::MatTransposeMatInto<f64>,
-    LazyMatrix<M, f64>: MatVec<V>
+    LazyMatrix<M>: MatVec<V>
         + MatTransposeVec<V>
         + MatVecInto<V>
         + MatTransposeVecInto<V>
@@ -23,8 +23,8 @@ where
         ColumnNormalization::new(Centering::Mean, Scaling::Range),
     )
     .unwrap();
-    assert_eq!(lazy.centers().unwrap(), &[1.0, 3.0]);
-    assert_eq!(lazy.scales().unwrap(), &[2.0, 6.0]);
+    assert_eq!(lazy.normalization().centers().unwrap(), &[1.0, 3.0]);
+    assert_eq!(lazy.normalization().scales().unwrap(), &[2.0, 6.0]);
     {
         use lazymatrix::{DenseBlock, MatMat, MatTransposeMat};
         let rhs = DenseBlock::new(&[2., 4., -1., -2.], 2, 2);

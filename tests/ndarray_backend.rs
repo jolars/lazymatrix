@@ -72,9 +72,9 @@ macro_rules! backend_suite {
                 let matrix = build(&tm);
                 common::batched::check_batched(&matrix.view(), &tm.dense);
                 common::batched::check_batched(&matrix.t(), &(0..3).map(|j| (0..7).map(|i| tm.dense[i][j]).collect()).collect::<Vec<_>>());
-                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.; 3]), Some(vec![-2.; 3]));
+                let lazy = LazyMatrix::from_normalization(&matrix, lazymatrix::ColumnNormalizationParams::from_parts(3, Some(vec![1.; 3]), Some(vec![-2.; 3])));
                 let eager = lazy.to_eager::<Array2<f64>>().unwrap();
-                common::batched::check_batched(&eager, &common::materialize(&tm.dense, lazy.centers(), lazy.scales()));
+                common::batched::check_batched(&eager, &common::materialize(&tm.dense, lazy.normalization().centers(), lazy.normalization().scales()));
                 let rhs = Array2::from_shape_fn((3, 2), |(i, j)| (i + j) as f64);
                 let native: Array2<f64> = lazy.matmat(&rhs.view()).unwrap();
                 let independent: common::MaterializeOutput = lazy.matmat(&rhs.view()).unwrap();
@@ -82,7 +82,7 @@ macro_rules! backend_suite {
                 let dense = Array2::from_shape_fn((6, 6), |(i, j)| 1e12 + (i * 6 + j) as f64);
                 let raw = dense.slice(s![..;-2, ..;3]);
                 let values: Vec<Vec<_>> = (0..3).map(|i| (0..2).map(|j| raw[(i, j)] - 1e12).collect()).collect();
-                let centered = LazyMatrix::with_centers(raw, vec![1e12; 2]);
+                let centered = LazyMatrix::from_normalization(raw, lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1e12; 2]), None));
                 common::batched::check_batched(&centered, &values);
                 let rhs = Array2::from_shape_fn((4, 4), |(i, j)| (i + j) as f64);
                 let input = rhs.slice(s![..;-2, ..;2]);
@@ -113,7 +113,7 @@ macro_rules! backend_suite {
             fn eager_conversion_supports_strided_outputs_and_fortran_allocation_reuse() {
                 use lazymatrix::{WeightedGramInto, WeightedColumnSumsInto, WithIntercept};
                 let dense = array![[1.0, 2.0], [3.0, 4.0]];
-                let lazy = LazyMatrix::with_centers(&dense, vec![1.0, 2.0]);
+                let lazy = LazyMatrix::from_normalization(&dense, lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 2.0]), None));
                 let mut storage = Array2::from_elem((4, 4), 99.0);
                 {
                     let mut view = storage.slice_mut(s![..;2, ..;2]);
@@ -135,7 +135,7 @@ macro_rules! backend_suite {
                 let dense = Array2::from_shape_fn((2, 2).f(), |(i, j)| (2 * i + j) as f32);
                 let pointer = dense.as_ptr();
                 let strides = dense.strides().to_vec();
-                let eager = LazyMatrix::with_centers(dense, vec![1.0, 1.0]).into_eager();
+                let eager = LazyMatrix::from_normalization(dense, lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 1.0]), None)).into_eager();
                 assert_eq!(eager.data().as_ptr(), pointer);
                 assert_eq!(eager.data().strides(), strides);
                 common::check_materialize_f32(eager.data(), &[-1.0, 0.0, 1.0, 2.0]);
@@ -146,7 +146,7 @@ macro_rules! backend_suite {
                 use lazymatrix::{WithIntercept, WeightedGramInto, WeightedColumnSumsInto, MatVecScaledInto, MatTransposeVecScaledInto};
                 let storage = Array2::from_shape_fn((6, 4), |(i, j)| (i + j) as f64);
                 let matrix = storage.slice(s![..;2, ..;2]);
-                let lazy = LazyMatrix::from_parts(matrix, Some(vec![1.0, 2.0]), Some(vec![2.0, -1.0]));
+                let lazy = LazyMatrix::from_normalization(matrix, lazymatrix::ColumnNormalizationParams::from_parts(2, Some(vec![1.0, 2.0]), Some(vec![2.0, -1.0])));
                 let augmented = WithIntercept::new(&lazy);
                 let input = array![2.0, 99.0, 3.0, 99.0, -1.0, 99.0];
                 let x = input.slice(s![..;2]);
@@ -180,12 +180,12 @@ macro_rules! backend_suite {
                 augmented.weighted_gram_into(&x, &mut gram.slice_mut(s![..;-2, ..;2])).unwrap();
                 let actual = common::GramOutput(gram.slice(s![..;-2, ..;2]).rows().into_iter().map(|r| r.to_vec()).collect());
                 let dense: Vec<_> = matrix.rows().into_iter().map(|r| r.to_vec()).collect();
-                let normalized: Vec<Vec<_>> = materialize(&dense, lazy.centers(), lazy.scales()).iter().map(|r| std::iter::once(1.0).chain(r.iter().copied()).collect()).collect();
+                let normalized: Vec<Vec<_>> = materialize(&dense, lazy.normalization().centers(), lazy.normalization().scales()).iter().map(|r| std::iter::once(1.0).chain(r.iter().copied()).collect()).collect();
                 common::assert_gram(&actual, &normalized, &x.to_vec());
                 assert!(gram.slice(s![..;2, ..]).iter().all(|&x| x == 99.0));
                 assert!(gram.slice(s![.., 1..;2]).iter().all(|&x| x == 99.0));
                 let small = array![[1.0_f32], [3.0]];
-                let small = WithIntercept::new(LazyMatrix::from_parts(small, Some(vec![1.0_f32]), None));
+                let small = WithIntercept::new(LazyMatrix::from_normalization(small, lazymatrix::ColumnNormalizationParams::from_parts(1, Some(vec![1.0_f32]), None)));
                 let mut gram = Array2::zeros((2, 2));
                 small.weighted_gram_into(&[2.0_f32, -1.0], &mut gram).unwrap();
                 assert_eq!(gram, array![[1.0, -2.0], [-2.0, -4.0]]);
@@ -194,7 +194,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn row_normalization() {
-                use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+                use lazymatrix::RowNormalization;
                 for build in [build, build_fortran] {
                     common::run_row_normalization_suite(build, |values| Array1::from_vec(values.to_vec()));
                 }
@@ -206,7 +206,7 @@ macro_rules! backend_suite {
                 common::check_row_normalization_view(&storage.t(), |values| Array1::from_vec(values.to_vec()));
                 common::check_row_normalization_view(&storage.slice(s![..;-2, ..;3]), |values| Array1::from_vec(values.to_vec()));
                 common::check_row_normalization_view(&storage.view_mut(), |values| Array1::from_vec(values.to_vec()));
-                let lazy = RowNormalizedMatrix::new(storage.slice(s![..;-2, ..;3]), RowNormalization::standardize()).unwrap();
+                let lazy = LazyMatrix::new(storage.slice(s![..;-2, ..;3]), RowNormalization::standardize()).unwrap();
                 let coefficients = array![1.0, 99.0, -2.0, 99.0];
                 let mut out = Array1::from_elem(6, 99.0);
                 let expected = lazy.matvec(&array![1.0, -2.0]).unwrap();
@@ -242,7 +242,7 @@ macro_rules! backend_suite {
                 let matrix = storage.slice(s![..;-2, ..;2]);
                 let weight_storage = Array1::from_shape_fn(600, |i| (i % 7) as f64 - 3.0);
                 let weights = weight_storage.slice(s![..;-2]);
-                let lazy = LazyMatrix::from_parts(matrix, Some(vec![1e9; 37]), Some(vec![-2.0; 37]));
+                let lazy = LazyMatrix::from_normalization(matrix, lazymatrix::ColumnNormalizationParams::from_parts(37, Some(vec![1e9; 37]), Some(vec![-2.0; 37])));
                 let mut output = Array2::from_elem((74, 74), -99.0);
                 lazy.weighted_gram_into(&weights, &mut output.slice_mut(s![..;-2, ..;2]))
                     .unwrap();
@@ -257,7 +257,7 @@ macro_rules! backend_suite {
                 let dense: Vec<_> = matrix.rows().into_iter().map(|r| r.to_vec()).collect();
                 common::assert_gram(
                     &actual,
-                    &materialize(&dense, lazy.centers(), lazy.scales()),
+                    &materialize(&dense, lazy.normalization().centers(), lazy.normalization().scales()),
                     &weights.to_vec(),
                 );
                 assert!(output.slice(s![..;2, ..]).iter().all(|&x| x == -99.0));
@@ -295,9 +295,9 @@ macro_rules! backend_suite {
                         let spec = ColumnNormalization::new(center, scale);
                         let lazy = LazyMatrix::new(matrix, spec).unwrap();
                         let reference = LazyMatrix::new(matrix.to_owned(), spec).unwrap();
-                        assert_eq!(lazy.centers(), reference.centers());
-                        assert_eq!(lazy.scales(), reference.scales());
-                        let normalized = materialize(&dense, lazy.centers(), lazy.scales());
+                        assert_eq!(lazy.normalization().centers(), reference.normalization().centers());
+                        assert_eq!(lazy.normalization().scales(), reference.normalization().scales());
+                        let normalized = materialize(&dense, lazy.normalization().centers(), lazy.normalization().scales());
                         assert_close(
                             &lazy.matvec(&v).unwrap().to_vec(),
                             &dense_matvec(&normalized, &v.to_vec()),
@@ -360,12 +360,12 @@ macro_rules! backend_suite {
 
                 for center in [false, true] {
                     for scale in [false, true] {
-                        let lazy = LazyMatrix::from_parts(
-                            matrix.view(),
-                            center.then(|| vec![0.5, -1.0]),
-                            scale.then(|| vec![2.0, 4.0]),
-                        );
-                        let normalized = materialize(&dense, lazy.centers(), lazy.scales());
+                        let lazy = {
+                            let normalization_data = matrix.view();
+                            let normalization_params = lazymatrix::ColumnNormalizationParams::from_parts(lazymatrix::MatrixShape::ncols(&normalization_data), center.then(|| vec![0.5, -1.0]), scale.then(|| vec![2.0, 4.0]));
+                            LazyMatrix::from_normalization(normalization_data, normalization_params)
+                        };
+                        let normalized = materialize(&dense, lazy.normalization().centers(), lazy.normalization().scales());
                         let mut output = Array1::from_elem(6, -99.0);
                         output.slice_mut(s![..;-2]).fill(f64::NAN);
                         let owned_input = input.to_owned();
@@ -468,8 +468,8 @@ macro_rules! backend_suite {
                 );
                 let matrix = array![[1.0_f32, 3.0], [3.0, 3.0]];
                 let lazy = LazyMatrix::new(matrix, ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 })).unwrap();
-                assert_eq!(lazy.centers(), Some([2.0, 3.0].as_slice()));
-                assert_eq!(lazy.scales(), Some([1.0, 1.0].as_slice()));
+                assert_eq!(lazy.normalization().centers(), Some([2.0, 3.0].as_slice()));
+                assert_eq!(lazy.normalization().scales(), Some([1.0, 1.0].as_slice()));
                 assert_eq!(
                     lazy.matvec(&array![2.0, 1.0]).unwrap().to_vec(),
                     vec![-2.0, 2.0]

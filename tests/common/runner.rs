@@ -9,10 +9,10 @@ pub mod batched;
 
 use lazymatrix::VectorView;
 use lazymatrix::{
-    Centering, ColumnNormalization, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm,
-    LazyMatrix, LazySparseColumn, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto,
-    MatrixShape, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice, Scaling,
-    SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
+    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnStats, DotProduct, DotSlice,
+    ElemDivAssign, L2Norm, LazyMatrix, LazySparseColumn, MatTransposeVec, MatTransposeVecInto,
+    MatVec, MatVecInto, MatrixShape, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign,
+    ScaledSubSlice, Scaling, SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -147,24 +147,38 @@ where
                 lazy.weighted_gram_into(&weights, &mut out).unwrap();
                 assert_gram(
                     &out,
-                    &materialize(&tm.dense, lazy.centers(), lazy.scales()),
+                    &materialize(
+                        &tm.dense,
+                        lazy.normalization().centers(),
+                        lazy.normalization().scales(),
+                    ),
                     &weights,
                 );
             }
         }
-        let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1.25; p]), Some(vec![-2.0; p]));
+        let lazy = LazyMatrix::from_normalization(
+            &matrix,
+            ColumnNormalizationParams::from_parts(p, Some(vec![1.25; p]), Some(vec![-2.0; p])),
+        );
         lazy.weighted_gram_into(&weights, &mut out).unwrap();
         assert_gram(
             &out,
-            &materialize(&tm.dense, lazy.centers(), lazy.scales()),
+            &materialize(
+                &tm.dense,
+                lazy.normalization().centers(),
+                lazy.normalization().scales(),
+            ),
             &weights,
         );
         for scale in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
-            let nonfinite = LazyMatrix::from_parts(&matrix, None, Some(vec![scale; p]));
+            let nonfinite = LazyMatrix::from_normalization(
+                &matrix,
+                ColumnNormalizationParams::from_parts(p, None, Some(vec![scale; p])),
+            );
             nonfinite.weighted_gram_into(&weights, &mut out).unwrap();
             assert_gram(
                 &out,
-                &materialize(&tm.dense, None, nonfinite.scales()),
+                &materialize(&tm.dense, None, nonfinite.normalization().scales()),
                 &weights,
             );
         }
@@ -211,13 +225,20 @@ where
     }
 
     let tm = random_matrix(518, 300, 37, 0.1);
-    let tiled = LazyMatrix::from_parts(build(&tm), Some(vec![0.5; 37]), Some(vec![-2.0; 37]));
+    let tiled = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(37, Some(vec![0.5; 37]), Some(vec![-2.0; 37])),
+    );
     let weights = random_vec(519, 300);
     let mut out = GramOutput(vec![vec![f64::NAN; 37]; 37]);
     tiled.weighted_gram_into(&weights, &mut out).unwrap();
     assert_gram(
         &out,
-        &materialize(&tm.dense, tiled.centers(), tiled.scales()),
+        &materialize(
+            &tm.dense,
+            tiled.normalization().centers(),
+            tiled.normalization().scales(),
+        ),
         &weights,
     );
     let mut nonfinite_weights = weights;
@@ -245,12 +266,15 @@ where
         dense,
         triplets,
     };
-    let tiled = LazyMatrix::with_centers(build(&tm), vec![1e12; 17]);
+    let tiled = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(17, Some(vec![1e12; 17]), None),
+    );
     let mut out = GramOutput(vec![vec![f64::NAN; 17]; 17]);
     tiled.weighted_gram_into(&[1.0; 35], &mut out).unwrap();
     assert_gram(
         &out,
-        &materialize(&tm.dense, tiled.centers(), None),
+        &materialize(&tm.dense, tiled.normalization().centers(), None),
         &[1.0; 35],
     );
 
@@ -308,12 +332,19 @@ where
             dense,
             triplets,
         };
-        let lazy = LazyMatrix::from_parts(build(&tm), Some(centers), None);
+        let lazy = LazyMatrix::from_normalization(
+            build(&tm),
+            ColumnNormalizationParams::from_parts(centers.len(), Some(centers), None),
+        );
         let mut out = GramOutput(vec![vec![f64::NAN; 2]; 2]);
         lazy.weighted_gram_into(&weights, &mut out).unwrap();
         assert_gram(
             &out,
-            &materialize(&tm.dense, lazy.centers(), lazy.scales()),
+            &materialize(
+                &tm.dense,
+                lazy.normalization().centers(),
+                lazy.normalization().scales(),
+            ),
             &weights,
         );
     }
@@ -421,7 +452,7 @@ pub fn run_row_normalization_suite<M, V>(
     M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
     V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
 {
-    use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+    use lazymatrix::RowNormalization;
     let mut cases: Vec<_> = [
         (7, 3, 0.4),
         (3, 7, 1.0),
@@ -467,15 +498,15 @@ pub fn run_row_normalization_suite<M, V>(
                 Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
             ] {
                 let spec = RowNormalization::new(center, scale);
-                let lazy = RowNormalizedMatrix::new(&matrix, spec).unwrap();
+                let lazy = LazyMatrix::new(&matrix, spec).unwrap();
                 let (centers, scales) = row_normalization_oracle(&tm.dense, spec);
-                assert_eq!(lazy.centers().is_some(), centers.is_some());
-                assert_eq!(lazy.scales().is_some(), scales.is_some());
+                assert_eq!(lazy.normalization().centers().is_some(), centers.is_some());
+                assert_eq!(lazy.normalization().scales().is_some(), scales.is_some());
                 if let Some(expected) = &centers {
-                    assert_quantile_values(lazy.centers().unwrap(), expected, EPS);
+                    assert_quantile_values(lazy.normalization().centers().unwrap(), expected, EPS);
                 }
                 if let Some(expected) = &scales {
-                    assert_quantile_values(lazy.scales().unwrap(), expected, EPS);
+                    assert_quantile_values(lazy.normalization().scales().unwrap(), expected, EPS);
                 }
                 check_row_normalized_products(
                     &lazy,
@@ -491,8 +522,15 @@ pub fn run_row_normalization_suite<M, V>(
                 Some(vec![f64::INFINITY; tm.nrows]),
                 Some(vec![f64::NAN; tm.nrows]),
             ] {
-                let lazy =
-                    RowNormalizedMatrix::from_parts(&matrix, centers.clone(), scales.clone());
+                let lazy = {
+                    let normalization_data = &matrix;
+                    let normalization_params = lazymatrix::RowNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::nrows(&normalization_data),
+                        centers.clone(),
+                        scales.clone(),
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
                 check_row_normalized_products(
                     &lazy,
                     &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
@@ -502,18 +540,18 @@ pub fn run_row_normalization_suite<M, V>(
         }
     }
     let tm = matrix_from_dense(vec![vec![1e16, 1e16 + 2.0, 1e16 + 4.0, 1e16 + 6.0]]);
-    let robust = RowNormalizedMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
-    assert_eq!(robust.centers().unwrap(), &[1e16 + 4.0]);
-    assert_eq!(robust.scales().unwrap(), &[3.0]);
+    let robust = LazyMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
+    assert_eq!(robust.normalization().centers().unwrap(), &[1e16 + 4.0]);
+    assert_eq!(robust.normalization().scales().unwrap(), &[3.0]);
     check_row_normalized_products(
         &robust,
         &[vec![-4.0 / 3.0, -2.0 / 3.0, 0.0, 2.0 / 3.0]],
         &to_v,
     );
     let tm = matrix_from_dense(vec![vec![-f64::MAX, f64::MAX]]);
-    let robust = RowNormalizedMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
-    assert_eq!(robust.centers().unwrap(), &[0.0]);
-    assert_eq!(robust.scales().unwrap(), &[f64::MAX]);
+    let robust = LazyMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
+    assert_eq!(robust.normalization().centers().unwrap(), &[0.0]);
+    assert_eq!(robust.normalization().scales().unwrap(), &[f64::MAX]);
     check_row_normalized_products(&robust, &[vec![-1.0, 1.0]], &to_v);
 }
 
@@ -523,7 +561,7 @@ where
     M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
     V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
 {
-    use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+    use lazymatrix::RowNormalization;
     let raw: Vec<Vec<_>> = (0..matrix.nrows())
         .map(|i| (0..matrix.ncols()).map(|j| matrix.get(i, j)).collect())
         .collect();
@@ -533,9 +571,17 @@ where
         RowNormalization::robust(),
     ] {
         let (centers, scales) = row_normalization_oracle(&raw, spec);
-        let lazy = RowNormalizedMatrix::new(matrix, spec).unwrap();
-        assert_quantile_values(lazy.centers().unwrap(), centers.as_ref().unwrap(), EPS);
-        assert_quantile_values(lazy.scales().unwrap(), scales.as_ref().unwrap(), EPS);
+        let lazy = LazyMatrix::new(matrix, spec).unwrap();
+        assert_quantile_values(
+            lazy.normalization().centers().unwrap(),
+            centers.as_ref().unwrap(),
+            EPS,
+        );
+        assert_quantile_values(
+            lazy.normalization().scales().unwrap(),
+            scales.as_ref().unwrap(),
+            EPS,
+        );
         check_row_normalized_products(
             &lazy,
             &materialize_rows(&raw, centers.as_deref(), scales.as_deref()),
@@ -547,7 +593,10 @@ where
         .map(|i| if i % 2 == 0 { 1.3 } else { -2.7 })
         .collect();
     let normalized = materialize_rows(&raw, Some(&centers), Some(&scales));
-    let lazy = RowNormalizedMatrix::from_parts(matrix, Some(centers), Some(scales));
+    let lazy = LazyMatrix::from_normalization(
+        matrix,
+        lazymatrix::RowNormalizationParams::from_parts(centers.len(), Some(centers), Some(scales)),
+    );
     check_row_normalized_products(&lazy, &normalized, to_v);
 }
 
@@ -640,7 +689,7 @@ fn materialize_rows<F: lazymatrix::Scalar>(
 
 /// Compare row-normalized vector products against a materialized dense oracle.
 pub fn check_row_normalized_products<M, V, F>(
-    operator: &lazymatrix::RowNormalizedMatrix<M, F>,
+    operator: &lazymatrix::LazyMatrix<M, lazymatrix::RowNormalizationParams<F>>,
     normalized: &[Vec<F>],
     to_v: impl Fn(&[F]) -> V,
 ) where
@@ -730,26 +779,33 @@ pub fn run_row_normalization_f32_suite<M, V>(
     M: lazymatrix::MatrixRead<f32> + lazymatrix::MatrixErrorType,
     V: lazymatrix::VectorOwned<f32, Owned = V> + lazymatrix::VectorViewMut<f32>,
 {
-    use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+    use lazymatrix::RowNormalization;
     let raw = vec![vec![1e8_f32, 1e8 + 8.0, 1e8 + 16.0, 1e8 + 24.0]];
     let spec = RowNormalization::new(
         Centering::Median,
         Scaling::QuantileRange(QuantileRange::new(0.125, 0.875)),
     );
-    let lazy = RowNormalizedMatrix::new(build(&raw), spec).unwrap();
-    assert_eq!(lazy.scales().unwrap(), &[18.0]);
+    let lazy = LazyMatrix::new(build(&raw), spec).unwrap();
+    assert_eq!(lazy.normalization().scales().unwrap(), &[18.0]);
     check_row_normalized_products(
         &lazy,
-        &materialize_rows(&raw, lazy.centers(), lazy.scales()),
+        &materialize_rows(
+            &raw,
+            lazy.normalization().centers(),
+            lazy.normalization().scales(),
+        ),
         &to_v,
     );
     let raw = vec![vec![1e38_f32, 1e38], vec![0.0, 0.0]];
-    let lazy = RowNormalizedMatrix::from_parts(build(&raw), None, Some(vec![1e38, 1.0]));
+    let lazy = LazyMatrix::from_normalization(
+        build(&raw),
+        lazymatrix::RowNormalizationParams::from_parts(2, None, Some(vec![1e38, 1.0])),
+    );
     check_row_normalized_products(&lazy, &[vec![1.0, 1.0], vec![0.0, 0.0]], &to_v);
     let raw = vec![vec![100_001.0, 100_003.0], vec![3.0, 3.0]];
-    let lazy = RowNormalizedMatrix::new(build(&raw), RowNormalization::standardize()).unwrap();
-    assert_eq!(lazy.centers().unwrap(), &[100_002.0, 3.0]);
-    assert_eq!(lazy.scales().unwrap(), &[1.0, 1.0]);
+    let lazy = LazyMatrix::new(build(&raw), RowNormalization::standardize()).unwrap();
+    assert_eq!(lazy.normalization().centers().unwrap(), &[100_002.0, 3.0]);
+    assert_eq!(lazy.normalization().scales().unwrap(), &[1.0, 1.0]);
     check_row_normalized_products(&lazy, &[vec![-1.0, 1.0], vec![0.0, 0.0]], &to_v);
 }
 
@@ -896,7 +952,10 @@ pub fn run_dense_centered_f32_suite<M, V>(
         vec![1e6 - 1.0, -1e6 + 1.0],
     ];
     let raw = build(&dense);
-    let lazy = LazyMatrix::from_parts(&raw, Some(vec![1e6, -1e6]), Some(vec![2.0, -2.0]));
+    let lazy = LazyMatrix::from_normalization(
+        &raw,
+        ColumnNormalizationParams::from_parts(2, Some(vec![1e6, -1e6]), Some(vec![2.0, -2.0])),
+    );
     let rectangle = lazy.submatrix(1..3, 0..2);
     assert_eq!(
         rectangle.matvec(&vec![1.0_f32, 2.0]).unwrap(),
@@ -1024,7 +1083,10 @@ pub fn check_dense_centered_products<M, V, F>(
         .collect();
     let x = to_v(coefficients);
     let u = to_v(observations);
-    let lazy = LazyMatrix::from_parts(matrix, Some(centers), scales);
+    let lazy = LazyMatrix::from_normalization(
+        matrix,
+        ColumnNormalizationParams::from_parts(centers.len(), Some(centers), scales),
+    );
     assert_values(&lazy.matvec(&x).unwrap(), &forward);
     assert_values(&lazy.mat_transpose_vec(&u).unwrap(), &transpose);
     let transposed = Transpose::new(&lazy);
@@ -1107,7 +1169,15 @@ where
                         .collect()
                 });
                 let normalized = materialize(&tm.dense, centers.as_deref(), scales.as_deref());
-                let lazy = LazyMatrix::from_parts(&matrix, centers, scales);
+                let lazy = {
+                    let normalization_data = &matrix;
+                    let normalization_params = ColumnNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::ncols(&normalization_data),
+                        centers,
+                        scales,
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
                 check_fused_operator(&lazy, &normalized, cols, &to_v);
                 let design = WithIntercept::new(&lazy);
                 let augmented: Vec<Vec<f64>> = normalized
@@ -1239,10 +1309,9 @@ where
         .mat_transpose_vec_scaled_into(2.0, &to_v(&[1.0; 2]), -1.0, &mut transpose)
         .unwrap();
     assert_eq!(transpose.get(0), 5.0);
-    let design = WithIntercept::new(LazyMatrix::from_parts(
+    let design = WithIntercept::new(LazyMatrix::from_normalization(
         matrix,
-        Some(vec![1.0_f32]),
-        Some(vec![-2.0_f32]),
+        ColumnNormalizationParams::from_parts(1, Some(vec![1.0_f32]), Some(vec![-2.0_f32])),
     ));
     out = to_v(&[3.0; 2]);
     let mut scratch = to_v(&[f32::NAN]);
@@ -1442,8 +1511,20 @@ fn transpose_products<M, V>(
                         .map(|j| if j % 2 == 0 { 2.0 } else { -3.0 })
                         .collect()
                 });
-                let lazy = LazyMatrix::from_parts(&matrix, centers, scales);
-                let normalized = materialize(&tm.dense, lazy.centers(), lazy.scales());
+                let lazy = {
+                    let normalization_data = &matrix;
+                    let normalization_params = ColumnNormalizationParams::from_parts(
+                        lazymatrix::MatrixShape::ncols(&normalization_data),
+                        centers,
+                        scales,
+                    );
+                    LazyMatrix::from_normalization(normalization_data, normalization_params)
+                };
+                let normalized = materialize(
+                    &tm.dense,
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
+                );
                 check_transpose_products(&lazy, &normalized, to_v, from_v);
                 check_transpose_products(
                     &lazymatrix::WithIntercept::new(&lazy),
@@ -1527,7 +1608,15 @@ fn reusable_output_parity<M, V>(
         for &use_s in &[false, true] {
             let c = use_c.then(|| centers.clone());
             let s = use_s.then(|| scales.clone());
-            let lazy = LazyMatrix::from_parts(build(&tm), c.clone(), s.clone());
+            let lazy = {
+                let normalization_data = build(&tm);
+                let normalization_params = ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    c.clone(),
+                    s.clone(),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let xtilde = materialize(&tm.dense, c.as_deref(), s.as_deref());
 
             let mut y = to_v(&vec![123.0; tm.nrows]);
@@ -1581,7 +1670,15 @@ fn reusable_output_parity<M, V>(
         dense: Vec::new(),
         triplets: Vec::new(),
     };
-    let no_rows = LazyMatrix::<_, f64>::from_parts(build(&no_rows), None, None);
+    let no_rows = {
+        let normalization_data = build(&no_rows);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let mut empty = to_v(&[]);
     no_rows
         .matvec_into(&to_v(&[1.0, 2.0, 3.0]), &mut empty)
@@ -1594,7 +1691,15 @@ fn reusable_output_parity<M, V>(
     assert_eq!(from_v(&zeros), vec![0.0; 3]);
 
     let no_columns = random_matrix(106, 3, 0, 0.5);
-    let no_columns = LazyMatrix::<_, f64>::from_parts(build(&no_columns), None, None);
+    let no_columns = {
+        let normalization_data = build(&no_columns);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let mut zeros = to_v(&[123.0, 123.0, 123.0]);
     no_columns.matvec_into(&to_v(&[]), &mut zeros).unwrap();
     assert_eq!(from_v(&zeros), vec![0.0; 3]);
@@ -1723,12 +1828,20 @@ fn lazy_rows_match_dense_oracle<M: SparseRows<f64>>(matrix: &M, tm: &TestMatrix)
         .collect();
     for use_center in [false, true] {
         for use_scale in [false, true] {
-            let lazy = LazyMatrix::from_parts(
-                matrix,
-                use_center.then(|| centers.clone()),
-                use_scale.then(|| scales.clone()),
+            let lazy = {
+                let normalization_data = matrix;
+                let normalization_params = ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    use_center.then(|| centers.clone()),
+                    use_scale.then(|| scales.clone()),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
+            let expected = materialize(
+                &tm.dense,
+                lazy.normalization().centers(),
+                lazy.normalization().scales(),
             );
-            let expected = materialize(&tm.dense, lazy.centers(), lazy.scales());
             for (i, expected_row) in expected.iter().enumerate() {
                 let row = lazy.row(i);
                 let (columns, values) = matrix.sparse_row(i);
@@ -1738,11 +1851,11 @@ fn lazy_rows_match_dense_oracle<M: SparseRows<f64>>(matrix: &M, tm: &TestMatrix)
                 assert_eq!(row.values().as_ptr(), values.as_ptr());
                 assert_eq!(
                     row.centers().map(<[f64]>::as_ptr),
-                    lazy.centers().map(<[f64]>::as_ptr)
+                    lazy.normalization().centers().map(<[f64]>::as_ptr)
                 );
                 assert_eq!(
                     row.scales().map(<[f64]>::as_ptr),
-                    lazy.scales().map(<[f64]>::as_ptr)
+                    lazy.normalization().scales().map(<[f64]>::as_ptr)
                 );
                 let mut raw = vec![0.0; row.len()];
                 for (&j, &value) in row.column_indices().iter().zip(row.values()) {
@@ -1790,7 +1903,10 @@ where
     M: SparseColumns<f64>,
 {
     let tm = column_view_matrix();
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&tm), Some(vec![0.5; 4]), None);
+    let lazy = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::<f64>::from_parts(4, Some(vec![0.5; 4]), None),
+    );
     let column = lazy.sparse_column(0);
     let vector = CountingView {
         values: &[1.0, 2.0, 3.0, 4.0],
@@ -1829,8 +1945,15 @@ where
         for &use_scale in &[false, true] {
             let active_centers = use_center.then(|| centers.clone());
             let active_scales = use_scale.then(|| scales.clone());
-            let lazy =
-                LazyMatrix::from_parts(build(&tm), active_centers.clone(), active_scales.clone());
+            let lazy = {
+                let normalization_data = build(&tm);
+                let normalization_params = ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    active_centers.clone(),
+                    active_scales.clone(),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let dense = materialize(
                 &tm.dense,
                 active_centers.as_deref(),
@@ -1904,7 +2027,15 @@ where
     assert_eq!(borrowed.ncols(), tm.ncols);
     assert_eq!(borrowed.column(0).len(), tm.nrows);
 
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&tm), None, None);
+    let lazy = {
+        let normalization_data = build(&tm);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let short = vec![1.0; tm.nrows - 1];
     assert!(
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1929,7 +2060,15 @@ where
         dense: Vec::new(),
         triplets: Vec::new(),
     };
-    let empty = LazyMatrix::<_, f64>::from_parts(build(&empty), None, None);
+    let empty = {
+        let normalization_data = build(&empty);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let column = empty.column(0);
     assert!(column.is_empty());
     assert_eq!(column.sum(), 0.0);
@@ -1942,7 +2081,15 @@ where
         dense: vec![vec![f64::NAN], vec![0.0], vec![f64::INFINITY]],
         triplets: vec![(0, 0, f64::NAN), (2, 0, f64::INFINITY)],
     };
-    let nonfinite = LazyMatrix::<_, f64>::from_parts(build(&nonfinite), None, None);
+    let nonfinite = {
+        let normalization_data = build(&nonfinite);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let column = nonfinite.column(0);
     assert!(column.sum().is_nan());
     assert!(column.dot(&[1.0, 2.0, 3.0]).is_nan());
@@ -1967,7 +2114,10 @@ fn weighted_norms_preserve_implicit_contributions<M: RawColumns<f64>>(
                 dense,
             };
             for scale in [1.0, -2.0] {
-                let lazy = LazyMatrix::from_parts(build(&tm), Some(vec![1.0]), Some(vec![scale]));
+                let lazy = LazyMatrix::from_normalization(
+                    build(&tm),
+                    ColumnNormalizationParams::from_parts(1, Some(vec![1.0]), Some(vec![scale])),
+                );
                 for small_weight in [1.0, -1.0] {
                     let mut weights = [1e16; 3];
                     weights[implicit_row] = small_weight;
@@ -2000,7 +2150,10 @@ fn weighted_norms_ignore_rounded_total_weights<M: RawColumns<f64>>(
         dense,
     };
     let center = 1e12 + 1.0;
-    let lazy = LazyMatrix::from_parts(build(&tm), Some(vec![center]), None);
+    let lazy = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(1, Some(vec![center]), None),
+    );
     let weights: Vec<_> = (1..=8).map(|i| 0.1 * i as f64).collect();
     let expected: f64 = (0..8)
         .map(|i| weights[i] * (tm.dense[i][0] - center).powi(2))
@@ -2029,10 +2182,9 @@ fn weighted_norms_preserve_nonfinite_arithmetic<M: RawColumns<f64>>(
         dense: Vec::new(),
         triplets: Vec::new(),
     };
-    let empty = LazyMatrix::from_parts(
+    let empty = LazyMatrix::from_normalization(
         build(&empty),
-        Some(vec![f64::NAN]),
-        Some(vec![f64::INFINITY]),
+        ColumnNormalizationParams::from_parts(1, Some(vec![f64::NAN]), Some(vec![f64::INFINITY])),
     );
     assert_eq!(empty.column(0).weighted_norm_squared(&[]), 0.0);
     assert_eq!(
@@ -2047,7 +2199,10 @@ fn weighted_norms_preserve_nonfinite_arithmetic<M: RawColumns<f64>>(
     };
     for center in [0.0, 1.0, f64::INFINITY, f64::NAN] {
         for scale in [1.0, -2.0, f64::INFINITY, f64::NAN] {
-            let lazy = LazyMatrix::from_parts(build(&tm), Some(vec![center]), Some(vec![scale]));
+            let lazy = LazyMatrix::from_normalization(
+                build(&tm),
+                ColumnNormalizationParams::from_parts(1, Some(vec![center]), Some(vec![scale])),
+            );
             for weights in [
                 [1.0, 1.0, 1.0],
                 [f64::INFINITY, 1.0, 1.0],
@@ -2088,7 +2243,10 @@ fn weighted_norms_normalize_before_squaring<M: RawColumns<f64>>(build: &impl Fn(
             dense: vec![vec![scale], vec![0.0], vec![2.0 * scale]],
             triplets: vec![(0, 0, scale), (2, 0, 2.0 * scale)],
         };
-        let lazy = LazyMatrix::from_parts(build(&tm), None, Some(vec![scale]));
+        let lazy = LazyMatrix::from_normalization(
+            build(&tm),
+            ColumnNormalizationParams::from_parts(1, None, Some(vec![scale])),
+        );
         let column = lazy.column(0);
         let weights = [1.0, -2.0, 3.0];
         approx::assert_abs_diff_eq!(column.weighted_norm_squared(&weights), 13.0);
@@ -2122,7 +2280,10 @@ where
     assert_eq!(rows, &[1]);
     assert_eq!(values, &[0.0]);
 
-    let lazy = LazyMatrix::from_parts(matrix, Some(vec![0.5; 4]), Some(vec![2.0; 4]));
+    let lazy = LazyMatrix::from_normalization(
+        matrix,
+        ColumnNormalizationParams::from_parts(4, Some(vec![0.5; 4]), Some(vec![2.0; 4])),
+    );
     let column = lazy.sparse_column(0);
     assert_eq!(column.implicit_value(), -0.25);
     assert_eq!(column.raw_sum(), -1.0);
@@ -2144,8 +2305,15 @@ where
         for &use_scale in &[false, true] {
             let active_centers = use_center.then(|| centers.clone());
             let active_scales = use_scale.then(|| scales.clone());
-            let lazy =
-                LazyMatrix::from_parts(build(&tm), active_centers.clone(), active_scales.clone());
+            let lazy = {
+                let normalization_data = build(&tm);
+                let normalization_params = ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    active_centers.clone(),
+                    active_scales.clone(),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let dense = materialize(
                 &tm.dense,
                 active_centers.as_deref(),
@@ -2190,8 +2358,15 @@ where
         for &use_scale in &[false, true] {
             let active_centers = use_center.then(|| centers.clone());
             let active_scales = use_scale.then(|| scales.clone());
-            let lazy =
-                LazyMatrix::from_parts(build(&tm), active_centers.clone(), active_scales.clone());
+            let lazy = {
+                let normalization_data = build(&tm);
+                let normalization_params = ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    active_centers.clone(),
+                    active_scales.clone(),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let dense = materialize(
                 &tm.dense,
                 active_centers.as_deref(),
@@ -2254,7 +2429,15 @@ where
         }
     }
 
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&tm), None, None);
+    let lazy = {
+        let normalization_data = build(&tm);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let column = lazy.sparse_column(0);
     let short = &vector[..vector.len() - 1];
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| column.dot(short))).is_err());
@@ -2306,7 +2489,15 @@ where
         dense: vec![vec![f64::NAN], vec![0.0], vec![f64::INFINITY]],
         triplets: vec![(0, 0, f64::NAN), (2, 0, f64::INFINITY)],
     };
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&tm), None, None);
+    let lazy = {
+        let normalization_data = build(&tm);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let column = lazy.sparse_column(0);
     let vector = [1.0, 2.0, 3.0];
     let weights = [0.5, 1.5, 2.0];
@@ -2344,7 +2535,15 @@ where
         dense: Vec::new(),
         triplets: Vec::new(),
     };
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&no_rows), None, None);
+    let lazy = {
+        let normalization_data = build(&no_rows);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     let column = lazy.sparse_column(0);
     assert_eq!(column.len(), 0);
     assert!(column.is_empty());
@@ -2446,10 +2645,22 @@ where
         ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )
     .unwrap();
-    let (data, centers, scales) = lazy.into_parts();
-    let lazy = LazyMatrix::from_parts(data, centers, scales);
-    assert!(lazy.centers().unwrap().iter().all(|value| value.is_nan()));
-    assert!(lazy.scales().unwrap().iter().all(|value| value.is_nan()));
+    let (data, params) = lazy.into_parts();
+    let lazy = LazyMatrix::from_normalization(data, params);
+    assert!(
+        lazy.normalization()
+            .centers()
+            .unwrap()
+            .iter()
+            .all(|value| value.is_nan())
+    );
+    assert!(
+        lazy.normalization()
+            .scales()
+            .unwrap()
+            .iter()
+            .all(|value| value.is_nan())
+    );
 
     let nan_column = TestMatrix {
         nrows: 2,
@@ -2553,12 +2764,22 @@ where
                     .iter()
                     .map(|&value| if value == 0.0 { 1.0 } else { value })
                     .collect();
-                check(lazy.scales().unwrap(), &guarded);
+                check(lazy.normalization().scales().unwrap(), &guarded);
                 if center == Centering::Mean {
                     if nrows == 0 {
-                        assert!(lazy.centers().unwrap().iter().all(|value| value.is_nan()));
+                        assert!(
+                            lazy.normalization()
+                                .centers()
+                                .unwrap()
+                                .iter()
+                                .all(|value| value.is_nan())
+                        );
                     } else {
-                        assert_close(lazy.centers().unwrap(), &matrix.col_means().unwrap(), EPS);
+                        assert_close(
+                            lazy.normalization().centers().unwrap(),
+                            &matrix.col_means().unwrap(),
+                            EPS,
+                        );
                     }
                 }
             }
@@ -2572,12 +2793,28 @@ where
     M: MatrixShape,
 {
     let tm = random_matrix(21, 7, 4, 0.3);
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&tm), None, None);
+    let lazy = {
+        let normalization_data = build(&tm);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     assert_eq!(lazy.nrows(), tm.nrows);
     assert_eq!(lazy.ncols(), tm.ncols);
 
     let no_columns = random_matrix(22, 3, 0, 0.3);
-    let lazy = LazyMatrix::<_, f64>::from_parts(build(&no_columns), None, None);
+    let lazy = {
+        let normalization_data = build(&no_columns);
+        let normalization_params = ColumnNormalizationParams::<f64>::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     assert_eq!(lazy.nrows(), no_columns.nrows);
     assert_eq!(lazy.ncols(), 0);
 }
@@ -2610,7 +2847,15 @@ fn oracle_parity<M, V>(
         for &use_s in &[false, true] {
             let c = use_c.then(|| centers.clone());
             let s = use_s.then(|| scales.clone());
-            let lazy = LazyMatrix::from_parts(build(&tm), c.clone(), s.clone());
+            let lazy = {
+                let normalization_data = build(&tm);
+                let normalization_params = ColumnNormalizationParams::from_parts(
+                    lazymatrix::MatrixShape::ncols(&normalization_data),
+                    c.clone(),
+                    s.clone(),
+                );
+                LazyMatrix::from_normalization(normalization_data, normalization_params)
+            };
             let xtilde = materialize(&tm.dense, c.as_deref(), s.as_deref());
 
             let got = from_v(&lazy.matvec(&v).unwrap());
@@ -2644,7 +2889,10 @@ fn adjoint_identity<M, V>(
         .iter()
         .map(|x| (x.abs() + 0.3).copysign(*x))
         .collect();
-    let lazy = LazyMatrix::from_parts(build(&tm), Some(centers), Some(scales));
+    let lazy = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(centers.len(), Some(centers), Some(scales)),
+    );
     let v = to_v(&random_vec(9, tm.ncols));
     let u = to_v(&random_vec(10, tm.nrows));
 
@@ -2677,7 +2925,15 @@ fn from_parts_passthrough<M, V>(
     let bare_y = from_v(&bare.matvec(&v).unwrap());
     let bare_t = from_v(&bare.mat_transpose_vec(&u).unwrap());
 
-    let lazy = LazyMatrix::from_parts(build(&tm), None, None);
+    let lazy = {
+        let normalization_data = build(&tm);
+        let normalization_params = ColumnNormalizationParams::from_parts(
+            lazymatrix::MatrixShape::ncols(&normalization_data),
+            None,
+            None,
+        );
+        LazyMatrix::from_normalization(normalization_data, normalization_params)
+    };
     assert_eq!(from_v(&lazy.matvec(&v).unwrap()), bare_y);
     assert_eq!(from_v(&lazy.mat_transpose_vec(&u).unwrap()), bare_t);
 }
@@ -2691,9 +2947,19 @@ fn explicit_scales_reject_zero<M: MatrixShape>(build: &impl Fn(&TestMatrix) -> M
                 scales[column] = zero;
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     if scales_only {
-                        LazyMatrix::with_scales(build(&tm), scales)
+                        LazyMatrix::from_normalization(
+                            build(&tm),
+                            ColumnNormalizationParams::from_parts(scales.len(), None, Some(scales)),
+                        )
                     } else {
-                        LazyMatrix::from_parts(build(&tm), Some(vec![0.0; tm.ncols]), Some(scales))
+                        LazyMatrix::from_normalization(
+                            build(&tm),
+                            ColumnNormalizationParams::from_parts(
+                                tm.ncols,
+                                Some(vec![0.0; tm.ncols]),
+                                Some(scales),
+                            ),
+                        )
                     }
                 }));
                 let panic = result.err().expect("explicit zero scales must panic");
@@ -2736,27 +3002,53 @@ fn explicit_normalization_preserves_parameters<M: MatrixShape>(build: &impl Fn(&
             .collect::<Vec<_>>()
     };
 
-    let lazy = LazyMatrix::from_parts(build(&tm), Some(centers.clone()), Some(scales.clone()));
-    assert_eq!(bits(lazy.centers().unwrap()), bits(&centers));
-    assert_eq!(bits(lazy.scales().unwrap()), bits(&scales));
-
-    let centered = LazyMatrix::with_centers(build(&tm), centers.clone());
-    assert_eq!(bits(centered.centers().unwrap()), bits(&centers));
-    assert!(centered.scales().is_none());
-
-    let scaled = LazyMatrix::with_scales(build(&tm), scales.clone());
-    assert_eq!(bits(scaled.scales().unwrap()), bits(&scales));
-    assert!(scaled.centers().is_none());
-
-    let (data, centers, scales) = lazy.into_parts();
-    let restored = LazyMatrix::from_parts(data, centers.clone(), scales.clone());
-    assert_eq!(
-        bits(restored.centers().unwrap()),
-        bits(centers.as_ref().unwrap())
+    let lazy = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(
+            centers.len(),
+            Some(centers.clone()),
+            Some(scales.clone()),
+        ),
     );
     assert_eq!(
-        bits(restored.scales().unwrap()),
-        bits(scales.as_ref().unwrap())
+        bits(lazy.normalization().centers().unwrap()),
+        bits(&centers)
+    );
+    assert_eq!(bits(lazy.normalization().scales().unwrap()), bits(&scales));
+
+    let centered = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(centers.len(), Some(centers.clone()), None),
+    );
+    assert_eq!(
+        bits(centered.normalization().centers().unwrap()),
+        bits(&centers)
+    );
+    assert!(centered.normalization().scales().is_none());
+
+    let scaled = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(scales.len(), None, Some(scales.clone())),
+    );
+    assert_eq!(
+        bits(scaled.normalization().scales().unwrap()),
+        bits(&scales)
+    );
+    assert!(scaled.normalization().centers().is_none());
+
+    let center_ptr = lazy.normalization().centers().unwrap().as_ptr();
+    let scale_ptr = lazy.normalization().scales().unwrap().as_ptr();
+    let (data, params) = lazy.into_parts();
+    assert_eq!(params.centers().unwrap().as_ptr(), center_ptr);
+    assert_eq!(params.scales().unwrap().as_ptr(), scale_ptr);
+    let restored = LazyMatrix::from_normalization(data, params);
+    assert_eq!(
+        bits(restored.normalization().centers().unwrap()),
+        bits(&centers)
+    );
+    assert_eq!(
+        bits(restored.normalization().scales().unwrap()),
+        bits(&scales)
     );
 }
 
@@ -2799,8 +3091,12 @@ fn new_matches_oracle<M, V>(
     for center in centerings {
         for scale in scalings {
             let spec = ColumnNormalization::new(center, scale);
-            let lazy = LazyMatrix::new(build(&tm), spec).unwrap();
-            let xtilde = materialize(&tm.dense, lazy.centers(), lazy.scales());
+            let lazy: LazyMatrix<_> = LazyMatrix::new(build(&tm), spec).unwrap();
+            let xtilde = materialize(
+                &tm.dense,
+                lazy.normalization().centers(),
+                lazy.normalization().scales(),
+            );
 
             let got = from_v(&lazy.matvec(&v).unwrap());
             assert_close(&got, &dense_matvec(&xtilde, &from_v(&v)), EPS);
@@ -2818,7 +3114,11 @@ fn new_matches_oracle<M, V>(
                     build(&prediction),
                     lazy.normalization().clone(),
                 );
-                let dense = materialize(&prediction.dense, lazy.centers(), lazy.scales());
+                let dense = materialize(
+                    &prediction.dense,
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
+                );
                 assert_close(
                     &from_v(&reused.matvec(&v).unwrap()),
                     &dense_matvec(&dense, &from_v(&v)),
@@ -2896,12 +3196,12 @@ where
                 ColumnNormalization::new(Centering::Median, Scaling::QuantileRange(range)),
             )
             .unwrap();
-            assert_quantile_values(normalized.centers().unwrap(), &medians, EPS);
+            assert_quantile_values(normalized.normalization().centers().unwrap(), &medians, EPS);
             let guarded: Vec<_> = ranges
                 .iter()
                 .map(|&x| if x == 0.0 { 1.0 } else { x })
                 .collect();
-            assert_quantile_values(normalized.scales().unwrap(), &guarded, EPS);
+            assert_quantile_values(normalized.normalization().scales().unwrap(), &guarded, EPS);
         }
     }
 
@@ -2912,9 +3212,21 @@ where
     ]);
     let matrix = build(&tm);
     let normalized = LazyMatrix::new(&matrix, ColumnNormalization::robust()).unwrap();
-    assert_close(normalized.centers().unwrap(), &[1.0, 1.0, 2.0], EPS);
-    assert_close(normalized.scales().unwrap(), &[3.0, 1.5, 2.5], EPS);
-    let dense = materialize(&tm.dense, normalized.centers(), normalized.scales());
+    assert_close(
+        normalized.normalization().centers().unwrap(),
+        &[1.0, 1.0, 2.0],
+        EPS,
+    );
+    assert_close(
+        normalized.normalization().scales().unwrap(),
+        &[3.0, 1.5, 2.5],
+        EPS,
+    );
+    let dense = materialize(
+        &tm.dense,
+        normalized.normalization().centers(),
+        normalized.normalization().scales(),
+    );
     for (actual, expected) in dense.iter().zip([
         vec![0.0, -2.0, 0.0],
         vec![-1.0, 0.0, 0.4],
@@ -3188,35 +3500,67 @@ where
         ColumnNormalization::new(Centering::None, Scaling::L1),
     )
     .unwrap();
-    assert_close(raw_l1.scales().unwrap(), &[4.0, 1.0, 15.0], EPS);
+    assert_close(
+        raw_l1.normalization().scales().unwrap(),
+        &[4.0, 1.0, 15.0],
+        EPS,
+    );
 
     let centered_l1 = LazyMatrix::new(
         build(&tm),
         ColumnNormalization::new(Centering::Mean, Scaling::L1),
     )
     .unwrap();
-    assert_close(centered_l1.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
-    assert_close(centered_l1.scales().unwrap(), &[10.0 / 3.0, 1.0, 1.0], EPS);
+    assert_close(
+        centered_l1.normalization().centers().unwrap(),
+        &[4.0 / 3.0, 0.0, 5.0],
+        EPS,
+    );
+    assert_close(
+        centered_l1.normalization().scales().unwrap(),
+        &[10.0 / 3.0, 1.0, 1.0],
+        EPS,
+    );
 
     let median_l1 = LazyMatrix::new(
         build(&tm),
         ColumnNormalization::new(Centering::Median, Scaling::L1),
     )
     .unwrap();
-    assert_close(median_l1.centers().unwrap(), &[1.0, 0.0, 5.0], EPS);
-    assert_close(median_l1.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
+    assert_close(
+        median_l1.normalization().centers().unwrap(),
+        &[1.0, 0.0, 5.0],
+        EPS,
+    );
+    assert_close(
+        median_l1.normalization().scales().unwrap(),
+        &[3.0, 1.0, 1.0],
+        EPS,
+    );
 
     let standardized = LazyMatrix::new(build(&tm), ColumnNormalization::standardize()).unwrap();
-    assert_close(standardized.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
     assert_close(
-        standardized.scales().unwrap(),
+        standardized.normalization().centers().unwrap(),
+        &[4.0 / 3.0, 0.0, 5.0],
+        EPS,
+    );
+    assert_close(
+        standardized.normalization().scales().unwrap(),
         &[14.0_f64.sqrt() / 3.0, 1.0, 1.0],
         EPS,
     );
 
     let min_range = LazyMatrix::new(build(&tm), ColumnNormalization::min_max()).unwrap();
-    assert_close(min_range.centers().unwrap(), &[0.0, 0.0, 5.0], EPS);
-    assert_close(min_range.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
+    assert_close(
+        min_range.normalization().centers().unwrap(),
+        &[0.0, 0.0, 5.0],
+        EPS,
+    );
+    assert_close(
+        min_range.normalization().scales().unwrap(),
+        &[3.0, 1.0, 1.0],
+        EPS,
+    );
 }
 
 /// (6): a constant column (sd 0) is floored to scale 1 → finite output.
@@ -3258,7 +3602,7 @@ fn zero_scale_guard<M, V>(
         ColumnNormalization::robust(),
     ] {
         let lazy = LazyMatrix::new(build(&tm), spec).unwrap();
-        let scales = lazy.scales().unwrap();
+        let scales = lazy.normalization().scales().unwrap();
         assert_eq!(scales[1], 1.0, "empty column scale must be floored to 1");
         assert_eq!(scales[2], 1.0, "constant column scale must be floored to 1");
 
@@ -3312,11 +3656,22 @@ fn intercept_products<M, V>(
                 // Empty statistics can be nonfinite; finite explicit parameters
                 // isolate the operator's empty-sum behavior in this fixture.
                 let lazy = if n == 0 {
-                    LazyMatrix::from_parts(&matrix, Some(vec![1.0; p]), Some(vec![-2.0; p]))
+                    LazyMatrix::from_normalization(
+                        &matrix,
+                        ColumnNormalizationParams::from_parts(
+                            p,
+                            Some(vec![1.0; p]),
+                            Some(vec![-2.0; p]),
+                        ),
+                    )
                 } else {
                     LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap()
                 };
-                let dense = with_intercept(&materialize(&tm.dense, lazy.centers(), lazy.scales()));
+                let dense = with_intercept(&materialize(
+                    &tm.dense,
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
+                ));
                 let augmented = WithIntercept::new(&lazy);
                 let x = random_vec(832, p + 1);
                 let y = random_vec(833, n);
@@ -3398,7 +3753,11 @@ where
                     .unwrap();
                 assert_gram(
                     &out,
-                    &with_intercept(&materialize(&tm.dense, lazy.centers(), lazy.scales())),
+                    &with_intercept(&materialize(
+                        &tm.dense,
+                        lazy.normalization().centers(),
+                        lazy.normalization().scales(),
+                    )),
                     &weights,
                 );
             }
@@ -3424,7 +3783,10 @@ where
         let matrix = build(&tm);
         for center in [0.0, 1.0, 1e16, f64::INFINITY, f64::NAN] {
             for scale in [1.0, -2.0, f64::INFINITY, f64::NAN] {
-                let lazy = LazyMatrix::from_parts(&matrix, Some(vec![center]), Some(vec![scale]));
+                let lazy = LazyMatrix::from_normalization(
+                    &matrix,
+                    ColumnNormalizationParams::from_parts(1, Some(vec![center]), Some(vec![scale])),
+                );
                 for weights in [
                     [0.1, 0.2, 0.3],
                     [0.0, -1.0, 2.0],
@@ -3438,7 +3800,11 @@ where
                         .unwrap();
                     assert_gram(
                         &out,
-                        &with_intercept(&materialize(&tm.dense, lazy.centers(), lazy.scales())),
+                        &with_intercept(&materialize(
+                            &tm.dense,
+                            lazy.normalization().centers(),
+                            lazy.normalization().scales(),
+                        )),
                         &weights,
                     );
                     let mut sums = [f64::NAN];
@@ -3452,7 +3818,10 @@ where
             }
         }
         if values[0] == 1e16 + 2.0 {
-            let lazy = LazyMatrix::from_parts(&matrix, Some(vec![1e16]), None);
+            let lazy = LazyMatrix::from_normalization(
+                &matrix,
+                ColumnNormalizationParams::from_parts(1, Some(vec![1e16]), None),
+            );
             let mut out = GramOutput(vec![vec![f64::NAN; 2]; 2]);
             WithIntercept::new(lazy)
                 .weighted_gram_into(&[0.1, 0.2, 0.3], &mut out)
@@ -3540,20 +3909,24 @@ where
             ] {
                 let lazy =
                     LazyMatrix::new(&source, ColumnNormalization::new(center, scale)).unwrap();
-                let expected: Vec<_> = materialize(&tm.dense, lazy.centers(), lazy.scales())
-                    .into_iter()
-                    .flatten()
-                    .collect();
+                let expected: Vec<_> = materialize(
+                    &tm.dense,
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
+                )
+                .into_iter()
+                .flatten()
+                .collect();
                 let eager = lazy.to_eager::<MaterializeOutput>().unwrap();
                 assert_eq!((eager.nrows(), eager.ncols()), (rows, cols));
                 assert_close(&eager.data().values, &expected, EPS);
                 assert_eq!(
-                    eager.centers().map(|x| x.len()),
-                    lazy.centers().map(|x| x.len())
+                    eager.normalization().centers().map(|x| x.len()),
+                    lazy.normalization().centers().map(|x| x.len())
                 );
                 assert_eq!(
-                    eager.scales().map(|x| x.len()),
-                    lazy.scales().map(|x| x.len())
+                    eager.normalization().scales().map(|x| x.len()),
+                    lazy.normalization().scales().map(|x| x.len())
                 );
                 let mut out = MaterializeOutput::zeros(rows, cols);
                 out.values.fill(f64::NAN);
@@ -3603,16 +3976,23 @@ where
     }
     let tm = random_matrix(184, 7, 4, 0.4);
     let source = build(&tm);
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         &source,
-        Some(vec![f64::NAN, f64::INFINITY, -1.0, 1.0]),
-        Some(vec![-2.0, 3.0, f64::NAN, f64::INFINITY]),
+        ColumnNormalizationParams::from_parts(
+            4,
+            Some(vec![f64::NAN, f64::INFINITY, -1.0, 1.0]),
+            Some(vec![-2.0, 3.0, f64::NAN, f64::INFINITY]),
+        ),
     );
     let eager = lazy.to_eager::<MaterializeOutput>().unwrap();
-    let expected: Vec<_> = materialize(&tm.dense, lazy.centers(), lazy.scales())
-        .into_iter()
-        .flatten()
-        .collect();
+    let expected: Vec<_> = materialize(
+        &tm.dense,
+        lazy.normalization().centers(),
+        lazy.normalization().scales(),
+    )
+    .into_iter()
+    .flatten()
+    .collect();
     for (&value, expected) in eager.data().values.iter().zip(expected) {
         if expected.is_nan() {
             assert!(value.is_nan());
@@ -3646,7 +4026,11 @@ pub fn run_eager_product_suite<M, D, V>(
     )
     .unwrap();
     let eager = lazy.to_eager::<D>().unwrap();
-    let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
+    let dense = materialize(
+        &tm.dense,
+        lazy.normalization().centers(),
+        lazy.normalization().scales(),
+    );
     check_transpose_products(&eager, &dense, &to_v, &from_v);
     let coefficients = random_vec(129, 4);
     let rows = random_vec(130, 7);
@@ -3710,9 +4094,12 @@ pub fn run_eager_product_suite<M, D, V>(
 pub fn check_materialize_f32<M: lazymatrix::MaterializeDense<f32>>(source: &M, raw: &[f32]) {
     let centers = vec![1.0; source.ncols()];
     let scales = vec![-2.0; source.ncols()];
-    let eager = LazyMatrix::from_parts(source, Some(centers), Some(scales))
-        .to_eager::<MaterializeOutput<f32>>()
-        .unwrap();
+    let eager = LazyMatrix::from_normalization(
+        source,
+        ColumnNormalizationParams::from_parts(centers.len(), Some(centers), Some(scales)),
+    )
+    .to_eager::<MaterializeOutput<f32>>()
+    .unwrap();
     let expected: Vec<_> = raw.iter().map(|&x| (x - 1.0) / -2.0).collect();
     assert_eq!(eager.data().values, expected);
 }
@@ -3775,7 +4162,11 @@ where
             ] {
                 let lazy =
                     LazyMatrix::new(&matrix, ColumnNormalization::new(centering, scaling)).unwrap();
-                let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
+                let dense = materialize(
+                    &tm.dense,
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
+                );
                 for (rows, cols) in [
                     (0..n, 0..p),
                     (n.min(1)..n, p.min(1)..p),
@@ -3786,9 +4177,15 @@ where
                 ] {
                     let view = lazy.submatrix(rows.clone(), cols.clone());
                     assert_eq!((view.nrows(), view.ncols()), (rows.len(), cols.len()));
-                    assert_parameter_bits(view.centers(), lazy.centers().map(|c| &c[cols.clone()]));
-                    assert_parameter_bits(view.scales(), lazy.scales().map(|s| &s[cols.clone()]));
-                    if let Some(centers) = lazy.centers() {
+                    assert_parameter_bits(
+                        view.centers(),
+                        lazy.normalization().centers().map(|c| &c[cols.clone()]),
+                    );
+                    assert_parameter_bits(
+                        view.scales(),
+                        lazy.normalization().scales().map(|s| &s[cols.clone()]),
+                    );
+                    if let Some(centers) = lazy.normalization().centers() {
                         assert_eq!(
                             view.centers().unwrap().as_ptr(),
                             centers[cols.clone()].as_ptr()
@@ -3796,8 +4193,8 @@ where
                     }
                     let mut output = RectangleOutput::new(rows.len(), cols.len());
                     let eager = view.to_eager_into(&mut output).unwrap();
-                    assert_parameter_bits(eager.centers(), view.centers());
-                    assert_parameter_bits(eager.scales(), view.scales());
+                    assert_parameter_bits(eager.normalization().centers(), view.centers());
+                    assert_parameter_bits(eager.normalization().scales(), view.scales());
                     let expected: Vec<_> = rows
                         .clone()
                         .flat_map(|i| {
@@ -3949,8 +4346,20 @@ pub fn check_submatrix_weighted<M: lazymatrix::SubmatrixKernel<f64>>(matrix: &M,
         normalizations.push((Some(vec![f64::NAN; p]), Some(vec![f64::INFINITY; p])));
     }
     for (centers, scales) in normalizations {
-        let lazy = LazyMatrix::from_parts(matrix, centers, scales);
-        let normalized = materialize(raw, lazy.centers(), lazy.scales());
+        let lazy = {
+            let normalization_data = matrix;
+            let normalization_params = ColumnNormalizationParams::from_parts(
+                lazymatrix::MatrixShape::ncols(&normalization_data),
+                centers,
+                scales,
+            );
+            LazyMatrix::from_normalization(normalization_data, normalization_params)
+        };
+        let normalized = materialize(
+            raw,
+            lazy.normalization().centers(),
+            lazy.normalization().scales(),
+        );
         for (rows, cols) in [
             (0..n, 0..p),
             (n.min(1)..n, p.min(1)..p),
@@ -4016,12 +4425,19 @@ fn assert_parameter_bits(actual: Option<&[f64]>, expected: Option<&[f64]>) {
 
 fn submatrix_columns_match_dense<M: RawColumns<f64>>(build: &impl Fn(&TestMatrix) -> M) {
     let tm = column_view_matrix();
-    let lazy = LazyMatrix::from_parts(
+    let lazy = LazyMatrix::from_normalization(
         build(&tm),
-        Some(vec![0.5, 1.0, 2.0, 3.0]),
-        Some(vec![-2.0; 4]),
+        ColumnNormalizationParams::from_parts(
+            4,
+            Some(vec![0.5, 1.0, 2.0, 3.0]),
+            Some(vec![-2.0; 4]),
+        ),
     );
-    let dense = materialize(&tm.dense, lazy.centers(), lazy.scales());
+    let dense = materialize(
+        &tm.dense,
+        lazy.normalization().centers(),
+        lazy.normalization().scales(),
+    );
     for (rows, cols) in [(1..4, 0..4), (0..4, 1..3), (4..4, 0..4)] {
         let view = lazy.submatrix(rows.clone(), cols.clone());
         for j in 0..view.ncols() {
@@ -4089,7 +4505,10 @@ fn submatrix_sparse_columns_match_storage<M: SparseColumns<f64>>(
     build: &impl Fn(&TestMatrix) -> M,
 ) {
     let tm = column_view_matrix();
-    let lazy = LazyMatrix::from_parts(build(&tm), Some(vec![1.0; 4]), Some(vec![-2.0; 4]));
+    let lazy = LazyMatrix::from_normalization(
+        build(&tm),
+        ColumnNormalizationParams::from_parts(4, Some(vec![1.0; 4]), Some(vec![-2.0; 4])),
+    );
     let view = lazy.submatrix(1..4, 0..4);
     for j in 0..4 {
         let original = lazy.sparse_column(j);
@@ -4117,7 +4536,10 @@ fn submatrix_sparse_columns_match_storage<M: SparseColumns<f64>>(
 fn submatrix_sparse_rows_match_storage<M: SparseRows<f64>>(matrix: &M) {
     let n = matrix.nrows();
     let p = matrix.ncols();
-    let lazy = LazyMatrix::from_parts(matrix, Some(vec![1.0; p]), Some(vec![-2.0; p]));
+    let lazy = LazyMatrix::from_normalization(
+        matrix,
+        ColumnNormalizationParams::from_parts(p, Some(vec![1.0; p]), Some(vec![-2.0; p])),
+    );
     let view = lazy.submatrix(n.min(1)..n, p.min(1)..p);
     for i in 0..view.nrows() {
         let row = view.row(i);
@@ -4258,8 +4680,14 @@ where
                     let fitted = LazyMatrix::new(&selected, spec).unwrap();
                     let expected = LazyMatrix::new(&reference, spec).unwrap();
                     for (a, b) in [
-                        (fitted.centers(), expected.centers()),
-                        (fitted.scales(), expected.scales()),
+                        (
+                            fitted.normalization().centers(),
+                            expected.normalization().centers(),
+                        ),
+                        (
+                            fitted.normalization().scales(),
+                            expected.normalization().scales(),
+                        ),
                     ] {
                         if let (Some(a), Some(b)) = (a, b) {
                             assert_quantile_values(a, b, EPS);
