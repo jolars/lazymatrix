@@ -38,15 +38,6 @@ assuming full API or numerical parity.
   - Evaluate optional clipping for `MinMaxScaler` and `MaxAbsScaler` separately
     from the affine normalization metadata.
 
-- [ ] Evaluate row normalization (`Normalizer` and `normalize(axis=1)`).
-  - Support L1, L2, and maximum-absolute norms, leaving zero rows unchanged.
-    Column normalization with these norms already exists.
-  - Design `RowNormalization` with independent centering and scaling choices,
-    matching `ColumnNormalization`. Keep explicit parameters and custom fitting
-    possible, and define the order when both axes are normalized.
-  - Consider a composable row-scaling operator and define its ordering relative
-    to column normalization. Compute row factors independently for new samples.
-
 - [ ] Evaluate weighted and incremental fitting of normalization parameters.
   - Cover weighted means and population standard deviations, as supported by
     `StandardScaler.fit(sample_weight=...)`. Weighted products and Gram matrices
@@ -76,6 +67,44 @@ assuming full API or numerical parity.
   - Evaluate separate operators, adapters, or downstream implementations for
     these methods. Specify sparse-storage and bounded-workspace contracts rather
     than representing them only through column centers and scales.
+
+## Row normalization
+
+- [x] Add dense row normalization as a companion to column normalization.
+  - `RowNormalization` offers independent centering and scaling choices matching
+    `ColumnNormalization`, including standardization, min-max, and robust
+    recipes. L1, L2, and maximum-absolute scaling leave zero rows unchanged.
+  - `RowNormalizedMatrix` supports fitted and explicit parameters, allocating
+    and reusable forward and transpose vector products, and dense views across
+    every supported backend release. Explicit parameters permit custom fitting.
+  - Fit new samples' row parameters independently. Exact quantiles reuse one
+    working row; products normalize entries before accumulation without
+    materializing the design.
+
+- [ ] Extend row normalization (`Normalizer` and `normalize(axis=1)`) to sparse
+  storage.
+  - Combine duplicate cells before nonlinear statistics, include implicit
+    zeros, and preserve CSC and CSR storage with bounded workspace.
+
+- [ ] Stream row fitting and products over Zarr chunks without materializing
+  the array. Preserve fill values, exclude padding, and account for outer shards.
+
+- [ ] Define composition and ordering with column normalization.
+  - Consider a composable row-scaling operator and distinguish fitting row
+    factors before column normalization from fitting them afterward.
+
+- [ ] Add a public row-statistics capability when sparse or storage-backed
+  fitting needs it, keeping shared fitting hooks and reference forwarding.
+
+- [ ] Extend row-normalized operators with fused and workspace products,
+  batched products, borrowed logical rows and columns, weighted operations,
+  and eager conversion.
+
+- [ ] Expose row normalization in Python, including independent fitting for new
+  samples and explicit parameters.
+
+- [ ] Benchmark row fitting and products across storage layouts and document
+  scan counts, workspace, and tradeoffs against eager normalization.
 
 ## Operator algebra
 

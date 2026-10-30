@@ -234,6 +234,58 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn row_normalization() {
+                use lazymatrix::{MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto};
+                common::run_row_normalization_suite(build_dense, to_dvec);
+                common::run_row_normalization_f32_suite(
+                    |dense| DMatrix::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
+                    DVector::from_column_slice,
+                );
+                let mut storage = DMatrix::from_fn(14, 6, |i, j| 1e12 + (i * 6 + j) as f64 / 4.0);
+                common::check_row_normalization_view(
+                    &storage.view_with_steps((0, 0), (7, 3), (1, 1)),
+                    to_dvec,
+                );
+                common::check_row_normalization_view(
+                    &storage.view_with_steps_mut((0, 0), (7, 3), (1, 1)),
+                    to_dvec,
+                );
+                let normalized = lazymatrix::RowNormalizedMatrix::new(
+                    storage.view_with_steps((0, 0), (3, 2), (1, 1)),
+                    lazymatrix::RowNormalization::standardize(),
+                )
+                .unwrap();
+                let coefficients = to_dvec(&[1.0, 99.0, -2.0, 99.0]);
+                let expected = normalized.matvec(&to_dvec(&[1.0, -2.0])).unwrap();
+                let mut out = DVector::from_element(6, 99.0);
+                normalized
+                    .matvec_into(
+                        &coefficients.rows_with_step(0, 2, 1),
+                        &mut out.rows_with_step_mut(0, 3, 1),
+                    )
+                    .unwrap();
+                for i in 0..3 {
+                    assert_eq!(out[2 * i], expected[i]);
+                    assert_eq!(out[2 * i + 1], 99.0);
+                }
+                let observations = to_dvec(&[1.0, 99.0, -2.0, 99.0, 0.5, 99.0]);
+                let expected = normalized
+                    .mat_transpose_vec(&to_dvec(&[1.0, -2.0, 0.5]))
+                    .unwrap();
+                let mut out = DVector::from_element(4, 99.0);
+                normalized
+                    .mat_transpose_vec_into(
+                        &observations.rows_with_step(0, 3, 1),
+                        &mut out.rows_with_step_mut(0, 2, 1),
+                    )
+                    .unwrap();
+                for i in 0..2 {
+                    assert_eq!(out[2 * i], expected[i]);
+                    assert_eq!(out[2 * i + 1], 99.0);
+                }
+            }
+
+            #[test]
             fn nalgebra_backend_suite() {
                 common::run_submatrix_suite(build, to_dvec);
                 common::run_submatrix_suite(build_dense, to_dvec);

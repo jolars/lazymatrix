@@ -11,6 +11,10 @@ mod batched;
 mod transpose;
 
 #[cfg(test)]
+#[path = "../../row_normalization.rs"]
+mod row_normalization;
+
+#[cfg(test)]
 mod tests {
     use std::{cell::Cell, convert::Infallible};
 

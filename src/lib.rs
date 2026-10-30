@@ -26,6 +26,18 @@
 //! Sparse and chunked storage use the algebraic identities above to preserve
 //! their storage and access patterns.
 //!
+//! # Dense row normalization
+//!
+//! [`RowNormalization`] offers the same independent centering and scaling
+//! choices as [`ColumnNormalization`]. [`RowNormalizedMatrix`] presents
+//! `D⁻¹(X − r1ᵀ)` with one center and scale per row. It supports allocating and
+//! reusable forward and transpose vector products over all dense backends and
+//! their borrowed, potentially strided views through [`MatrixRead`]. Fitting
+//! uses at most one working row, and products normalize entries before
+//! accumulation without materializing the design. New samples need independently
+//! fitted row parameters. Sparse and Zarr support, composition with column
+//! normalization, and additional operator capabilities remain future work.
+//!
 //! # Multiple right-hand sides
 //!
 //! [`MatMat`] and [`MatTransposeMat`] apply forward and transpose products to
@@ -501,6 +513,7 @@ mod matrix;
 mod normalization;
 mod quantiles;
 mod row;
+mod row_matrix;
 mod submatrix;
 #[cfg(any(
     feature = "faer_all",
@@ -525,9 +538,10 @@ pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationStats,
-    QuantileRange, Scaling,
+    QuantileRange, RowNormalization, RowNormalizationParams, RowNormalizationStats, Scaling,
 };
 pub use row::LazyRow;
+pub use row_matrix::RowNormalizedMatrix;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};
 pub use traits::{
     ColumnStats, Columns, DenseBlock, DenseNormalize, DotProduct, DotSlice, ElemDivAssign,

@@ -413,6 +413,346 @@ pub fn assert_close(a: &[f64], b: &[f64], eps: f64) {
 
 const EPS: f64 = 1e-10;
 
+/// Check dense row fitting independently of storage layout and vector backend.
+pub fn run_row_normalization_suite<M, V>(
+    build: impl Fn(&TestMatrix) -> M,
+    to_v: impl Fn(&[f64]) -> V,
+) where
+    M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
+    V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
+{
+    use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+    let mut cases: Vec<_> = [
+        (7, 3, 0.4),
+        (3, 7, 1.0),
+        (0, 3, 0.0),
+        (4, 0, 0.0),
+        (0, 0, 0.0),
+        (4, 1, 1.0),
+        (3, 5, 0.0),
+    ]
+    .into_iter()
+    .map(|(n, p, density)| random_matrix(423, n, p, density))
+    .collect();
+    cases.push(matrix_from_dense(vec![
+        vec![0.0; 3],
+        vec![3.0; 3],
+        vec![-2.0, 0.0, 2.0],
+    ]));
+    cases.push(matrix_from_dense(vec![
+        vec![f64::NAN, 1.0, 0.0],
+        vec![f64::INFINITY, 1.0, 0.0],
+        vec![f64::NEG_INFINITY, 0.0, f64::INFINITY],
+        vec![f64::INFINITY; 3],
+    ]));
+    for tm in cases {
+        let matrix = build(&tm);
+        for center in [
+            Centering::None,
+            Centering::Mean,
+            Centering::Min,
+            Centering::Median,
+        ] {
+            for scale in [
+                Scaling::None,
+                Scaling::Sd { df: 0 },
+                Scaling::Sd { df: 1 },
+                Scaling::Sd { df: tm.ncols },
+                Scaling::L1,
+                Scaling::L2,
+                Scaling::MaxAbs,
+                Scaling::Range,
+                Scaling::QuantileRange(QuantileRange::default()),
+                Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+                Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
+            ] {
+                let spec = RowNormalization::new(center, scale);
+                let lazy = RowNormalizedMatrix::new(&matrix, spec).unwrap();
+                let (centers, scales) = row_normalization_oracle(&tm.dense, spec);
+                assert_eq!(lazy.centers().is_some(), centers.is_some());
+                assert_eq!(lazy.scales().is_some(), scales.is_some());
+                if let Some(expected) = &centers {
+                    assert_quantile_values(lazy.centers().unwrap(), expected, EPS);
+                }
+                if let Some(expected) = &scales {
+                    assert_quantile_values(lazy.scales().unwrap(), expected, EPS);
+                }
+                check_row_normalized_products(
+                    &lazy,
+                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
+                    &to_v,
+                );
+            }
+        }
+        for centers in [None, Some(vec![0.75; tm.nrows])] {
+            for scales in [
+                None,
+                Some(vec![-2.0; tm.nrows]),
+                Some(vec![f64::INFINITY; tm.nrows]),
+                Some(vec![f64::NAN; tm.nrows]),
+            ] {
+                let lazy =
+                    RowNormalizedMatrix::from_parts(&matrix, centers.clone(), scales.clone());
+                check_row_normalized_products(
+                    &lazy,
+                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
+                    &to_v,
+                );
+            }
+        }
+    }
+    let tm = matrix_from_dense(vec![vec![1e16, 1e16 + 2.0, 1e16 + 4.0, 1e16 + 6.0]]);
+    let robust = RowNormalizedMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
+    assert_eq!(robust.centers().unwrap(), &[1e16 + 4.0]);
+    assert_eq!(robust.scales().unwrap(), &[3.0]);
+    check_row_normalized_products(
+        &robust,
+        &[vec![-4.0 / 3.0, -2.0 / 3.0, 0.0, 2.0 / 3.0]],
+        &to_v,
+    );
+    let tm = matrix_from_dense(vec![vec![-f64::MAX, f64::MAX]]);
+    let robust = RowNormalizedMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
+    assert_eq!(robust.centers().unwrap(), &[0.0]);
+    assert_eq!(robust.scales().unwrap(), &[f64::MAX]);
+    check_row_normalized_products(&robust, &[vec![-1.0, 1.0]], &to_v);
+}
+
+/// Fit dense views and preserve variation around large row offsets.
+pub fn check_row_normalization_view<M, V>(matrix: &M, to_v: impl Fn(&[f64]) -> V)
+where
+    M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
+    V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
+{
+    use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+    let raw: Vec<Vec<_>> = (0..matrix.nrows())
+        .map(|i| (0..matrix.ncols()).map(|j| matrix.get(i, j)).collect())
+        .collect();
+    for spec in [
+        RowNormalization::standardize(),
+        RowNormalization::min_max(),
+        RowNormalization::robust(),
+    ] {
+        let (centers, scales) = row_normalization_oracle(&raw, spec);
+        let lazy = RowNormalizedMatrix::new(matrix, spec).unwrap();
+        assert_quantile_values(lazy.centers().unwrap(), centers.as_ref().unwrap(), EPS);
+        assert_quantile_values(lazy.scales().unwrap(), scales.as_ref().unwrap(), EPS);
+        check_row_normalized_products(
+            &lazy,
+            &materialize_rows(&raw, centers.as_deref(), scales.as_deref()),
+            &to_v,
+        );
+    }
+    let centers = vec![1e12; matrix.nrows()];
+    let scales: Vec<_> = (0..matrix.nrows())
+        .map(|i| if i % 2 == 0 { 1.3 } else { -2.7 })
+        .collect();
+    let normalized = materialize_rows(&raw, Some(&centers), Some(&scales));
+    let lazy = RowNormalizedMatrix::from_parts(matrix, Some(centers), Some(scales));
+    check_row_normalized_products(&lazy, &normalized, to_v);
+}
+
+fn row_normalization_oracle(
+    raw: &[Vec<f64>],
+    spec: lazymatrix::RowNormalization,
+) -> lazymatrix::RowNormalizationStats<f64> {
+    let mean = |row: &[f64]| row.iter().sum::<f64>() / row.len() as f64;
+    let min = |row: &[f64]| {
+        if row.is_empty() || row.iter().any(|v| v.is_nan()) {
+            f64::NAN
+        } else {
+            row.iter().copied().fold(f64::INFINITY, f64::min)
+        }
+    };
+    let max = |row: &[f64]| {
+        if row.is_empty() || row.iter().any(|v| v.is_nan()) {
+            f64::NAN
+        } else {
+            row.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        }
+    };
+    let centers: Option<Vec<_>> = (spec.center != Centering::None).then(|| {
+        raw.iter()
+            .map(|row| match spec.center {
+                Centering::Mean => mean(row),
+                Centering::Min => min(row),
+                Centering::Median => sorted_quantile(row, 0.5),
+                Centering::None => unreachable!(),
+            })
+            .collect()
+    });
+    let scales = (spec.scale != Scaling::None).then(|| {
+        raw.iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let centered: Vec<_> = row
+                    .iter()
+                    .map(|&v| centers.as_ref().map_or(v, |c| v - c[i]))
+                    .collect();
+                let scale = match spec.scale {
+                    Scaling::Sd { df } => {
+                        let center = mean(row);
+                        let variance = row.iter().map(|v| (v - center).powi(2)).sum::<f64>();
+                        if row.len() <= df {
+                            f64::NAN
+                        } else {
+                            (variance / (row.len() - df) as f64).sqrt()
+                        }
+                    }
+                    Scaling::Range => max(row) - min(row),
+                    Scaling::QuantileRange(q) => {
+                        sorted_quantile(row, q.upper()) - sorted_quantile(row, q.lower())
+                    }
+                    Scaling::L1 => centered.iter().map(|v| v.abs()).sum(),
+                    Scaling::L2 => centered.iter().map(|v| v * v).sum::<f64>().sqrt(),
+                    Scaling::MaxAbs => {
+                        if centered.iter().any(|v| v.is_nan()) {
+                            f64::NAN
+                        } else {
+                            centered.iter().map(|v| v.abs()).fold(0.0, f64::max)
+                        }
+                    }
+                    Scaling::None => unreachable!(),
+                };
+                if scale == 0.0 { 1.0 } else { scale }
+            })
+            .collect()
+    });
+    (centers, scales)
+}
+
+fn materialize_rows<F: lazymatrix::Scalar>(
+    raw: &[Vec<F>],
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+) -> Vec<Vec<F>> {
+    raw.iter()
+        .enumerate()
+        .map(|(i, row)| {
+            row.iter()
+                .map(|&value| {
+                    let centered = centers.map_or(value, |c| value - c[i]);
+                    scales.map_or(centered, |s| centered / s[i])
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Compare row-normalized vector products against a materialized dense oracle.
+pub fn check_row_normalized_products<M, V, F>(
+    operator: &lazymatrix::RowNormalizedMatrix<M, F>,
+    normalized: &[Vec<F>],
+    to_v: impl Fn(&[F]) -> V,
+) where
+    M: lazymatrix::MatrixRead<F> + lazymatrix::MatrixErrorType,
+    F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
+    V: lazymatrix::VectorOwned<F, Owned = V> + lazymatrix::VectorViewMut<F>,
+{
+    let tolerance = F::from_f64(EPS)
+        .unwrap()
+        .max(F::epsilon() * F::from_u32(64).unwrap());
+    let coefficients: Vec<_> = (0..operator.ncols())
+        .map(|j| F::from_f64((j % 3) as f64 - 1.0).unwrap())
+        .collect();
+    let observations: Vec<_> = (0..operator.nrows())
+        .map(|i| F::from_f64((i % 4) as f64 - 1.5).unwrap())
+        .collect();
+    let forward: Vec<F> = normalized
+        .iter()
+        .map(|row| row.iter().zip(&coefficients).map(|(&v, &x)| v * x).sum())
+        .collect();
+    let transpose: Vec<F> = (0..operator.ncols())
+        .map(|j| {
+            normalized
+                .iter()
+                .zip(&observations)
+                .map(|(row, &u)| row[j] * u)
+                .sum()
+        })
+        .collect();
+    let assert_values = |actual: &V, expected: &[F]| {
+        assert_eq!(actual.len(), expected.len());
+        for (i, &expected) in expected.iter().enumerate() {
+            let actual = actual.get(i);
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else if expected.is_infinite() {
+                assert_eq!(actual, expected);
+            } else {
+                approx::assert_relative_eq!(
+                    actual,
+                    expected,
+                    epsilon = tolerance,
+                    max_relative = tolerance
+                );
+            }
+        }
+    };
+    let x = to_v(&coefficients);
+    let u = to_v(&observations);
+    assert_values(&operator.matvec(&x).unwrap(), &forward);
+    assert_values(&operator.mat_transpose_vec(&u).unwrap(), &transpose);
+    let transposed = Transpose::new(operator);
+    assert_values(&transposed.matvec(&u).unwrap(), &transpose);
+    assert_values(&transposed.mat_transpose_vec(&x).unwrap(), &forward);
+    let mut out = to_v(&vec![F::nan(); operator.nrows()]);
+    operator.matvec_into(&x, &mut out).unwrap();
+    assert_values(&out, &forward);
+    let mut out = to_v(&vec![F::nan(); operator.ncols()]);
+    operator.mat_transpose_vec_into(&u, &mut out).unwrap();
+    assert_values(&out, &transpose);
+    if forward.iter().chain(&transpose).all(|v| v.is_finite()) {
+        let lhs: F = forward
+            .iter()
+            .zip(&observations)
+            .map(|(&a, &b)| a * b)
+            .sum();
+        let rhs: F = transpose
+            .iter()
+            .zip(&coefficients)
+            .map(|(&a, &b)| a * b)
+            .sum();
+        approx::assert_relative_eq!(
+            lhs,
+            rhs,
+            epsilon =
+                tolerance * F::from_usize(10 * (operator.nrows() + operator.ncols() + 1)).unwrap(),
+            max_relative = tolerance
+        );
+    }
+}
+
+/// Row norms, quantiles, large offsets, and entry-wise scaling work for f32.
+pub fn run_row_normalization_f32_suite<M, V>(
+    build: impl Fn(&[Vec<f32>]) -> M,
+    to_v: impl Fn(&[f32]) -> V,
+) where
+    M: lazymatrix::MatrixRead<f32> + lazymatrix::MatrixErrorType,
+    V: lazymatrix::VectorOwned<f32, Owned = V> + lazymatrix::VectorViewMut<f32>,
+{
+    use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+    let raw = vec![vec![1e8_f32, 1e8 + 8.0, 1e8 + 16.0, 1e8 + 24.0]];
+    let spec = RowNormalization::new(
+        Centering::Median,
+        Scaling::QuantileRange(QuantileRange::new(0.125, 0.875)),
+    );
+    let lazy = RowNormalizedMatrix::new(build(&raw), spec).unwrap();
+    assert_eq!(lazy.scales().unwrap(), &[18.0]);
+    check_row_normalized_products(
+        &lazy,
+        &materialize_rows(&raw, lazy.centers(), lazy.scales()),
+        &to_v,
+    );
+    let raw = vec![vec![1e38_f32, 1e38], vec![0.0, 0.0]];
+    let lazy = RowNormalizedMatrix::from_parts(build(&raw), None, Some(vec![1e38, 1.0]));
+    check_row_normalized_products(&lazy, &[vec![1.0, 1.0], vec![0.0, 0.0]], &to_v);
+    let raw = vec![vec![100_001.0, 100_003.0], vec![3.0, 3.0]];
+    let lazy = RowNormalizedMatrix::new(build(&raw), RowNormalization::standardize()).unwrap();
+    assert_eq!(lazy.centers().unwrap(), &[100_002.0, 3.0]);
+    assert_eq!(lazy.scales().unwrap(), &[1.0, 1.0]);
+    check_row_normalized_products(&lazy, &[vec![-1.0, 1.0], vec![0.0, 0.0]], &to_v);
+}
+
 /// Compare every dense product interface with entries normalized before summation.
 pub fn run_dense_centered_product_suite<M, V>(
     build: impl Fn(&TestMatrix) -> M,

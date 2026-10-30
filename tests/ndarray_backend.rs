@@ -193,6 +193,35 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn row_normalization() {
+                use lazymatrix::{RowNormalization, RowNormalizedMatrix};
+                for build in [build, build_fortran] {
+                    common::run_row_normalization_suite(build, |values| Array1::from_vec(values.to_vec()));
+                }
+                common::run_row_normalization_f32_suite(
+                    |dense| Array2::from_shape_fn((dense.len(), dense[0].len()), |(i, j)| dense[i][j]),
+                    |values| Array1::from_vec(values.to_vec()),
+                );
+                let mut storage = Array2::from_shape_fn((6, 6), |(i, j)| 1e12 + (i * 6 + j) as f64 / 4.0);
+                common::check_row_normalization_view(&storage.t(), |values| Array1::from_vec(values.to_vec()));
+                common::check_row_normalization_view(&storage.slice(s![..;-2, ..;3]), |values| Array1::from_vec(values.to_vec()));
+                common::check_row_normalization_view(&storage.view_mut(), |values| Array1::from_vec(values.to_vec()));
+                let lazy = RowNormalizedMatrix::new(storage.slice(s![..;-2, ..;3]), RowNormalization::standardize()).unwrap();
+                let coefficients = array![1.0, 99.0, -2.0, 99.0];
+                let mut out = Array1::from_elem(6, 99.0);
+                let expected = lazy.matvec(&array![1.0, -2.0]).unwrap();
+                lazy.matvec_into(&coefficients.slice(s![..;2]), &mut out.slice_mut(s![..;-2])).unwrap();
+                assert_eq!(out.slice(s![..;-2]), expected);
+                assert!(out.slice(s![..;2]).iter().all(|&v| v == 99.0));
+                let observations = array![1.0, 99.0, -2.0, 99.0, 0.5, 99.0];
+                let mut out = Array1::from_elem(4, 99.0);
+                let expected = lazy.mat_transpose_vec(&array![1.0, -2.0, 0.5]).unwrap();
+                lazy.mat_transpose_vec_into(&observations.slice(s![..;2]), &mut out.slice_mut(s![..;-2])).unwrap();
+                assert_eq!(out.slice(s![..;-2]), expected);
+                assert!(out.slice(s![..;2]).iter().all(|&v| v == 99.0));
+            }
+
+            #[test]
             fn ndarray_backend_suite() {
                 for build in [build, build_fortran] {
                     common::run_gram_suite(build);

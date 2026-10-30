@@ -5,13 +5,6 @@ use crate::{
     Scaling,
 };
 
-#[cfg(any(
-    test,
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "ndarray_all",
-    feature = "sprs_all"
-))]
 mod buffered;
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
 pub(crate) use buffered::borrowed_columns;
@@ -23,6 +16,22 @@ pub(crate) use buffered::columns;
     feature = "ndarray_all"
 ))]
 pub(crate) use buffered::dense_columns;
+
+pub(crate) fn row_quantiles<M: crate::MatrixRead<F> + ?Sized, F: Scalar>(
+    matrix: &M,
+    spec: crate::RowNormalization,
+) -> crate::RowNormalizationStats<F> {
+    let request = Request::from_spec(ColumnNormalization::new(spec.center, spec.scale));
+    if !request.median && request.range.is_none() {
+        return (None, None);
+    }
+    buffered::dense(
+        matrix.ncols(),
+        matrix.nrows(),
+        |j, i| matrix.get(i, j),
+        request,
+    )
+}
 
 mod streaming;
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]

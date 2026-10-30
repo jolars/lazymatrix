@@ -10,12 +10,26 @@ pub(crate) fn dense_columns<M: crate::MatrixRead<F> + ?Sized, F: Scalar>(
     matrix: &M,
     request: Request,
 ) -> ColumnNormalizationStats<F> {
-    let positions = request.positions(matrix.nrows());
-    let mut output = request.output(matrix.ncols());
+    dense(
+        matrix.nrows(),
+        matrix.ncols(),
+        |i, j| matrix.get(i, j),
+        request,
+    )
+}
+
+pub(crate) fn dense<F: Scalar>(
+    nrows: usize,
+    ncols: usize,
+    at: impl Fn(usize, usize) -> F,
+    request: Request,
+) -> ColumnNormalizationStats<F> {
+    let positions = request.positions(nrows);
+    let mut output = request.output(ncols);
     let mut column = Vec::new();
-    for j in 0..matrix.ncols() {
+    for j in 0..ncols {
         column.clear();
-        column.extend((0..matrix.nrows()).map(|i| matrix.get(i, j)));
+        column.extend((0..nrows).map(|i| at(i, j)));
         let mut selected = [F::nan(); 6];
         if !column.is_empty() && !column.iter().any(|value| value.is_nan()) {
             column.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());

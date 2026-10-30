@@ -5,21 +5,28 @@
 /// exact zeros with one while preserving nonfinite values.
 pub type ColumnNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 
-/// How to center each column.
+/// Computed row centers and raw scales, respectively.
+///
+/// An inactive component is `None`. Present vectors have one entry per row.
+/// [`crate::RowNormalizedMatrix::new`] replaces exact zero scales with one
+/// while preserving nonfinite values.
+pub type RowNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
+
+/// How to center each column or row.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Centering {
     /// No centering.
     #[default]
     None,
-    /// Subtract the column mean.
+    /// Subtract the mean.
     Mean,
-    /// Subtract the column minimum.
+    /// Subtract the minimum.
     Min,
-    /// Subtract the column median.
+    /// Subtract the median.
     Median,
 }
 
-/// Validated probabilities defining a column's quantile range.
+/// Validated probabilities defining a column's or row's quantile range.
 ///
 /// Bounds are probabilities in `[0, 1]`, rather than percentages. The default
 /// is the interquartile range, with bounds `0.25` and `0.75`.
@@ -63,18 +70,19 @@ impl Default for QuantileRange {
     }
 }
 
-/// How to scale each column.
+/// How to scale each column or row.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Scaling {
     /// No scaling.
     #[default]
     None,
-    /// Divide by the standard deviation, using `nrows - df` as the variance divisor.
+    /// Divide by the standard deviation, using `n - df` as the variance divisor.
     ///
+    /// Here `n` is `nrows` for column normalization and `ncols` for row normalization.
     /// Use `df = 0` for population standard deviation or `df = 1` for sample
-    /// standard deviation. When `nrows <= df`, the scale is `NaN`.
+    /// standard deviation. When `n <= df`, the scale is `NaN`.
     Sd {
-        /// Degrees of freedom subtracted from the number of rows.
+        /// Degrees of freedom subtracted from the number of entries.
         df: usize,
     },
     /// Divide by the maximum absolute value.
@@ -110,7 +118,7 @@ pub struct ColumnNormalization {
 }
 
 impl ColumnNormalization {
-    /// Build a specification from its two axes.
+    /// Build a specification from its centering and scaling choices.
     pub const fn new(center: Centering, scale: Scaling) -> Self {
         Self { center, scale }
     }
@@ -141,6 +149,58 @@ impl ColumnNormalization {
     /// at `(nrows - 1) * q`. It has no standard-normal calibration and does not
     /// target unit variance. Fitting replaces exact zero ranges with one.
     /// Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds.
+    pub fn robust() -> Self {
+        Self::new(
+            Centering::Median,
+            Scaling::QuantileRange(QuantileRange::default()),
+        )
+    }
+}
+
+/// A row normalization specification with independent [`Centering`] and
+/// [`Scaling`] choices.
+///
+/// The default performs no centering or scaling. Norms (`L1`, `L2`, and
+/// `MaxAbs`) are fitted to centered rows when centering is active. Standard
+/// deviations, ranges, and quantile ranges are translation-invariant.
+/// Use [`crate::RowNormalizedMatrix::new`] to fit each row independently.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RowNormalization {
+    /// How to center each row.
+    pub center: Centering,
+    /// How to scale each row.
+    pub scale: Scaling,
+}
+
+impl RowNormalization {
+    /// Build a specification from its centering and scaling choices.
+    pub const fn new(center: Centering, scale: Scaling) -> Self {
+        Self { center, scale }
+    }
+
+    /// Subtract each row's mean and divide by its population standard deviation.
+    ///
+    /// The variance uses `ncols` as its divisor. Fitting replaces exact zero
+    /// scales with one, so finite constant rows become zero. For sample standard
+    /// deviations, use `Self::new(Centering::Mean, Scaling::Sd { df: 1 })`.
+    pub const fn standardize() -> Self {
+        Self::new(Centering::Mean, Scaling::Sd { df: 0 })
+    }
+
+    /// Subtract each row's minimum and divide by its range.
+    ///
+    /// Finite, nonconstant rows span `[0, 1]` on the fitting data. Fitting
+    /// replaces exact zero ranges with one, so finite constant rows become zero.
+    /// Reusing parameters does not clip values to `[0, 1]`.
+    pub const fn min_max() -> Self {
+        Self::new(Centering::Min, Scaling::Range)
+    }
+
+    /// Subtract each row's median and divide by its interquartile range.
+    ///
+    /// Quantiles use linear interpolation at `(ncols - 1) * q`. There is no
+    /// standard-normal calibration. Fitting replaces exact zero ranges with
+    /// one. Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds.
     pub fn robust() -> Self {
         Self::new(
             Centering::Median,
@@ -201,6 +261,65 @@ impl<F: crate::Scalar> ColumnNormalizationParams<F> {
 
     /// Recover the fitted centers and scales without copying.
     pub fn into_parts(self) -> ColumnNormalizationStats<F> {
+        (self.centers, self.scales)
+    }
+}
+
+/// Fitted normalization for particular rows of a matrix.
+///
+/// Present vectors have one entry per row, and scales are nonzero. Explicit
+/// parameters preserve negative scales and nonfinite values. Parameters may be
+/// reapplied to matrices with the same row count, but they describe the fitted
+/// rows, not a transformation learned across samples. Fit new samples' row
+/// parameters independently.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RowNormalizationParams<F = f64> {
+    nrows: usize,
+    centers: Option<Vec<F>>,
+    scales: Option<Vec<F>>,
+}
+
+impl<F: crate::Scalar> RowNormalizationParams<F> {
+    /// Construct validated explicit parameters without changing their values.
+    ///
+    /// # Panics
+    /// Panics if either vector has a different length from `nrows`, or if a
+    /// scale is exact positive or negative zero. A zero-scale panic reports
+    /// the zero-based row index.
+    pub fn from_parts(nrows: usize, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
+        if let Some(centers) = &centers {
+            assert_eq!(centers.len(), nrows, "centers length must equal nrows");
+        }
+        if let Some(scales) = &scales {
+            assert_eq!(scales.len(), nrows, "scales length must equal nrows");
+            for (row, &scale) in scales.iter().enumerate() {
+                assert!(scale != F::zero(), "scale at row {row} must be nonzero");
+            }
+        }
+        Self {
+            nrows,
+            centers,
+            scales,
+        }
+    }
+
+    /// Number of rows these parameters describe.
+    pub fn nrows(&self) -> usize {
+        self.nrows
+    }
+
+    /// Fitted row centers, if centering is active.
+    pub fn centers(&self) -> Option<&[F]> {
+        self.centers.as_deref()
+    }
+
+    /// Fitted row scales, if scaling is active.
+    pub fn scales(&self) -> Option<&[F]> {
+        self.scales.as_deref()
+    }
+
+    /// Recover the fitted centers and scales without copying.
+    pub fn into_parts(self) -> RowNormalizationStats<F> {
         (self.centers, self.scales)
     }
 }

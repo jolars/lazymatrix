@@ -5,10 +5,11 @@
 [![PyPI](https://badge.fury.io/py/lazymatrix.svg)](https://badge.fury.io/py/lazymatrix)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23666450-blue)](https://doi.org/10.5281/zenodo.23666450)
 
-LazyMatrix is a Rust library for column normalization of design matrices. It
+LazyMatrix is a Rust library for normalization of design matrices. It
 applies centering and scaling through matrix operations, preserving sparse
-storage without creating a normalized copy. It supports dense and sparse
-matrices, borrowed views, and chunked Zarr arrays.
+storage without creating a normalized copy. Column normalization supports dense
+and sparse matrices, borrowed views, and chunked Zarr arrays. Row normalization
+supports dense matrices and their borrowed views.
 
 See the [documentation](https://lazymatrix.org) for guides, benchmarks, and
 links to the API reference.
@@ -94,6 +95,36 @@ Gram matrices, and file-backed input. Run one from a checkout with:
 ```sh
 cargo run --locked --example coordinate_descent --features faer
 ```
+
+## Row normalization
+
+Fit dense rows independently with `RowNormalization` and `RowNormalizedMatrix`:
+
+```rust
+use lazymatrix::{Centering, MatVec, RowNormalization, RowNormalizedMatrix, Scaling};
+use ndarray::array;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let x = array![[3.0, 4.0], [0.0, 0.0]];
+    let spec = RowNormalization::new(Centering::None, Scaling::L2);
+    let normalized = RowNormalizedMatrix::new(x.view(), spec)?;
+
+    let y = normalized.matvec(&array![1.0, 1.0])?;
+    assert_eq!(y, array![1.4, 0.0]);
+    Ok(())
+}
+```
+
+Row normalization offers the same centering and scaling choices and common
+recipes as column normalization. Each parameter vector has one entry per row.
+Norm scaling leaves zero rows unchanged, and new samples need independently
+fitted row parameters. `from_parts` accepts explicit parameters for custom
+fitting, and `from_normalization` reapplies parameters for the same rows.
+
+The initial row operator supports allocating and reusable forward and transpose
+vector products across every dense backend release, including strided views.
+Sparse and Zarr support, composition with column normalization, additional
+operator capabilities, and Python bindings remain in [the roadmap](TODO.md#row-normalization).
 
 ## Features
 

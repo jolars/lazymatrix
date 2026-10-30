@@ -565,6 +565,56 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn row_normalization() {
+                use lazymatrix::{MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto};
+                common::run_row_normalization_suite(build_dense, to_col);
+                common::run_row_normalization_f32_suite(
+                    |dense| Mat::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
+                    |values| Col::from_fn(values.len(), |i| values[i]),
+                );
+                let mut storage = Mat::from_fn(6, 6, |i, j| 1e12 + (i * 6 + j) as f64 / 4.0);
+                common::check_row_normalization_view(
+                    &storage.as_ref().submatrix(1, 1, 3, 4),
+                    to_col,
+                );
+                common::check_row_normalization_view(&storage.as_ref().transpose(), to_col);
+                common::check_row_normalization_view(&storage.as_mut().transpose_mut(), to_col);
+                let normalized = lazymatrix::RowNormalizedMatrix::new(
+                    storage.as_ref().submatrix(1, 1, 3, 2),
+                    lazymatrix::RowNormalization::standardize(),
+                )
+                .unwrap();
+                let coefficients = Mat::from_fn(2, 2, |_, j| [1.0, -2.0][j]);
+                let expected = normalized.matvec(&to_col(&[1.0, -2.0])).unwrap();
+                let mut out = Mat::from_fn(2, 3, |_, _| 99.0);
+                normalized
+                    .matvec_into(
+                        &coefficients.row(1).transpose(),
+                        &mut out.row_mut(1).transpose_mut(),
+                    )
+                    .unwrap();
+                for j in 0..3 {
+                    assert_eq!(out[(1, j)], expected[j]);
+                    assert_eq!(out[(0, j)], 99.0);
+                }
+                let observations = Mat::from_fn(2, 3, |_, j| [1.0, -2.0, 0.5][j]);
+                let expected = normalized
+                    .mat_transpose_vec(&to_col(&[1.0, -2.0, 0.5]))
+                    .unwrap();
+                let mut out = Mat::from_fn(2, 2, |_, _| 99.0);
+                normalized
+                    .mat_transpose_vec_into(
+                        &observations.row(1).transpose(),
+                        &mut out.row_mut(1).transpose_mut(),
+                    )
+                    .unwrap();
+                for j in 0..2 {
+                    assert_eq!(out[(1, j)], expected[j]);
+                    assert_eq!(out[(0, j)], 99.0);
+                }
+            }
+
+            #[test]
             fn faer_backend_suite() {
                 common::run_submatrix_suite(build, to_col);
                 common::run_submatrix_suite(build_dense, to_col);
