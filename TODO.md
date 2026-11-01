@@ -48,8 +48,7 @@ assuming full API or numerical parity.
 
 - [x] Expose the existing Rust normalization choices in Python.
   - Include minimum and median centering and range, quantile-range,
-    maximum-absolute, L1, and L2 scaling. Coordinate this with the reusable
-    fitted-parameter task above.
+    maximum-absolute, L1, and L2 scaling.
 
 - [ ] Document intentional numerical differences from scikit-learn.
   - Compare IEEE NaN propagation with skipping missing values during fitting,
@@ -68,15 +67,67 @@ assuming full API or numerical parity.
     these methods. Specify sparse-storage and bounded-workspace contracts rather
     than representing them only through column centers and scales.
 
+## Fitting and parameter reuse
+
+Make fitted parameters useful independently of a matrix, building on
+`LazyMatrix<M, P>` and the existing axis-specific parameter types. Add explicit
+fitting and borrowed application while retaining the current constructors. Start
+with single-axis fitting and reuse before introducing fitted pipelines.
+
+- [ ] Add explicit `.fit(&data)` methods to column and row recipes.
+  - Return `ColumnNormalizationParams<F>` or `RowNormalizationParams<F>` without
+    retaining the fitting data. Keep `LazyMatrix::new(data, recipe)` as the
+    convenient operation that fits and wraps in one call.
+  - Use the same fitting paths, validation, and numerical policies as the
+    existing constructors.
+
+- [ ] Apply fitted parameters without cloning their vectors.
+  - Add column parameter `.apply(data)` that returns a lazy operator borrowing
+    the parameters. Support several operators sharing the same fitted values:
+
+    ```rust
+    let params = ColumnNormalization::standardize().fit(&training)?;
+    let train = params.apply(training.view());
+    let valid = params.apply(validation.view());
+    ```
+
+  - Provide owning application through `.into_apply(data)` and a recipe
+    `.fit_apply(data)` convenience. Define return types and lifetimes so that
+    callers can return owning operators without borrowing temporary parameters.
+
+  - Name frozen row application `.apply_frozen(data)`. Row parameters describe
+    particular rows; fit new samples independently, even when row counts match.
+    Make the frozen semantics explicit for owning row application as well.
+
+  - Preserve `from_parts`, `from_column_parts`, and `from_row_parts`.
+    Application uses supplied values unchanged, checks dimensions, and performs
+    no fitting. Share kernels between operators with owned and borrowed
+    parameters.
+
+- [ ] Validate fitting and application signatures with external consumers.
+  - Check scalar inference for `f32` and `f64`, generic recipes and matrices,
+    fallible backend errors, and owned and borrowed data and parameters.
+  - Cover shared-parameter reuse, lifetimes, dimension validation, and parity
+    with existing constructors across supported backends.
+
+- [ ] Evaluate a public fitting trait for downstream estimators.
+  - Keep explicit parameter construction available for custom fitting. Add an
+    open trait only when it improves integration with generic consumers.
+  - Specify scalar inference, output types, errors, and validation before
+    opening the interface. Custom recipes should produce supported fitted
+    parameter types; operator kernels and parameter invariants remain library
+    controlled. Keep backend statistics capabilities and shared scan hooks
+    independent of recipe extensibility.
+
 ## Row normalization
 
 - [x] Add dense row normalization as a companion to column normalization.
   - `RowNormalization` offers independent centering and scaling choices matching
     `ColumnNormalization`, including standardization, min-max, and robust
     recipes. L1, L2, and maximum-absolute scaling leave zero rows unchanged.
-  - `LazyMatrix` supports fitted and explicit row parameters, allocating
-    and reusable forward and transpose vector products, and dense views across
-    every supported backend release. Explicit parameters permit custom fitting.
+  - `LazyMatrix` supports fitted and explicit row parameters, allocating and
+    reusable forward and transpose vector products, and dense views across every
+    supported backend release. Explicit parameters permit custom fitting.
   - Fit new samples' row parameters independently. Exact quantiles reuse one
     working row; products normalize entries before accumulation without
     materializing the design.
@@ -85,11 +136,11 @@ assuming full API or numerical parity.
   - Accept either axis's recipe in `LazyMatrix::new`, and select capabilities
     through the fitted parameter type. Remove the separate row wrapper.
   - Keep column-only use concise:
-    `LazyMatrix::new(data, ColumnNormalization::standardize())?`.
-    Retain specialized column-only kernels without row-parameter allocations or
-    runtime axis dispatch.
-  - Store typed metadata in `LazyMatrix<M, P>` and `EagerMatrix<M, P>`. Inspect it
-    with `normalization()` and recover `(data, params)` with `into_parts()`.
+    `LazyMatrix::new(data, ColumnNormalization::standardize())?`. Retain
+    specialized column-only kernels without row-parameter allocations or runtime
+    axis dispatch.
+  - Store typed metadata in `LazyMatrix<M, P>` and `EagerMatrix<M, P>`. Inspect
+    it with `normalization()` and recover `(data, params)` with `into_parts()`.
     Rebuild from those parts with `LazyMatrix::from_parts`. Supply explicit
     vectors with `from_column_parts` or `from_row_parts`, inferring the
     dimension from the matrix.
@@ -97,50 +148,67 @@ assuming full API or numerical parity.
     together, preferring the consistent API over backward compatibility.
 
 - [ ] Compose normalization recipes with `.then()`, read from left to right.
-  - Accept an ordered recipe chain in `LazyMatrix::new`.
+  - Support explicit fitting of an ordered recipe chain and retain
+    `LazyMatrix::new(data, recipe)` as a convenience.
+
   - Support row-then-column standardization for the Duke breast-cancer
-    preprocessing order:
+    preprocessing order, with separate frozen and new-sample application:
 
     ```rust
     let recipe = RowNormalization::standardize()
         .then(ColumnNormalization::standardize());
-    let matrix = LazyMatrix::new(data, recipe)?;
+    let fitted = recipe.fit(&training)?;
+    let train = fitted.apply_frozen(training.view());
+    let valid = fitted.for_new_samples(validation.view())?;
     ```
 
   - Fit each stage on the logical output of all preceding stages. Reversing the
-    recipe changes the fitted transformation; allow repeated axes as well.
-    Later stages may change statistics established by earlier stages.
+    recipe changes the fitted transformation; allow repeated axes as well. Later
+    stages may change statistics established by earlier stages.
+
   - Preserve stage order in the types, and expose capabilities only when the
     backend and the entire sequence support them.
+
   - Apply the fitted transformation lazily, preserving sparse storage and
     bounded workspace without materializing intermediate design matrices.
 
-- [ ] Represent fitted parameters in the same order as their recipes.
+- [ ] Represent reusable fitted pipelines in the same order as their recipes.
   - Retain the axis-specific `RowNormalizationParams` and
-    `ColumnNormalizationParams` types. Have `normalization()` expose the fitted
-    sequence and `from_parts` apply it unchanged, without refitting.
-  - Define an explicit path for new samples that fits their row stages at the
-    correct points in the sequence while reusing fitted training column stages.
-    Keep this distinct from applying frozen parameters to the same rows.
+    `ColumnNormalizationParams` types. Retain row recipes alongside fitted
+    values so that the pipeline can fit new rows. Have `normalization()` expose
+    the fitted sequence and `from_parts` apply it unchanged, without refitting.
+  - Use `.apply_frozen(data)` to apply every saved stage unchanged to matching
+    rows. Use a fallible `.for_new_samples(data)` to fit row stages at the
+    correct points while reusing fitted training column stages. Avoid an
+    ambiguous plain `.apply()` on mixed pipelines.
+  - Define ownership and lifetimes for both operations, including newly fitted
+    row values and borrowed training column parameters. Keep all refitting in
+    explicit preparation calls; ordinary products only execute fitted stages.
+  - Implement only sequences whose intermediate statistics and products have
+    supported bounded-workspace paths. Unsupported capabilities should fail at
+    compile time; composable recipe syntax alone does not imply backend support.
 
 - [ ] Validate ordered normalization against an eager dense oracle.
   - Cover both axis orders, repeated stages, explicit and computed parameters,
-    new samples, the adjoint identity, and existing zero, empty, and nonfinite
-    cases across supported backends. Preserve the existing numerical invariants.
+    frozen application, new-sample row fitting with reused column parameters,
+    borrowed and owning operators, the adjoint identity, and existing zero,
+    empty, and nonfinite cases across supported backends. Preserve the existing
+    numerical invariants.
 
 - [ ] Extend row normalization (`Normalizer` and `normalize(axis=1)`) to sparse
   storage.
-  - Combine duplicate cells before nonlinear statistics, include implicit
-    zeros, and preserve CSC and CSR storage with bounded workspace.
+  - Combine duplicate cells before nonlinear statistics, include implicit zeros,
+    and preserve CSC and CSR storage with bounded workspace.
 
-- [ ] Stream row fitting and products over Zarr chunks without materializing
-  the array. Preserve fill values, exclude padding, and account for outer shards.
+- [ ] Stream row fitting and products over Zarr chunks without materializing the
+  array. Preserve fill values, exclude padding, and account for outer
+  shards.
 
 - [ ] Add a public row-statistics capability when sparse or storage-backed
   fitting needs it, keeping shared fitting hooks and reference forwarding.
 
-- [ ] Extend `LazyMatrix` capabilities to row and composed normalization:
-  fused and workspace products, batched products, borrowed logical rows and
+- [ ] Extend `LazyMatrix` capabilities to row and composed normalization: fused
+  and workspace products, batched products, borrowed logical rows and
   columns, weighted operations, and eager conversion.
 
 - [ ] Expose row normalization in Python, including independent fitting for new
