@@ -5,10 +5,10 @@
 [![PyPI](https://badge.fury.io/py/lazymatrix.svg)](https://badge.fury.io/py/lazymatrix)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23666450-blue)](https://doi.org/10.5281/zenodo.23666450)
 
-LazyMatrix is a Rust library for normalization of design matrices. It
-applies centering and scaling through matrix operations, preserving sparse
-storage without creating a normalized copy. Column normalization supports dense
-and sparse matrices, borrowed views, and chunked Zarr arrays. Row normalization
+LazyMatrix is a Rust library for normalization of design matrices. It applies
+centering and scaling through matrix operations, preserving sparse storage
+without creating a normalized copy. Column normalization supports dense and
+sparse matrices, borrowed views, and chunked Zarr arrays. Row normalization
 supports dense matrices and their borrowed views.
 
 See the [documentation](https://lazymatrix.org) for guides, benchmarks, and
@@ -57,6 +57,16 @@ fitted data or `ColumnNormalization::robust()` for median centering and
 interquartile-range scaling. `ColumnNormalization::new(center, scale)` accepts
 custom combinations, with centering and scaling independently optional. Reuse
 fitted parameters on new observations with `LazyMatrix::from_parts`.
+
+Fit parameters independently of a matrix wrapper with `.fit(&data)`. The
+parameters own their centers and scales and do not retain the fitting data:
+
+```rust
+let params = ColumnNormalization::standardize().fit(&x)?;
+let training = LazyMatrix::from_parts(x.view(), params.clone());
+let validation_data = array![[3.0, 2.0]];
+let validation = LazyMatrix::from_parts(validation_data.view(), params);
+```
 
 Supply explicit vectors with `LazyMatrix::from_column_parts`; the column count
 comes from the matrix:
@@ -131,8 +141,9 @@ recipes as column normalization. Each parameter vector has one entry per row.
 Norm scaling leaves zero rows unchanged, and new samples need independently
 fitted row parameters. Use `LazyMatrix::from_row_parts(data, centers, scales)`
 for explicit vectors; the row count comes from the matrix. Use
-`LazyMatrix::from_parts(data, params)` to apply previously fitted parameters
-for the same rows.
+`LazyMatrix::from_parts(data, params)` to apply previously fitted parameters for
+the same rows. To fit row parameters separately, call `spec.fit(&data)`; the
+returned parameters own their vectors and do not retain the input matrix.
 
 The parameter type identifies the axis and scalar:
 `LazyMatrix<M, ColumnNormalizationParams<f64>>` or
@@ -146,7 +157,8 @@ uses the same typed metadata API for its already normalized data.
 The initial row operator supports allocating and reusable forward and transpose
 vector products across every dense backend release, including strided views.
 Sparse and Zarr support, composition with column normalization, additional
-operator capabilities, and Python bindings remain in [the roadmap](TODO.md#row-normalization).
+operator capabilities, and Python bindings remain in [the
+roadmap](TODO.md#row-normalization).
 
 ## Features
 

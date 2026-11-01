@@ -74,7 +74,7 @@ Make fitted parameters useful independently of a matrix, building on
 fitting and borrowed application while retaining the current constructors. Start
 with single-axis fitting and reuse before introducing fitted pipelines.
 
-- [ ] Add explicit `.fit(&data)` methods to column and row recipes.
+- [x] Add explicit `.fit(&data)` methods to column and row recipes.
   - Return `ColumnNormalizationParams<F>` or `RowNormalizationParams<F>` without
     retaining the fitting data. Keep `LazyMatrix::new(data, recipe)` as the
     convenient operation that fits and wraps in one call.

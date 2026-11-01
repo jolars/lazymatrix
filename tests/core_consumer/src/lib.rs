@@ -15,6 +15,10 @@ mod transpose;
 mod row_normalization;
 
 #[cfg(test)]
+#[path = "../../normalization_fitting.rs"]
+mod normalization_fitting;
+
+#[cfg(test)]
 mod tests {
     use std::{cell::Cell, convert::Infallible};
 

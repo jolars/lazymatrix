@@ -56,6 +56,8 @@ impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
     /// scales become one; negative and nonfinite values are preserved. Column
     /// recipes use [`crate::ColumnStats`], while row recipes require dense
     /// indexed access through [`crate::MatrixRead`].
+    /// To fit parameters separately, use [`crate::ColumnNormalization::fit`]
+    /// or [`crate::RowNormalization::fit`].
     ///
     /// # Errors
     /// Returns the backend error if computing normalization statistics fails.

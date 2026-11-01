@@ -39,6 +39,11 @@
 //! fitted row parameters. Sparse and Zarr support, composition with column
 //! normalization, and additional operator capabilities remain future work.
 //!
+//! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
+//! independently of a matrix wrapper. Their results own the fitted vectors
+//! without retaining the input data. Apply them with [`LazyMatrix::from_parts`];
+//! [`LazyMatrix::new`] uses the same fitting path and wraps the data in one call.
+//!
 //! The fitted parameter type selects the axis and scalar:
 //! `LazyMatrix<M, ColumnNormalizationParams<F>>` or
 //! `LazyMatrix<M, RowNormalizationParams<F>>`. The default is column parameters

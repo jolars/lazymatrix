@@ -484,7 +484,9 @@ pub fn run_row_normalization_suite<M, V>(
                 Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
             ] {
                 let spec = RowNormalization::new(center, scale);
-                let lazy = LazyMatrix::new(&matrix, spec).unwrap();
+                let params = spec.fit(&matrix).unwrap();
+                assert_eq!(params.nrows(), tm.nrows);
+                let lazy = LazyMatrix::from_parts(&matrix, params);
                 let (centers, scales) = row_normalization_oracle(&tm.dense, spec);
                 assert_eq!(lazy.normalization().centers().is_some(), centers.is_some());
                 assert_eq!(lazy.normalization().scales().is_some(), scales.is_some());
@@ -2488,13 +2490,9 @@ where
     assert_eq!(matrix.col_l1().unwrap(), vec![0.0, 0.0]);
     assert_eq!(matrix.col_l2().unwrap(), vec![0.0, 0.0]);
 
-    let lazy = LazyMatrix::new(
-        matrix,
-        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
-    )
-    .unwrap();
-    let (data, params) = lazy.into_parts();
-    let lazy = LazyMatrix::from_parts(data, params);
+    let params = ColumnNormalization::standardize().fit(&matrix).unwrap();
+    assert_eq!(params.ncols(), no_rows.ncols);
+    let lazy = LazyMatrix::from_parts(matrix, params);
     assert!(
         lazy.normalization()
             .centers()
@@ -2528,6 +2526,9 @@ where
     assert!(matrix.col_l1_centered(&[0.0]).unwrap()[0].is_nan());
     assert!(matrix.col_l2_centered(&[0.0]).unwrap()[0].is_nan());
     assert!(matrix.col_maxabs_centered(&[0.0]).unwrap()[0].is_nan());
+    let params = ColumnNormalization::standardize().fit(&matrix).unwrap();
+    assert!(params.centers().unwrap()[0].is_nan());
+    assert!(params.scales().unwrap()[0].is_nan());
 
     let implicit_zero = TestMatrix {
         nrows: 2,
@@ -3006,7 +3007,8 @@ where
         vec![4.0, 1.0, -2.0],
     ]);
     let matrix = build(&tm);
-    let normalized = LazyMatrix::new(&matrix, ColumnNormalization::robust()).unwrap();
+    let params = ColumnNormalization::robust().fit(&matrix).unwrap();
+    let normalized = LazyMatrix::from_parts(&matrix, params);
     assert_close(
         normalized.normalization().centers().unwrap(),
         &[1.0, 1.0, 2.0],
@@ -3267,7 +3269,7 @@ where
     );
 }
 
-/// `LazyMatrix::new` selects raw or centered statistics according to the
+/// Explicit fitting selects raw or centered statistics according to the
 /// normalization specification and applies the exact-zero scale guard.
 fn normalization_statistic_dispatch<M>(build: &impl Fn(&TestMatrix) -> M)
 where
@@ -3290,72 +3292,40 @@ where
         ],
     };
 
-    let raw_l1 = LazyMatrix::new(
-        build(&tm),
-        ColumnNormalization::new(Centering::None, Scaling::L1),
-    )
-    .unwrap();
-    assert_close(
-        raw_l1.normalization().scales().unwrap(),
-        &[4.0, 1.0, 15.0],
-        EPS,
-    );
+    let matrix = build(&tm);
+    let inactive = ColumnNormalization::default().fit(&matrix).unwrap();
+    assert_eq!(inactive.ncols(), tm.ncols);
+    assert!(inactive.centers().is_none());
+    assert!(inactive.scales().is_none());
 
-    let centered_l1 = LazyMatrix::new(
-        build(&tm),
-        ColumnNormalization::new(Centering::Mean, Scaling::L1),
-    )
-    .unwrap();
-    assert_close(
-        centered_l1.normalization().centers().unwrap(),
-        &[4.0 / 3.0, 0.0, 5.0],
-        EPS,
-    );
-    assert_close(
-        centered_l1.normalization().scales().unwrap(),
-        &[10.0 / 3.0, 1.0, 1.0],
-        EPS,
-    );
+    let raw_l1 = ColumnNormalization::new(Centering::None, Scaling::L1)
+        .fit(&matrix)
+        .unwrap();
+    assert_close(raw_l1.scales().unwrap(), &[4.0, 1.0, 15.0], EPS);
 
-    let median_l1 = LazyMatrix::new(
-        build(&tm),
-        ColumnNormalization::new(Centering::Median, Scaling::L1),
-    )
-    .unwrap();
-    assert_close(
-        median_l1.normalization().centers().unwrap(),
-        &[1.0, 0.0, 5.0],
-        EPS,
-    );
-    assert_close(
-        median_l1.normalization().scales().unwrap(),
-        &[3.0, 1.0, 1.0],
-        EPS,
-    );
+    let centered_l1 = ColumnNormalization::new(Centering::Mean, Scaling::L1)
+        .fit(&matrix)
+        .unwrap();
+    assert_close(centered_l1.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
+    assert_close(centered_l1.scales().unwrap(), &[10.0 / 3.0, 1.0, 1.0], EPS);
 
-    let standardized = LazyMatrix::new(build(&tm), ColumnNormalization::standardize()).unwrap();
+    let median_l1 = ColumnNormalization::new(Centering::Median, Scaling::L1)
+        .fit(&matrix)
+        .unwrap();
+    assert_close(median_l1.centers().unwrap(), &[1.0, 0.0, 5.0], EPS);
+    assert_close(median_l1.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
+
+    let standardized = ColumnNormalization::standardize().fit(&matrix).unwrap();
+    assert_close(standardized.centers().unwrap(), &[4.0 / 3.0, 0.0, 5.0], EPS);
     assert_close(
-        standardized.normalization().centers().unwrap(),
-        &[4.0 / 3.0, 0.0, 5.0],
-        EPS,
-    );
-    assert_close(
-        standardized.normalization().scales().unwrap(),
+        standardized.scales().unwrap(),
         &[14.0_f64.sqrt() / 3.0, 1.0, 1.0],
         EPS,
     );
 
-    let min_range = LazyMatrix::new(build(&tm), ColumnNormalization::min_max()).unwrap();
-    assert_close(
-        min_range.normalization().centers().unwrap(),
-        &[0.0, 0.0, 5.0],
-        EPS,
-    );
-    assert_close(
-        min_range.normalization().scales().unwrap(),
-        &[3.0, 1.0, 1.0],
-        EPS,
-    );
+    let min_range = ColumnNormalization::min_max().fit(&matrix).unwrap();
+    assert_close(min_range.centers().unwrap(), &[0.0, 0.0, 5.0], EPS);
+    assert_close(min_range.scales().unwrap(), &[3.0, 1.0, 1.0], EPS);
 }
 
 /// (6): a constant column (sd 0) is floored to scale 1 → finite output.

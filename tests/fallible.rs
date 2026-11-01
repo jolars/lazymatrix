@@ -238,15 +238,23 @@ fn normalization_uses_borrowed_fused_hook_and_preserves_scale_policy() {
         fused_calls: Cell::new(0),
     };
     let spec = ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 });
-    let lazy = LazyMatrix::new(&source, spec).unwrap();
+    let params = spec.fit(&source).unwrap();
+    assert_eq!(source.fused_calls.get(), 1);
+    let lazy = LazyMatrix::from_parts(&source, params);
     assert_eq!(source.fused_calls.get(), 1);
     assert_eq!(lazy.normalization().centers(), Some([1.0, 2.0].as_slice()));
     assert_eq!(
         lazy.normalization().scales(),
         Some([1.0, f64::INFINITY].as_slice())
     );
+    let combined = LazyMatrix::new(&source, spec).unwrap();
+    assert_eq!(source.fused_calls.get(), 2);
+    assert_eq!(combined.normalization(), lazy.normalization());
     source.fail.set(true);
+    assert!(matches!(spec.fit(&source), Err(ReadError)));
+    assert_eq!(source.fused_calls.get(), 3);
     assert!(matches!(LazyMatrix::new(&source, spec), Err(ReadError)));
+    assert_eq!(source.fused_calls.get(), 4);
 }
 
 #[test]

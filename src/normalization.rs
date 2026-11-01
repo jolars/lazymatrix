@@ -42,14 +42,14 @@ where
 /// Computed column centers and raw scales, respectively.
 ///
 /// An inactive normalization component is `None`. Present vectors have one
-/// entry per column. Raw scales may be zero; [`crate::LazyMatrix::new`] replaces
-/// exact zeros with one while preserving nonfinite values.
+/// entry per column. Raw scales may be zero; [`ColumnNormalization::fit`]
+/// replaces exact zeros with one while preserving nonfinite values.
 pub type ColumnNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 
 /// Computed row centers and raw scales, respectively.
 ///
 /// An inactive component is `None`. Present vectors have one entry per row.
-/// [`crate::LazyMatrix::new`] replaces exact zero scales with one
+/// [`RowNormalization::fit`] replaces exact zero scales with one
 /// while preserving nonfinite values.
 pub type RowNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 
@@ -162,6 +162,50 @@ impl ColumnNormalization {
     /// Build a specification from its centering and scaling choices.
     pub const fn new(center: Centering, scale: Scaling) -> Self {
         Self { center, scale }
+    }
+
+    /// Fit owned column parameters without retaining or modifying the data.
+    ///
+    /// Uses [`crate::ColumnStats::normalization_stats`] so backends can share
+    /// scans. Norm scales use centered values when centering is active. Exact
+    /// zero scales become one; negative and nonfinite values are preserved.
+    /// No normalized design matrix is materialized.
+    ///
+    /// Apply the parameters with [`crate::LazyMatrix::from_parts`], or use
+    /// [`crate::LazyMatrix::new`] to fit and wrap in one call. Column parameters
+    /// can be reused on new samples with the same number of columns.
+    ///
+    /// # Errors
+    /// Returns the backend error if computing normalization statistics fails.
+    ///
+    /// # Panics
+    /// Panics if the backend returns a center or scale vector whose length
+    /// differs from the number of columns.
+    ///
+    /// ```
+    /// # #[cfg(feature = "ndarray_v0_17")]
+    /// # {
+    /// use lazymatrix::{ColumnNormalization, LazyMatrix, MatVec};
+    /// use ndarray::array;
+    ///
+    /// let training = array![[1.0, 2.0], [3.0, 6.0]];
+    /// let params = ColumnNormalization::standardize().fit(&training).unwrap();
+    /// let validation = array![[5.0, 10.0]];
+    /// let valid = LazyMatrix::from_parts(validation.view(), params);
+    /// assert_eq!(valid.matvec(&array![1.0, 1.0]).unwrap(), array![6.0]);
+    /// # }
+    /// ```
+    pub fn fit<M, F>(self, data: &M) -> Result<ColumnNormalizationParams<F>, M::Error>
+    where
+        M: crate::ColumnStats<F> + crate::MatrixShape + ?Sized,
+        F: crate::Scalar,
+    {
+        let (centers, scales) = data.normalization_stats(self)?;
+        Ok(ColumnNormalizationParams::from_parts(
+            data.ncols(),
+            centers,
+            scales.map(replace_zero_scales),
+        ))
     }
 
     /// Subtract each column's mean and divide by its population standard deviation.
@@ -310,6 +354,50 @@ impl RowNormalization {
     /// Build a specification from its centering and scaling choices.
     pub const fn new(center: Centering, scale: Scaling) -> Self {
         Self { center, scale }
+    }
+
+    /// Fit owned row parameters without retaining or modifying the data.
+    ///
+    /// Requires dense indexed access through [`crate::MatrixRead`]. Norm scales
+    /// use centered values when centering is active. Exact zero scales become
+    /// one, and nonfinite values are preserved. Fitting uses the bounded
+    /// workspace described by [`RowNormalization`], without materializing a
+    /// normalized design matrix.
+    ///
+    /// Apply the parameters to the same rows with
+    /// [`crate::LazyMatrix::from_parts`], or use [`crate::LazyMatrix::new`] to fit
+    /// and wrap in one call. Fit new samples independently, even when their row
+    /// count matches the fitting data.
+    ///
+    /// # Errors
+    /// Returns the backend's `Result` type for consistency with column fitting.
+    /// Dense indexed reads are infallible, so this method always returns `Ok`.
+    ///
+    /// ```
+    /// # #[cfg(feature = "ndarray_v0_17")]
+    /// # {
+    /// use lazymatrix::{Centering, LazyMatrix, MatVec, RowNormalization, Scaling};
+    /// use ndarray::array;
+    ///
+    /// let data = array![[3.0, 4.0], [0.0, 0.0]];
+    /// let recipe = RowNormalization::new(Centering::None, Scaling::L2);
+    /// let params = recipe.fit(&data).unwrap();
+    /// assert_eq!(params.scales(), Some([5.0, 1.0].as_slice()));
+    /// let rows = LazyMatrix::from_parts(data.view(), params);
+    /// assert_eq!(rows.matvec(&array![1.0, 1.0]).unwrap(), array![1.4, 0.0]);
+    /// # }
+    /// ```
+    pub fn fit<M, F>(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error>
+    where
+        M: crate::MatrixRead<F> + crate::MatrixErrorType + ?Sized,
+        F: crate::Scalar,
+    {
+        let (centers, scales) = row::fit(data, self);
+        Ok(RowNormalizationParams::from_parts(
+            data.nrows(),
+            centers,
+            scales,
+        ))
     }
 
     /// Subtract each row's mean and divide by its population standard deviation.
@@ -494,12 +582,7 @@ impl<M: crate::ColumnStats<F> + crate::MatrixShape, F: crate::Scalar>
     private::Recipe<M, ColumnNormalizationParams<F>> for ColumnNormalization
 {
     fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, M::Error> {
-        let (centers, scales) = data.normalization_stats(self)?;
-        Ok(ColumnNormalizationParams::from_parts(
-            data.ncols(),
-            centers,
-            scales.map(replace_zero_scales),
-        ))
+        ColumnNormalization::fit(self, data)
     }
 }
 
@@ -507,12 +590,7 @@ impl<M: crate::MatrixRead<F> + crate::MatrixErrorType, F: crate::Scalar>
     private::Recipe<M, RowNormalizationParams<F>> for RowNormalization
 {
     fn fit(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error> {
-        let (centers, scales) = row::fit(data, self);
-        Ok(RowNormalizationParams::from_parts(
-            data.nrows(),
-            centers,
-            scales,
-        ))
+        RowNormalization::fit(self, data)
     }
 }
 

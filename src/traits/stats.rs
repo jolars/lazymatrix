@@ -21,7 +21,7 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
     /// Compute the centers and raw scales requested by `spec`.
     ///
     /// Backends may override this hook to share scans between statistics. Exact
-    /// zero scales are returned unchanged; [`crate::LazyMatrix::new`] replaces
+    /// zero scales are returned unchanged; [`ColumnNormalization::fit`] replaces
     /// them with one. Each present vector must have length `ncols`.
     ///
     /// # Errors
