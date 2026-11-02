@@ -237,6 +237,18 @@
 //! feature for each direct backend dependency. The `*_all` features are internal
 //! markers and cannot be enabled without a version feature.
 //!
+//! Enable `ndarray-blas` for BLAS acceleration with ndarray 0.17, or select
+//! `ndarray_v0_15-blas`, `ndarray_v0_16-blas`, or `ndarray_v0_17-blas` for a
+//! specific release. These features enable the matching ndarray adapter and its
+//! BLAS support. The application must supply a BLAS provider, such as LP64
+//! OpenBLAS, at link time. LazyMatrix selects no provider.
+//!
+//! BLAS can accelerate `f32` and `f64` uncentered vector and batched products,
+//! eager products, and finite weighted Gram products when memory layouts permit.
+//! Centered lazy vector and batched products use directly centered Rust kernels
+//! to preserve small variations around large offsets. BLAS threading is
+//! controlled by the provider independently of `parallel`.
+//!
 //! The core requires Rust 1.85. Other backends retain their dependency MSRVs. The `nalgebra` and
 //! `nalgebra_v0_35` features require Rust 1.89. The `nalgebra` feature previously
 //! selected 0.34; use `nalgebra_v0_34` to retain that release and Rust 1.87 support.

@@ -99,6 +99,18 @@ jobs:
           cargo run --locked --example ndarray_mmap --features ndarray
           cargo run --locked --example zarrs_chunked --features zarrs
 
+  blas:
+    name: ndarray BLAS (OpenBLAS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install OpenBLAS (LP64)
+        run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ndarray-blas
+      - run: bash scripts/test-backends.sh blas
+
   core-msrv:
     strategy:
       matrix:
@@ -262,6 +274,7 @@ jobs:
         clippy,
         docs,
         test,
+        blas,
         core-msrv,
         core-wasm,
         msrv,

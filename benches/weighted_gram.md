@@ -19,9 +19,10 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 bash scripts/bench-weighted-gram-blas.s
 ```
 
 The BLAS script uses `OPENBLAS_LP64_LIB`, supplied by the project's devenv,
-and a separate target directory. It does not add system BLAS to ordinary builds
-or the all-feature CI checks. Both commands accept Criterion filters and timing
-options after `--` for Cargo or directly after the script name.
+and a separate target directory. It enables the public `ndarray-blas` feature.
+Linked BLAS correctness checks run separately with `task test:blas`. The
+benchmark commands accept Criterion filters and timing options after `--` for
+Cargo or directly after the script name.
 
 The fixtures contain 2,000 rows and 32 predictors or 10,000 rows and 128
 predictors, with densities of 0.1%, 1%, 10%, and 100%. Values come from a seeded

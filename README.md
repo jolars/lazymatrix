@@ -256,6 +256,18 @@ feature such as `nalgebra_v0_34` for an older release, and match your direct
 backend dependency to it. Enable `parallel` alongside a backend for parallel
 column statistics where supported.
 
+Enable `ndarray-blas` for optional BLAS acceleration with ndarray 0.17, or use
+`ndarray_v0_15-blas`, `ndarray_v0_16-blas`, or `ndarray_v0_17-blas` for a
+specific release. Your application must select and link a BLAS provider, such as
+LP64 OpenBLAS. LazyMatrix does not select one. See the [BLAS setup
+guide](https://lazymatrix.org/guide/getting-started#optional-blas-acceleration).
+
+BLAS can accelerate `f32` and `f64` uncentered vector and batched products,
+eager products, and finite weighted Gram products. Centered lazy vector and
+batched products use directly centered Rust kernels to preserve small variations
+around large offsets. BLAS threading is controlled by the provider independently
+of `parallel`.
+
 Faer matrices support immutable and mutable borrowed views, including
 `SparseColMatRef` and `SparseColMatMut` for CSC storage. Pass `matrix.as_ref()`
 directly to `LazyMatrix::new` to fit normalization and use products or borrowed

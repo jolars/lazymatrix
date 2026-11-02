@@ -40,8 +40,14 @@ test_core() {
         zarrs,ndarray_v0_15 zarrs,ndarray_v0_16 zarrs,ndarray_v0_17; do
         test_features --features "$features"
     done
-    test_features --features "$(IFS=,; echo "${versions[*]}")"
-    test_features --all-features
+    local combined
+    combined=$(
+        IFS=,
+        echo "${versions[*]}"
+    )
+    # All-feature runtime checks need a BLAS provider and run in the blas mode.
+    test_features --features "$combined"
+    test_features --features "$combined,parallel"
 }
 
 test_pairs() {
@@ -60,7 +66,10 @@ check_aliases() {
     local family=$1
     shift
     local combined
-    combined=$(IFS=,; echo "$*")
+    combined=$(
+        IFS=,
+        echo "$*"
+    )
     # Pairwise runtime coverage uses version features; aliases only select the latest release.
     cargo check --lib --locked --no-default-features --features "$combined,$family"
     cargo check --lib --locked --no-default-features --features "$combined,$family,parallel"
@@ -76,10 +85,36 @@ test_coexistence() {
     check_aliases ndarray "${ndarray_versions[@]}"
     check_aliases zarrs "${zarrs_versions[@]}"
     local combined
-    combined=$(IFS=,; echo "${faer_versions[*]},${nalgebra_versions[*]},${ndarray_versions[*]},${zarrs_versions[*]}")
+    combined=$(
+        IFS=,
+        echo "${faer_versions[*]},${nalgebra_versions[*]},${ndarray_versions[*]},${zarrs_versions[*]}"
+    )
     test_fixtures --features "$combined"
-    test_fixtures --all-features
+    test_fixtures --features "$combined,parallel"
 }
+
+test_blas() (
+    local blas_paths=""
+    if [[ -n ${OPENBLAS_LP64_LIB:-} ]]; then
+        blas_paths="-L native=$OPENBLAS_LP64_LIB -C link-arg=-Wl,-rpath,$OPENBLAS_LP64_LIB"
+    fi
+    export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+    export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$OPENBLAS_NUM_THREADS}"
+    export OMP_DYNAMIC=FALSE
+    # rustdoc needs the provider's search and runtime paths for doctest binaries.
+    export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-l openblas${blas_paths:+ $blas_paths}"
+    export RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }$blas_paths"
+    export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/ndarray-blas"
+    local feature
+    for feature in "${ndarray_versions[@]}"; do
+        test_version "$feature-blas"
+    done
+    test_version ndarray-blas
+    test_features --all-features
+    test_fixtures --workspace --all-features
+    test_fixtures --features ndarray_v0_15-blas,ndarray_v0_17
+    test_fixtures --features ndarray_v0_15,ndarray_v0_17-blas,parallel
+)
 
 check_msrv() (
     if [[ $(rustc --version) != "rustc 1.87.0 "* ]]; then
@@ -115,8 +150,14 @@ check_msrv() (
         fi
     done
     local combined fixtures
-    combined=$(IFS=,; echo "${compatible[*]}")
-    fixtures=$(IFS=,; echo "${fixture_compatible[*]}")
+    combined=$(
+        IFS=,
+        echo "${compatible[*]}"
+    )
+    fixtures=$(
+        IFS=,
+        echo "${fixture_compatible[*]}"
+    )
     cargo check --all-targets --locked --no-default-features --features "$combined"
     cargo check --all-targets --locked --no-default-features --features "$combined,parallel"
     cargo check --manifest-path "$fixture_manifest" --all-targets --locked --no-default-features --features "$fixtures"
@@ -124,6 +165,8 @@ check_msrv() (
     # The Gram example and benchmark require both dense and sparse adapters.
     for feature in "${ndarray_versions[@]}"; do
         cargo check --all-targets --locked --no-default-features --features "$feature,sprs_v0_11"
+        cargo check --all-targets --locked --no-default-features --features "$feature-blas,sprs_v0_11"
+        cargo check --all-targets --locked --no-default-features --features "$feature-blas,sprs_v0_11,parallel"
     done
 )
 
@@ -150,10 +193,11 @@ all)
 core) test_core ;;
 version) test_version "${2:?Specify a version feature.}" ;;
 coexistence | selection) test_coexistence ;;
+blas) test_blas ;;
 msrv) check_msrv ;;
 zarrs-msrv) check_zarrs_msrv ;;
 *)
-    echo "Usage: $0 [all|core|version FEATURE|coexistence|msrv|zarrs-msrv]" >&2
+    echo "Usage: $0 [all|core|version FEATURE|coexistence|blas|msrv|zarrs-msrv]" >&2
     exit 1
     ;;
 esac

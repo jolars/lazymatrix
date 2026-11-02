@@ -21,6 +21,13 @@ correctness suites and solver examples run in the individual-version and core
 jobs rather than repeating for each pair. CI caches this workspace's build
 artifacts separately from the root workspace.
 
+Each ndarray consumer also exposes a `blas` feature that enables its matching
+versioned BLAS adapter. `task test:blas` links LP64 OpenBLAS and tests all
+accelerated releases together, as well as mixed accelerated and unaccelerated
+consumers. It uses `OPENBLAS_LP64_LIB` when set, or system OpenBLAS otherwise.
+The `coexistence` mode uses explicit backend features to test without a BLAS
+provider. Direct `--all-features` runtime checks require a linked provider.
+
 MSRV checks exclude nalgebra 0.35 and zarrs 0.23; the latter has a separate
 Rust 1.91 check. The
 separate lockfile starts from the root lockfile's dependency versions; update both

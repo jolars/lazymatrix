@@ -18,6 +18,7 @@ tasks:
       - task: release:check
       - task: website:check
       - task: test
+      - task: test:blas
 
   fmt:
     desc: Check Rust formatting.
@@ -51,6 +52,11 @@ tasks:
       - cargo build --locked --no-default-features --target wasm32-unknown-unknown
       - cmd: wasm-pack test --node -- --locked
         dir: tests/core_consumer
+
+  test:blas:
+    desc: Test every ndarray BLAS feature with system LP64 OpenBLAS.
+    cmds:
+      - bash scripts/test-backends.sh blas
 
   python:install:
     desc: Install the locked Python build and test dependencies.

@@ -10,6 +10,7 @@ path = "../../src/ndarray.rs"
 
 [features]
 parallel = ["lazymatrix/parallel"]
+blas = ["lazymatrix/ndarray_v0_16-blas"]
 
 [dependencies]
 lazymatrix = { path = "../../../..", default-features = false, features = ["ndarray_v0_16"] }

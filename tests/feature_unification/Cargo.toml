@@ -34,12 +34,16 @@ nalgebra_v0_35 = ["dep:consumer_nalgebra_v0_35"]
 ndarray_v0_15 = ["dep:consumer_ndarray_v0_15"]
 ndarray_v0_16 = ["dep:consumer_ndarray_v0_16"]
 ndarray_v0_17 = ["dep:consumer_ndarray_v0_17"]
+ndarray_v0_15-blas = ["ndarray_v0_15", "consumer_ndarray_v0_15/blas"]
+ndarray_v0_16-blas = ["ndarray_v0_16", "consumer_ndarray_v0_16/blas"]
+ndarray_v0_17-blas = ["ndarray_v0_17", "consumer_ndarray_v0_17/blas"]
 zarrs_v0_22 = ["dep:consumer_zarrs_v0_22"]
 zarrs_v0_23 = ["dep:consumer_zarrs_v0_23"]
 zarrs = ["zarrs_v0_23"]
 faer = ["faer_v0_24"]
 nalgebra = ["nalgebra_v0_35"]
 ndarray = ["ndarray_v0_17"]
+ndarray-blas = ["ndarray_v0_17-blas"]
 parallel = [
     "consumer_zarrs_v0_22?/parallel",
     "consumer_zarrs_v0_23?/parallel",
