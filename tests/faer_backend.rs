@@ -50,11 +50,14 @@ macro_rules! backend_suite {
                     + lazymatrix::WeightedGramKernel<f64>
                     + lazymatrix::WeightedColumnSumsKernel<f64>
                     + lazymatrix::MaterializeDense<f64>
+                    + lazymatrix::RowStats<f64>
+                    + lazymatrix::RowNormalizationKernel<f64>
                     + lazymatrix::SubmatrixKernel<f64>,
             {
                 use lazymatrix::{RawColumn, WeightedColumnSumsInto, WeightedGramInto};
                 let reference = Mat::from_fn(matrix.nrows(), matrix.ncols(), |i, j| dense[i][j]);
                 common::check_column_stats_against(matrix, &reference);
+                common::check_row_normalization(matrix, dense, to_col);
                 common::check_transpose_products(matrix, dense, &to_col, &from_col);
                 common::check_fused_operator(matrix, dense, matrix.ncols(), &to_col);
                 common::batched::check_batched(matrix, dense);
@@ -402,6 +405,10 @@ macro_rules! backend_suite {
                 );
                 let mut matrix =
                     SparseRowMat::new(symbolic, vec![2.0, 0.0, -3.0, 99.0, 99.0, 4.0, 99.0]);
+                let raw = [vec![0., -1.], vec![0., 0.], vec![4., 0.]];
+                common::check_row_normalization(&matrix, &raw, to_col);
+                common::check_row_normalization(&matrix.as_ref(), &raw, to_col);
+                common::check_row_normalization(&matrix.rb_mut(), &raw, to_col);
                 let recipe = lazymatrix::ColumnNormalization::robust()
                     .then(lazymatrix::ColumnNormalization::standardize());
                 let pipeline = lazymatrix::LazyMatrix::new(&matrix, recipe).unwrap();
@@ -620,7 +627,29 @@ macro_rules! backend_suite {
             fn row_normalization() {
                 common::run_dense_pipeline_suite(build_dense, to_col);
                 use lazymatrix::{MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto};
+                common::run_row_normalization_suite(build, to_col);
+                common::run_row_normalization_suite(build_csr, to_col);
                 common::run_row_normalization_suite(build_dense, to_col);
+                let sparse = |raw: &[Vec<f32>]| {
+                    let triplets: Vec<_> = raw
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(i, row)| {
+                            row.iter()
+                                .enumerate()
+                                .filter(|&(_, &v)| v != 0.0)
+                                .map(move |(j, &v)| Triplet::new(i, j, v))
+                        })
+                        .collect();
+                    SparseColMat::try_new_from_triplets(raw.len(), raw[0].len(), &triplets).unwrap()
+                };
+                common::run_row_normalization_f32_suite(sparse, |v| {
+                    Col::from_fn(v.len(), |i| v[i])
+                });
+                common::run_row_normalization_f32_suite(
+                    |raw| sparse(raw).to_row_major().unwrap(),
+                    |v| Col::from_fn(v.len(), |i| v[i]),
+                );
                 common::run_row_normalization_f32_suite(
                     |dense| Mat::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
                     |values| Col::from_fn(values.len(), |i| values[i]),

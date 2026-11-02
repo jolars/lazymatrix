@@ -24,6 +24,8 @@ use nalgebra_sparse::ops::{Op, serial::spmm_csr_dense};
 
 use nalgebra_sparse::CsrMatrix;
 
+crate::row_normalization::sparse!(CsrMatrix<F>);
+
 use crate::{MatrixShape, Scalar, SparseRows};
 
 impl<F> MatrixShape for CsrMatrix<F> {

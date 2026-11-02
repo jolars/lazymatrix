@@ -15,6 +15,15 @@ mod products;
 pub(crate) mod source;
 mod stats;
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+pub(crate) fn raw_stats<M: Source<F>, F: Scalar>(
+    data: &M,
+    spec: ColumnNormalization,
+) -> Result<super::ColumnNormalizationStats<F>, M::Error> {
+    use crate::ColumnStats;
+    stats::Logical::new(data, &Identity(PhantomData)).normalization_stats(spec)
+}
+
 pub(crate) use source::Source;
 #[cfg(feature = "faer_all")]
 pub(crate) use source::dense_source;
@@ -646,7 +655,10 @@ where
 }
 
 pub trait Execute<M: MatrixErrorType, P: Stage> {
-    fn product<X: crate::VectorView<P::Scalar>, Y: crate::VectorViewMut<P::Scalar>>(
+    fn product<
+        X: crate::VectorView<P::Scalar> + ?Sized,
+        Y: crate::VectorViewMut<P::Scalar> + ?Sized,
+    >(
         data: &M,
         params: &P,
         transpose: bool,

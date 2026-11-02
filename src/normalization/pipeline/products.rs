@@ -9,7 +9,7 @@ where
     P: Stage<Kind = Columns>,
     M: Source<P::Scalar>,
 {
-    fn product<X: VectorView<P::Scalar>, Y: VectorViewMut<P::Scalar>>(
+    fn product<X: VectorView<P::Scalar> + ?Sized, Y: VectorViewMut<P::Scalar> + ?Sized>(
         data: &M,
         params: &P,
         transpose: bool,
@@ -51,8 +51,8 @@ fn sparse_product<M, P, X, Y>(
 where
     P: Stage<Kind = Columns>,
     M: Source<P::Scalar>,
-    X: VectorView<P::Scalar>,
-    Y: VectorViewMut<P::Scalar>,
+    X: VectorView<P::Scalar> + ?Sized,
+    Y: VectorViewMut<P::Scalar> + ?Sized,
 {
     use num_traits::One;
     let background: Vec<_> = (0..data.ncols())

@@ -2,6 +2,11 @@
 
 use std::{cell::Cell, convert::Infallible};
 
+mod dense_rows {
+    include!("common/dense_rows.rs");
+}
+dense_rows::implement!(Dense<F>);
+
 use lazymatrix::{
     ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
     ColumnNormalizationStats, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto,
@@ -64,6 +69,37 @@ impl<F: Scalar> ColumnStats<F> for Statistics<F> {
     );
 }
 
+impl<F: Scalar> lazymatrix::RowStats<F> for Statistics<F> {
+    fn row_normalization_stats(
+        &self,
+        spec: RowNormalization,
+    ) -> Result<lazymatrix::RowNormalizationStats<F>, Self::Error> {
+        assert_eq!(spec, RowNormalization::standardize());
+        self.calls.set(self.calls.get() + 1);
+        Ok((Some(self.centers.clone()), Some(self.scales.clone())))
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn row_fitting_forwards_shared_hooks_and_replaces_only_zero_scales() {
+    let mut source = Statistics {
+        centers: vec![1.0, 2.0],
+        scales: vec![-0.0, f64::INFINITY],
+        calls: Cell::new(0),
+    };
+    let spec = RowNormalization::standardize();
+    let params = spec.fit(&&source).unwrap();
+    assert_eq!(params.centers().unwrap(), &[1.0, 2.0]);
+    assert_eq!(params.scales().unwrap(), &[1.0, f64::INFINITY]);
+    assert_eq!(source.calls.get(), 1);
+    assert_eq!(spec.fit(&&mut source).unwrap(), params);
+    assert_eq!(source.calls.get(), 2);
+    let erased: &dyn lazymatrix::RowStats<f64, Error = Infallible> = &source;
+    assert_eq!(spec.fit(erased).unwrap(), params);
+    assert_eq!(source.calls.get(), 3);
+}
+
 struct Dense<F> {
     values: [[F; 2]; 2],
     reads: Cell<usize>,
@@ -102,7 +138,7 @@ where
 trait StatisticsSource<F: Scalar>: ColumnStats<F> + MatrixShape {}
 impl<F: Scalar> StatisticsSource<F> for Statistics<F> {}
 
-trait DenseSource<F: Scalar>: MatrixRead<F> + MatrixErrorType {}
+trait DenseSource<F: Scalar>: lazymatrix::RowStats<F> {}
 impl<F: Scalar> DenseSource<F> for Dense<F> {}
 
 fn check_fitting<F: Scalar>() {
@@ -189,7 +225,7 @@ fn owned_columns<M: MatrixShape + ColumnStats<F>, F: Scalar>(
     recipe.fit_apply(data)
 }
 
-fn owned_rows<M: MatrixRead<F> + MatrixErrorType, F: Scalar>(
+fn owned_rows<M: lazymatrix::RowStats<F>, F: Scalar>(
     recipe: RowNormalization,
     data: M,
 ) -> Result<LazyMatrix<M, RowNormalizationParams<F>>, M::Error> {
@@ -379,6 +415,45 @@ impl MatVecInto<Vec<f64>> for Failing {
         Err(ReadError)
     }
 }
+impl<F: Scalar> lazymatrix::RowStats<F> for Failing {
+    fn row_normalization_stats(
+        &self,
+        _: RowNormalization,
+    ) -> Result<lazymatrix::RowNormalizationStats<F>, ReadError> {
+        Err(ReadError)
+    }
+}
+
+macro_rules! failing_row_product {
+    ($method:ident) => {
+        fn $method<
+            X: lazymatrix::VectorView<F> + ?Sized,
+            Y: lazymatrix::VectorViewMut<F> + ?Sized,
+        >(
+            &self,
+            x: &X,
+            centers: Option<&[F]>,
+            scales: Option<&[F]>,
+            out: &mut Y,
+        ) -> Result<(), ReadError> {
+            assert_eq!(x.len(), 2);
+            assert_eq!(out.len(), 2);
+            if let Some(c) = centers {
+                assert_eq!(c.len(), 2);
+            }
+            if let Some(s) = scales {
+                assert_eq!(s.len(), 2);
+                assert!(s.iter().all(|&v| v != F::zero()));
+            }
+            out.set(0, F::from_u32(42).unwrap());
+            Err(ReadError)
+        }
+    };
+}
+impl<F: Scalar> lazymatrix::RowNormalizationKernel<F> for Failing {
+    failing_row_product!(row_normalized_matvec_into);
+    failing_row_product!(row_normalized_transpose_into);
+}
 impl MatTransposeVecInto<Vec<f64>> for Failing {
     fn mat_transpose_vec_into(&self, _: &Vec<f64>, out: &mut Vec<f64>) -> Result<(), ReadError> {
         out[0] = 42.0;
@@ -402,6 +477,22 @@ fn fitting_and_borrowed_products_preserve_backend_errors() {
     out.fill(99.0);
     assert_eq!(
         lazy.mat_transpose_vec_into(&vec![1.0; 2], &mut out),
+        Err(ReadError)
+    );
+    assert_eq!(out, vec![42.0, 99.0]);
+    let recipe = RowNormalization::standardize();
+    let fitted: Result<RowNormalizationParams<f32>, _> = recipe.fit(&Failing);
+    assert_eq!(fitted.unwrap_err(), ReadError);
+    let fitted: Result<LazyMatrix<_, RowNormalizationParams<f64>>, _> = recipe.fit_apply(Failing);
+    assert_eq!(fitted.unwrap_err(), ReadError);
+    let params = RowNormalizationParams::from_parts(2, Some(vec![3.0; 2]), Some(vec![2.0; 2]));
+    let rows = params.view().apply_frozen(Failing);
+    out.fill(99.0);
+    assert_eq!(rows.matvec_into(&vec![1.0; 2], &mut out), Err(ReadError));
+    assert_eq!(out, vec![42.0, 99.0]);
+    out.fill(99.0);
+    assert_eq!(
+        rows.mat_transpose_vec_into(&vec![1.0; 2], &mut out),
         Err(ReadError)
     );
     assert_eq!(out, vec![42.0, 99.0]);

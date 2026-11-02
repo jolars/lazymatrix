@@ -2,10 +2,15 @@
 
 use std::{cell::Cell, convert::Infallible};
 
+mod dense_rows {
+    include!("common/dense_rows.rs");
+}
+dense_rows::implement!(Dense<F>);
+
 use lazymatrix::{
     Centering, LazyMatrix, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto,
     MatrixErrorType, MatrixRead, MatrixShape, NormalizationParams, NormalizationRecipe,
-    RowNormalization, RowNormalizationParams, Scalar, Scaling,
+    RowNormalization, RowNormalizationParams, RowStats, Scalar, Scaling,
 };
 
 struct Dense<F> {
@@ -74,6 +79,14 @@ fn generic_recipe_selects_row_parameters_without_column_statistics() {
 #[test]
 fn computed_rows_are_independent_and_keep_zero_rows() {
     let source = Dense::new(3, 2, vec![1.0, 3.0, 10.0, 14.0, 0.0, 0.0]);
+    assert_eq!(
+        source
+            .row_normalization_stats(RowNormalization::standardize())
+            .unwrap()
+            .1
+            .unwrap(),
+        [1.0, 2.0, 0.0],
+    );
     let normalized = LazyMatrix::new(&source, RowNormalization::standardize()).unwrap();
     assert_eq!(
         normalized.normalization().centers().unwrap(),

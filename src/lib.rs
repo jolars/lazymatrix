@@ -26,18 +26,21 @@
 //! Sparse and chunked storage use the algebraic identities above to preserve
 //! their storage and access patterns.
 //!
-//! # Dense row normalization
+//! # Row normalization
 //!
 //! [`RowNormalization`] offers the same independent centering and scaling
 //! choices as [`ColumnNormalization`]. [`LazyMatrix::new`] accepts either
 //! recipe, and row normalization presents
 //! `D⁻¹(X − r1ᵀ)` with one center and scale per row. It supports allocating and
-//! reusable forward and transpose vector products over all dense backends and
-//! their borrowed, potentially strided views through [`MatrixRead`]. Fitting
-//! uses at most one working row, and products normalize entries before
-//! accumulation without materializing the design. New samples need independently
-//! fitted row parameters. Sparse and Zarr row support and additional operator
-//! capabilities remain future work.
+//! reusable forward and transpose vector products over all dense backends,
+//! strided views, and sparse CSC/CSR storage. [`RowStats`] provides fitted row
+//! statistics, and [`RowNormalizationKernel`] provides the products. Dense
+//! products normalize entries before accumulation. Sparse kernels combine
+//! duplicate cells and include implicit zeros while preserving storage and using
+//! O(nrows + ncols) workspace. CSR fitting buffers one coalesced row, and CSC
+//! fitting streams native column scans. New samples need independently fitted
+//! row parameters. Zarr row support and additional operator capabilities remain
+//! future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -582,6 +585,7 @@ mod matrix;
 mod normalization;
 mod quantiles;
 mod row;
+mod row_normalization;
 mod submatrix;
 #[cfg(any(
     feature = "faer_all",
@@ -617,9 +621,9 @@ pub use traits::{
     IndexedRowSource, L2Norm, LogicalColumn, MatMat, MatMatInto, MatTransposeMat,
     MatTransposeMatInto, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
     MatVecInto, MatVecScaledInto, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixRead,
-    MatrixShape, MatrixWrite, RawColumn, RawColumns, ReadBlock, Scalar, ScaleAssign,
-    ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel,
-    SumEntries, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
-    WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
+    MatrixShape, MatrixWrite, RawColumn, RawColumns, ReadBlock, RowNormalizationKernel, RowStats,
+    Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows,
+    SubScalarAssign, SubmatrixKernel, SumEntries, VectorOwned, VectorView, VectorViewMut,
+    WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
 };
 pub use transpose::Transpose;

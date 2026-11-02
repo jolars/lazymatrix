@@ -13,6 +13,14 @@ use crate::traits::{
     MatVecInto, MatVecScaledInto, MatrixShape, RawColumns, Scalar,
 };
 
+impl<F: Scalar, S: Data<Elem = F>> crate::RowStats<F> for ArrayBase<S, Ix2> {
+    crate::row_normalization::dense_stats!();
+}
+
+impl<F: Scalar, S: Data<Elem = F>> crate::RowNormalizationKernel<F> for ArrayBase<S, Ix2> {
+    crate::row_normalization::dense_products!();
+}
+
 impl<F, S> crate::normalization::pipeline::Source<F> for ArrayBase<S, Ix2>
 where
     F: Scalar,

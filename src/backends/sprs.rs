@@ -17,6 +17,75 @@ use crate::traits::{
     MatVecScaledInto, MatrixShape, Scalar, VectorView, VectorViewMut,
 };
 
+impl<F, I, IP, IS, DS, Iptr> crate::RowStats<F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+{
+    crate::row_normalization::sparse_stats!();
+}
+
+impl<F, I, IP, IS, DS, Iptr> crate::RowNormalizationKernel<F> for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+{
+    crate::row_normalization::sparse_products!();
+}
+
+macro_rules! row_normalization {
+    ($wrapper:ident) => {
+        impl<M: crate::RowStats<F>, F: Scalar> crate::RowStats<F> for $wrapper<M> {
+            fn row_normalization_stats(
+                &self,
+                spec: crate::RowNormalization,
+            ) -> Result<crate::RowNormalizationStats<F>, Self::Error> {
+                self.as_inner().row_normalization_stats(spec)
+            }
+        }
+        impl<M: crate::RowNormalizationKernel<F>, F: Scalar> crate::RowNormalizationKernel<F>
+            for $wrapper<M>
+        {
+            fn row_normalized_matvec_into<
+                X: VectorView<F> + ?Sized,
+                Y: VectorViewMut<F> + ?Sized,
+            >(
+                &self,
+                x: &X,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut Y,
+            ) -> Result<(), Self::Error> {
+                self.as_inner()
+                    .row_normalized_matvec_into(x, centers, scales, out)
+            }
+            fn row_normalized_transpose_into<
+                X: VectorView<F> + ?Sized,
+                Y: VectorViewMut<F> + ?Sized,
+            >(
+                &self,
+                x: &X,
+                centers: Option<&[F]>,
+                scales: Option<&[F]>,
+                out: &mut Y,
+            ) -> Result<(), Self::Error> {
+                self.as_inner()
+                    .row_normalized_transpose_into(x, centers, scales, out)
+            }
+        }
+    };
+}
+row_normalization!(SprsCsc);
+row_normalization!(SprsCsr);
+
 impl<F, I, IP, IS, DS, Iptr> crate::normalization::pipeline::Source<F>
     for CsMatBase<F, I, IP, IS, DS, Iptr>
 where
@@ -26,7 +95,6 @@ where
     IP: Deref<Target = [Iptr]>,
     IS: Deref<Target = [I]>,
     DS: Deref<Target = [F]>,
-    Self: crate::ColumnStats<F>,
 {
     fn layout(&self) -> crate::normalization::pipeline::source::Layout {
         if self.is_csc() {

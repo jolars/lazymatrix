@@ -33,6 +33,47 @@ pub(crate) fn row_quantiles<M: crate::MatrixRead<F> + ?Sized, F: Scalar>(
     )
 }
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+pub(crate) fn sparse_row_quantiles<F: Scalar>(
+    values: &mut [F],
+    ncols: usize,
+    spec: crate::RowNormalization,
+) -> (Option<F>, Option<F>) {
+    let request = Request::from_spec(ColumnNormalization::new(spec.center, spec.scale));
+    if !request.median && request.range.is_none() {
+        return (None, None);
+    }
+    if ncols == 0 || values.iter().any(|v| v.is_nan()) {
+        return (request.median.then(F::nan), request.range.map(|_| F::nan()));
+    }
+    values.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+    let missing = ncols - values.len();
+    let negative = values.partition_point(|&value| value < F::zero());
+    let at = |rank: usize| {
+        if rank < negative {
+            values[rank]
+        } else if rank < negative + missing {
+            F::zero()
+        } else {
+            values[rank - missing]
+        }
+    };
+    let median = request.median.then(|| {
+        let p = Position::new(ncols, 0.5);
+        interpolate(at(p.lower), at(p.upper), p.fraction)
+    });
+    let range = request.range.map(|range| {
+        let lo = Position::new(ncols, range.lower());
+        let hi = Position::new(ncols, range.upper());
+        quantile_range(
+            lo,
+            hi,
+            [at(lo.lower), at(lo.upper), at(hi.lower), at(hi.upper)],
+        )
+    });
+    (median, range)
+}
+
 mod streaming;
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) use streaming::sparse_rows;

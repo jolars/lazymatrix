@@ -125,7 +125,7 @@ cargo run --locked --example coordinate_descent --features faer
 
 ## Row normalization
 
-Fit dense rows independently with `RowNormalization` and `LazyMatrix`:
+Fit dense or sparse rows independently with `RowNormalization` and `LazyMatrix`:
 
 ```rust
 use lazymatrix::{Centering, LazyMatrix, MatVec, RowNormalization, Scaling};
@@ -166,10 +166,16 @@ Their `.view()` methods return `ColumnNormalizationParamsView<'a, F>` or
 `RowNormalizationParamsView<'a, F>`, using borrowed slices. Owned parameters and
 views share each axis's operator capabilities.
 
-The initial row operator supports allocating and reusable forward and transpose
-vector products across every dense backend release, including strided views.
-Sparse and Zarr row support, additional operator capabilities, and Python
-bindings remain in [the roadmap](TODO.md#row-normalization).
+The row operator supports allocating and reusable forward and transpose vector
+products across every dense and sparse backend release, including strided dense
+views and borrowed CSC/CSR storage. Sparse fitting combines duplicate cells and
+includes implicit zeros without converting storage or materializing the design.
+CSR fitting buffers one row; CSC fitting streams column scans, repeating scans
+for exact quantiles. Sparse fitting and products use O(nrows + ncols) workspace.
+`RowStats` supplies the fitting hook, and `RowNormalizationKernel` supplies the
+products. Dense adapters can delegate to their provided dense helper methods.
+Zarr row support, additional operator capabilities, and Python bindings remain
+in [the roadmap](TODO.md#row-normalization).
 
 ## Ordered normalization
 

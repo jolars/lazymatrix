@@ -256,7 +256,7 @@ pub trait FitColumns<M: MatrixErrorType, F: Scalar>: RecipeType<F> {
         prefix: &P,
     ) -> Result<Self::Params, M::Error>;
 }
-impl<M: Source<F>, F: Scalar> FitColumns<M, F> for ColumnNormalization {
+impl<M: Source<F> + ColumnStats<F>, F: Scalar> FitColumns<M, F> for ColumnNormalization {
     fn fit_columns<P: Stage<Scalar = F>>(
         self,
         data: &M,

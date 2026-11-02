@@ -36,9 +36,12 @@ X_tilde v = X(S^-1 v) - 1(c^T S^-1 v)
 X_tilde^T u = S^-1(X^T u - c sum(u))
 ```
 
-Row normalization uses `D^-1(X - r1^T)` and currently supports dense fitting
-and vector products only. Ordered recipes compose with `.then()`. Fitted
-`NormalizationChainParams` preserve stage order and retain row recipes for
+Row normalization uses `D^-1(X - r1^T)` and supports fitting and vector products
+on dense and sparse CSC/CSR storage. `RowStats` shares row fitting hooks, and
+`RowNormalizationKernel` supplies products. CSR fitting buffers one coalesced
+row; CSC fitting streams columns, using repeated scans for exact quantiles.
+Ordered recipes compose with `.then()`. Fitted `NormalizationChainParams`
+preserve stage order and retain row recipes for
 `.for_new_samples()`, which refits row stages while reusing training column
 parameters. `.apply_frozen()` reuses every stage unchanged. Mixed chains require
 dense storage; column-only chains also support sparse and chunked storage.

@@ -201,8 +201,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     empty, and nonfinite cases across supported backends. Preserve the existing
     numerical invariants.
 
-- [ ] Extend row normalization (`Normalizer` and `normalize(axis=1)`) to sparse
-  storage.
+- [x] Extend row normalization (`RowNormalization`) to sparse storage.
   - Combine duplicate cells before nonlinear statistics, include implicit zeros,
     and preserve CSC and CSR storage with bounded workspace.
 
@@ -210,8 +209,10 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   array. Preserve fill values, exclude padding, and account for outer
   shards.
 
-- [ ] Add a public row-statistics capability when sparse or storage-backed
+- [x] Add a public row-statistics capability when sparse or storage-backed
   fitting needs it, keeping shared fitting hooks and reference forwarding.
+  - `RowStats::row_normalization_stats` returns raw row centers and scales.
+    References and checked sparse wrappers forward the hook without refitting.
 
 - [ ] Extend `LazyMatrix` capabilities to row and composed normalization: fused
   and workspace products, batched products, borrowed logical rows and

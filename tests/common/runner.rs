@@ -444,12 +444,12 @@ pub fn assert_close(a: &[f64], b: &[f64], eps: f64) {
 
 const EPS: f64 = 1e-10;
 
-/// Check dense row fitting independently of storage layout and vector backend.
+/// Check row fitting independently of storage layout and vector backend.
 pub fn run_row_normalization_suite<M, V>(
     build: impl Fn(&TestMatrix) -> M,
     to_v: impl Fn(&[f64]) -> V,
 ) where
-    M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
+    M: lazymatrix::RowStats<f64> + lazymatrix::RowNormalizationKernel<f64>,
     V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
 {
     use lazymatrix::RowNormalization;
@@ -477,73 +477,7 @@ pub fn run_row_normalization_suite<M, V>(
         vec![f64::INFINITY; 3],
     ]));
     for tm in cases {
-        let matrix = build(&tm);
-        for center in [
-            Centering::None,
-            Centering::Mean,
-            Centering::Min,
-            Centering::Median,
-        ] {
-            for scale in [
-                Scaling::None,
-                Scaling::Sd { df: 0 },
-                Scaling::Sd { df: 1 },
-                Scaling::Sd { df: tm.ncols },
-                Scaling::L1,
-                Scaling::L2,
-                Scaling::MaxAbs,
-                Scaling::Range,
-                Scaling::QuantileRange(QuantileRange::default()),
-                Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
-                Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
-            ] {
-                let spec = RowNormalization::new(center, scale);
-                let params = spec.fit(&matrix).unwrap();
-                assert_eq!(params.nrows(), tm.nrows);
-                let lazy = LazyMatrix::from_parts(&matrix, params);
-                let (centers, scales) = row_normalization_oracle(&tm.dense, spec);
-                assert_eq!(lazy.normalization().centers().is_some(), centers.is_some());
-                assert_eq!(lazy.normalization().scales().is_some(), scales.is_some());
-                if let Some(expected) = &centers {
-                    assert_quantile_values(lazy.normalization().centers().unwrap(), expected, EPS);
-                }
-                if let Some(expected) = &scales {
-                    assert_quantile_values(lazy.normalization().scales().unwrap(), expected, EPS);
-                }
-                check_row_normalized_products(
-                    &lazy,
-                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
-                    &to_v,
-                );
-                let shared = lazy.normalization().view().apply_frozen(&matrix);
-                check_row_normalized_products(
-                    &shared,
-                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
-                    &to_v,
-                );
-            }
-        }
-        for centers in [None, Some(vec![0.75; tm.nrows])] {
-            for scales in [
-                None,
-                Some(vec![-2.0; tm.nrows]),
-                Some(vec![f64::INFINITY; tm.nrows]),
-                Some(vec![f64::NAN; tm.nrows]),
-            ] {
-                let lazy = LazyMatrix::from_row_parts(&matrix, centers.clone(), scales.clone());
-                check_row_normalized_products(
-                    &lazy,
-                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
-                    &to_v,
-                );
-                let shared = lazy.normalization().view().apply_frozen(&matrix);
-                check_row_normalized_products(
-                    &shared,
-                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
-                    &to_v,
-                );
-            }
-        }
+        check_row_normalization(&build(&tm), &tm.dense, &to_v);
     }
     let tm = matrix_from_dense(vec![vec![1e16, 1e16 + 2.0, 1e16 + 4.0, 1e16 + 6.0]]);
     let robust = LazyMatrix::new(build(&tm), RowNormalization::robust()).unwrap();
@@ -561,10 +495,87 @@ pub fn run_row_normalization_suite<M, V>(
     check_row_normalized_products(&robust, &[vec![-1.0, 1.0]], &to_v);
 }
 
+/// Compare row statistics and products with a dense oracle, including borrowed storage.
+pub fn check_row_normalization<M, V>(matrix: &M, raw: &[Vec<f64>], to_v: impl Fn(&[f64]) -> V)
+where
+    M: lazymatrix::RowStats<f64> + lazymatrix::RowNormalizationKernel<f64>,
+    V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
+{
+    use lazymatrix::RowNormalization;
+    for center in [
+        Centering::None,
+        Centering::Mean,
+        Centering::Min,
+        Centering::Median,
+    ] {
+        for scale in [
+            Scaling::None,
+            Scaling::Sd { df: 0 },
+            Scaling::Sd { df: 1 },
+            Scaling::Sd { df: matrix.ncols() },
+            Scaling::L1,
+            Scaling::L2,
+            Scaling::MaxAbs,
+            Scaling::Range,
+            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+            Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
+        ] {
+            let spec = RowNormalization::new(center, scale);
+            let params = spec.fit(&matrix).unwrap();
+            assert_eq!(params.nrows(), matrix.nrows());
+            let lazy = LazyMatrix::from_parts(&matrix, params);
+            let (centers, scales) = row_normalization_oracle(raw, spec);
+            assert_eq!(lazy.normalization().centers().is_some(), centers.is_some());
+            assert_eq!(lazy.normalization().scales().is_some(), scales.is_some());
+            if let Some(expected) = &centers {
+                assert_quantile_values(lazy.normalization().centers().unwrap(), expected, EPS);
+            }
+            if let Some(expected) = &scales {
+                assert_quantile_values(lazy.normalization().scales().unwrap(), expected, EPS);
+            }
+            check_row_normalized_products(
+                &lazy,
+                &materialize_rows(raw, centers.as_deref(), scales.as_deref()),
+                &to_v,
+            );
+            let shared = lazy.normalization().view().apply_frozen(&matrix);
+            check_row_normalized_products(
+                &shared,
+                &materialize_rows(raw, centers.as_deref(), scales.as_deref()),
+                &to_v,
+            );
+        }
+    }
+    for centers in [None, Some(vec![0.75; matrix.nrows()])] {
+        for scales in [
+            None,
+            Some(vec![-2.0; matrix.nrows()]),
+            Some(vec![f64::INFINITY; matrix.nrows()]),
+            Some(vec![f64::NAN; matrix.nrows()]),
+        ] {
+            let lazy = LazyMatrix::from_row_parts(&matrix, centers.clone(), scales.clone());
+            check_row_normalized_products(
+                &lazy,
+                &materialize_rows(raw, centers.as_deref(), scales.as_deref()),
+                &to_v,
+            );
+            let shared = lazy.normalization().view().apply_frozen(&matrix);
+            check_row_normalized_products(
+                &shared,
+                &materialize_rows(raw, centers.as_deref(), scales.as_deref()),
+                &to_v,
+            );
+        }
+    }
+}
+
 /// Fit dense views and preserve variation around large row offsets.
 pub fn check_row_normalization_view<M, V>(matrix: &M, to_v: impl Fn(&[f64]) -> V)
 where
-    M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
+    M: lazymatrix::MatrixRead<f64>
+        + lazymatrix::RowStats<f64>
+        + lazymatrix::RowNormalizationKernel<f64>,
     V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
 {
     pipeline::check_dense_pipeline_view(matrix, &to_v);
@@ -697,7 +708,7 @@ pub fn check_row_normalized_products<M, V, F, S: AsRef<[F]>>(
     normalized: &[Vec<F>],
     to_v: impl Fn(&[F]) -> V,
 ) where
-    M: lazymatrix::MatrixRead<F> + lazymatrix::MatrixErrorType,
+    M: lazymatrix::RowNormalizationKernel<F>,
     F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
     V: lazymatrix::VectorOwned<F, Owned = V> + lazymatrix::VectorViewMut<F>,
 {
@@ -780,7 +791,7 @@ pub fn run_row_normalization_f32_suite<M, V>(
     build: impl Fn(&[Vec<f32>]) -> M,
     to_v: impl Fn(&[f32]) -> V,
 ) where
-    M: lazymatrix::MatrixRead<f32> + lazymatrix::MatrixErrorType,
+    M: lazymatrix::RowStats<f32> + lazymatrix::RowNormalizationKernel<f32>,
     V: lazymatrix::VectorOwned<f32, Owned = V> + lazymatrix::VectorViewMut<f32>,
 {
     use lazymatrix::RowNormalization;

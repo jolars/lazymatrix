@@ -113,7 +113,7 @@ O(ncols) selection state and repeated scans whose count depends on the values.
 They preserve implicit zeros and sparse storage. See [how it works](/guide/how-it-works#quantile-fitting)
 for memory, numerical behavior, and fitting costs.
 
-## Normalize dense rows
+## Normalize rows
 
 Use the same constructor with a row recipe:
 
@@ -125,9 +125,13 @@ let row_scales = rows.normalization().scales().unwrap();
 ```
 
 The fitted type is `RowNormalizationParams<f64>`, with one center and scale per
-row. Row normalization supports dense fitting and forward and transpose vector
-products, including strided views. Fit new samples' row parameters independently.
-Compose row and column recipes as described below.
+row. Row normalization supports fitting and forward and transpose vector products
+on dense matrices, strided views, and sparse CSC/CSR storage. Sparse fitting sums
+duplicate cells and includes implicit zeros. It buffers one row for CSR or
+streams columns for CSC, with repeated scans for exact CSC quantiles. Fitting
+and products retain sparse storage and use O(nrows + ncols) workspace.
+Fit new samples' row parameters independently. Compose row and column recipes
+as described below.
 
 `LazyMatrix<M, P>` stores its fitted parameter object as `P`. The default is
 `ColumnNormalizationParams<f64>`, so ordinary column-only type annotations can

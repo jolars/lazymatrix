@@ -1,28 +1,13 @@
-//! Dense row-normalized vector products.
+//! Row-normalized vector products over capable storage.
 
 use crate::{
-    LazyMatrix, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType,
-    MatrixRead, RowNormalizationParams, Scalar, VectorOwned, VectorView, VectorViewMut,
+    LazyMatrix, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, RowNormalizationKernel,
+    RowNormalizationParams, Scalar, VectorOwned, VectorView, VectorViewMut,
 };
-
-impl<M: MatrixRead<F> + MatrixErrorType, F: Scalar, S: AsRef<[F]>>
-    LazyMatrix<M, RowNormalizationParams<F, S>>
-{
-    fn entry(&self, row: usize, column: usize) -> F {
-        let mut value = self.data.get(row, column);
-        if let Some(centers) = self.normalization().centers() {
-            value = value - centers[row];
-        }
-        if let Some(scales) = self.normalization().scales() {
-            value = value / scales[row];
-        }
-        value
-    }
-}
 
 impl<M, V, F, S: AsRef<[F]>> MatVec<V> for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
-    M: MatrixRead<F> + MatrixErrorType,
+    M: RowNormalizationKernel<F>,
     F: Scalar,
     V: VectorOwned<F, Owned = V> + VectorViewMut<F>,
 {
@@ -36,7 +21,7 @@ where
 
 impl<M, X, Y, F, S: AsRef<[F]>> MatVecInto<X, Y> for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
-    M: MatrixRead<F> + MatrixErrorType,
+    M: RowNormalizationKernel<F>,
     F: Scalar,
     X: VectorView<F>,
     Y: VectorViewMut<F>,
@@ -48,17 +33,18 @@ where
             self.nrows(),
             "matvec_into: output dimension mismatch"
         );
-        for i in 0..self.nrows() {
-            let value = (0..self.ncols()).map(|j| self.entry(i, j) * x.get(j)).sum();
-            out.set(i, value);
-        }
-        Ok(())
+        self.data.row_normalized_matvec_into(
+            x,
+            self.normalization().centers(),
+            self.normalization().scales(),
+            out,
+        )
     }
 }
 
 impl<M, V, F, S: AsRef<[F]>> MatTransposeVec<V> for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
-    M: MatrixRead<F> + MatrixErrorType,
+    M: RowNormalizationKernel<F>,
     F: Scalar,
     V: VectorOwned<F, Owned = V> + VectorViewMut<F>,
 {
@@ -77,7 +63,7 @@ where
 impl<M, X, Y, F, S: AsRef<[F]>> MatTransposeVecInto<X, Y>
     for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
-    M: MatrixRead<F> + MatrixErrorType,
+    M: RowNormalizationKernel<F>,
     F: Scalar,
     X: VectorView<F>,
     Y: VectorViewMut<F>,
@@ -93,10 +79,11 @@ where
             self.ncols(),
             "mat_transpose_vec_into: output dimension mismatch"
         );
-        for j in 0..self.ncols() {
-            let value = (0..self.nrows()).map(|i| self.entry(i, j) * x.get(i)).sum();
-            out.set(j, value);
-        }
-        Ok(())
+        self.data.row_normalized_transpose_into(
+            x,
+            self.normalization().centers(),
+            self.normalization().scales(),
+            out,
+        )
     }
 }

@@ -14,6 +14,26 @@ use crate::traits::{
     VectorViewMut,
 };
 
+impl<F, R, C, S> crate::RowStats<F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorage<F, R, C>,
+{
+    crate::row_normalization::dense_stats!();
+}
+
+impl<F, R, C, S> crate::RowNormalizationKernel<F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorage<F, R, C>,
+{
+    crate::row_normalization::dense_products!();
+}
+
 impl<F, R, C, S> crate::normalization::pipeline::Source<F> for Matrix<F, R, C, S>
 where
     F: Scalar + nalgebra::Scalar,

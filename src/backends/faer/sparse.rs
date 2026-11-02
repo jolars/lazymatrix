@@ -504,6 +504,10 @@ impl_csc!(SparseColMat<usize, F>);
 impl_csc!(SparseColMatRef<'_, usize, F>);
 impl_csc!(SparseColMatMut<'_, usize, F>);
 
+crate::row_normalization::sparse!(SparseColMat<usize, F>);
+crate::row_normalization::sparse!(SparseColMatRef<'_, usize, F>);
+crate::row_normalization::sparse!(SparseColMatMut<'_, usize, F>);
+
 crate::indexed_rows_kernels::sparse_source!(SparseColMat<usize, F>, true, crate::SparseColumns::sparse_column);
 
 crate::indexed_rows_kernels::sparse_source!(

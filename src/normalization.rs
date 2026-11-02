@@ -1,5 +1,5 @@
 pub(crate) mod pipeline;
-mod row;
+pub(crate) mod row;
 
 pub use pipeline::{FittedRowNormalization, NormalizationChain, NormalizationChainParams};
 
@@ -28,9 +28,9 @@ pub trait NormalizationParams: private::Params {
 /// A normalization recipe supported by a backend and fitted parameter type.
 ///
 /// [`crate::LazyMatrix::new`] selects fitting through this sealed trait. Column
-/// recipes require [`crate::ColumnStats`]; row recipes require dense indexed
-/// access through [`crate::MatrixRead`]. Implementing those capabilities enables
-/// fitting for a downstream backend without implementing this trait directly.
+/// recipes require [`crate::ColumnStats`]; row recipes require [`crate::RowStats`].
+/// Implementing those capabilities enables fitting for a downstream backend
+/// without implementing this trait directly.
 /// Mixed and row-only chains require dense indexed access. Column-only chains
 /// use the supported backend adapters' native scans.
 pub trait NormalizationRecipe<M: crate::MatrixErrorType, P: NormalizationParams>:
@@ -281,19 +281,27 @@ impl ColumnNormalization {
 /// `MaxAbs`) are fitted to centered rows when centering is active. Standard
 /// deviations, ranges, and quantile ranges are translation-invariant.
 /// Use [`crate::LazyMatrix::new`] to fit each row independently. Fitting requires
-/// [`crate::MatrixRead`] and takes O(nrows * ncols) time, or
+/// [`crate::RowStats`]. Dense fitting takes O(nrows * ncols) time, or
 /// O(nrows * ncols * log(ncols)) when sorting for exact linear quantiles. It uses
 /// O(nrows + ncols) storage at most, including one working row for quantiles.
 /// Standard deviations use a two-pass calculation with `ncols - df` as divisor.
+/// Sparse fitting combines duplicate cells and includes implicit zeros. CSR
+/// fitting scans storage once and buffers one coalesced row, sorting it for
+/// exact quantiles. CSC fitting streams column scans with O(nrows) state;
+/// quantiles use repeated scans whose count depends on the values. Both retain
+/// their storage orientation and use O(nrows + ncols) total workspace, including
+/// the fitted vectors and duplicate-coalescing scratch.
 /// Empty rows have undefined means, standard deviations, minima, and ranges
 /// (`NaN`), and zero norms, matching column fitting along the other axis.
 ///
 /// Row-normalized operators support allocating and reusable forward and
-/// transpose vector products on dense matrices and strided views. Products
-/// normalize entries before accumulating and use O(1) additional workspace
-/// beyond their output. Sparse and storage-backed fitting, fused and batched
-/// products, borrowed logical views, weighted operations, and eager conversion
-/// are not yet supported. New samples require independently fitted row
+/// transpose vector products through [`crate::RowNormalizationKernel`] on dense
+/// matrices, strided views, and sparse CSC/CSR storage. Dense products normalize
+/// entries before accumulating and use O(1) additional workspace. Sparse
+/// products combine duplicate cells before normalization and account for
+/// transformed implicit zeros with O(nrows + ncols) workspace. Storage-backed
+/// row fitting, fused and batched products, borrowed logical views, weighted
+/// operations, and eager conversion are not yet supported. New samples require independently fitted row
 /// parameters. [`crate::Transpose`] transposes the fitted operator without
 /// refitting.
 ///
@@ -312,11 +320,11 @@ impl ColumnNormalization {
 /// # }
 /// ```
 ///
-/// Computed row normalization requires dense indexed access:
+/// Computed row normalization requires a row-statistics capability:
 ///
 /// ```compile_fail
 /// use lazymatrix::{LazyMatrix, MatrixErrorType, MatrixShape, RowNormalization};
-/// fn without_dense_access<M: MatrixShape + MatrixErrorType>(matrix: M) {
+/// fn without_row_statistics<M: MatrixShape + MatrixErrorType>(matrix: M) {
 ///     let _ = LazyMatrix::new(matrix, RowNormalization::standardize());
 /// }
 /// ```
@@ -390,9 +398,9 @@ impl RowNormalization {
 
     /// Fit owned row parameters without retaining or modifying the data.
     ///
-    /// Requires dense indexed access through [`crate::MatrixRead`]. Norm scales
-    /// use centered values when centering is active. Exact zero scales become
-    /// one, and nonfinite values are preserved. Fitting uses the bounded
+    /// Requires [`crate::RowStats`]. Norm scales use centered values when
+    /// centering is active. Exact zero scales become one, and nonfinite values
+    /// are preserved. Fitting uses the bounded
     /// workspace described by [`RowNormalization`], without materializing a
     /// normalized design matrix.
     ///
@@ -403,8 +411,7 @@ impl RowNormalization {
     /// count matches the fitting data.
     ///
     /// # Errors
-    /// Returns the backend's `Result` type for consistency with column fitting.
-    /// Dense indexed reads are infallible, so this method always returns `Ok`.
+    /// Returns the backend error if computing row statistics fails.
     ///
     /// ```
     /// # #[cfg(feature = "ndarray_v0_17")]
@@ -422,10 +429,11 @@ impl RowNormalization {
     /// ```
     pub fn fit<M, F>(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error>
     where
-        M: crate::MatrixRead<F> + crate::MatrixErrorType + ?Sized,
+        M: crate::RowStats<F> + ?Sized,
         F: crate::Scalar,
     {
-        let (centers, scales) = row::fit(data, self);
+        let (centers, scales) = data.row_normalization_stats(self)?;
+        let scales = scales.map(replace_zero_scales);
         Ok(RowNormalizationParams::from_parts(
             data.nrows(),
             centers,
@@ -440,14 +448,13 @@ impl RowNormalization {
     /// their own call to this method or [`Self::fit`].
     ///
     /// # Errors
-    /// Returns the backend's `Result` type for consistency with column fitting.
-    /// Dense indexed reads are infallible, so this method always returns `Ok`.
+    /// Returns the backend error if computing row statistics fails.
     pub fn fit_apply<M, F>(
         self,
         data: M,
     ) -> Result<crate::LazyMatrix<M, RowNormalizationParams<F>>, M::Error>
     where
-        M: crate::MatrixRead<F> + crate::MatrixErrorType,
+        M: crate::RowStats<F>,
         F: crate::Scalar,
     {
         Ok(self.fit(&data)?.apply_frozen(data))
@@ -640,15 +647,7 @@ impl<F: crate::Scalar> RowNormalizationParams<F> {
     /// scale is exact positive or negative zero. A zero-scale panic reports
     /// the zero-based row index.
     pub fn from_parts(nrows: usize, centers: Option<Vec<F>>, scales: Option<Vec<F>>) -> Self {
-        if let Some(centers) = &centers {
-            assert_eq!(centers.len(), nrows, "centers length must equal nrows");
-        }
-        if let Some(scales) = &scales {
-            assert_eq!(scales.len(), nrows, "scales length must equal nrows");
-            for (row, &scale) in scales.iter().enumerate() {
-                assert!(scale != F::zero(), "scale at row {row} must be nonzero");
-            }
-        }
+        crate::row_normalization::validate_parameters(nrows, centers.as_deref(), scales.as_deref());
         Self {
             nrows,
             centers,
@@ -759,8 +758,8 @@ impl<M: crate::ColumnStats<F> + crate::MatrixShape, F: crate::Scalar>
     }
 }
 
-impl<M: crate::MatrixRead<F> + crate::MatrixErrorType, F: crate::Scalar>
-    private::Recipe<M, RowNormalizationParams<F>> for RowNormalization
+impl<M: crate::RowStats<F>, F: crate::Scalar> private::Recipe<M, RowNormalizationParams<F>>
+    for RowNormalization
 {
     fn fit(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error> {
         RowNormalization::fit(self, data)

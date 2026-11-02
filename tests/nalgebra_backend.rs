@@ -246,7 +246,25 @@ macro_rules! backend_suite {
             fn row_normalization() {
                 common::run_dense_pipeline_suite(build_dense, to_dvec);
                 use lazymatrix::{MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto};
+                common::run_row_normalization_suite(build, to_dvec);
+                common::run_row_normalization_suite(build_csr, to_dvec);
                 common::run_row_normalization_suite(build_dense, to_dvec);
+                let sparse = |raw: &[Vec<f32>]| {
+                    let mut coo = CooMatrix::new(raw.len(), raw[0].len());
+                    for (i, row) in raw.iter().enumerate() {
+                        for (j, &value) in row.iter().enumerate() {
+                            if value != 0.0 {
+                                coo.push(i, j, value);
+                            }
+                        }
+                    }
+                    CscMatrix::from(&coo)
+                };
+                common::run_row_normalization_f32_suite(sparse, DVector::from_column_slice);
+                common::run_row_normalization_f32_suite(
+                    |raw| CsrMatrix::from(&sparse(raw)),
+                    DVector::from_column_slice,
+                );
                 common::run_row_normalization_f32_suite(
                     |dense| DMatrix::from_fn(dense.len(), dense[0].len(), |i, j| dense[i][j]),
                     DVector::from_column_slice,

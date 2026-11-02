@@ -30,6 +30,8 @@
 //!   exactly the shape the centering/scaling math needs.
 //! * [`ColumnStats`] — column statistics computed directly over a (possibly
 //!   sparse) backend matrix, used by [`LazyMatrix::new`](crate::LazyMatrix::new).
+//! * [`RowStats`] and [`RowNormalizationKernel`] — fitted row statistics and
+//!   row-normalized vector products over dense or sparse raw storage.
 //! * [`IndexedRowSource`] — native raw traversal for [`crate::IndexedRows`],
 //!   which fits normalization on selected rows without copying the design.
 //! * [`VectorView`] / [`VectorViewMut`] — storage-independent borrowed vector
@@ -64,6 +66,7 @@ mod indexed_rows;
 mod materialize;
 mod matmat;
 mod operator;
+mod row_normalization;
 mod rows;
 mod stats;
 mod submatrix;
@@ -91,6 +94,7 @@ pub use operator::{
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
     MatVecScaledInto, MatrixErrorType, MatrixShape,
 };
+pub use row_normalization::{RowNormalizationKernel, RowStats};
 pub use rows::SparseRows;
 pub use stats::ColumnStats;
 pub(crate) use stats::normalization_stats_with_quantiles;

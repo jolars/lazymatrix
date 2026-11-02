@@ -23,6 +23,18 @@ impl<M: MatrixShape, P> MatrixShape for Logical<'_, M, P> {
 impl<M: MatrixErrorType, P> MatrixErrorType for Logical<'_, M, P> {
     type Error = M::Error;
 }
+impl<M, P> crate::RowStats<P::Scalar> for Logical<'_, M, P>
+where
+    P: Stage,
+    M: MatrixRead<P::Scalar> + MatrixErrorType,
+{
+    fn row_normalization_stats(
+        &self,
+        spec: RowNormalization,
+    ) -> Result<crate::RowNormalizationStats<P::Scalar>, Self::Error> {
+        Ok(self.dense_row_normalization_stats(spec))
+    }
+}
 impl<M, P> MatrixRead<P::Scalar> for Logical<'_, M, P>
 where
     P: Stage,
@@ -126,7 +138,7 @@ where
     P: Stage,
     M: MatrixRead<P::Scalar> + MatrixErrorType,
 {
-    fn product<X: VectorView<P::Scalar>, Y: VectorViewMut<P::Scalar>>(
+    fn product<X: VectorView<P::Scalar> + ?Sized, Y: VectorViewMut<P::Scalar> + ?Sized>(
         data: &M,
         params: &P,
         transpose: bool,

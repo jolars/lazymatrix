@@ -135,6 +135,13 @@ fn column_stats_support_f32_storage_orientations_and_index_widths() {
 
 #[test]
 fn sprs_backend_suite() {
+    common::run_row_normalization_suite(build, |v| v.to_vec());
+    common::run_row_normalization_suite(|tm| build(tm).to_csr(), |v| v.to_vec());
+    common::run_row_normalization_suite(|tm| SprsCsc::try_new(build(tm)).unwrap(), |v| v.to_vec());
+    common::run_row_normalization_suite(
+        |tm| SprsCsr::try_new(build(tm).to_csr()).unwrap(),
+        |v| v.to_vec(),
+    );
     common::run_column_pipeline_suite(build, |v| v.to_vec());
     common::run_column_pipeline_suite(|tm| build(tm).to_csr(), |v| v.to_vec());
     common::run_column_pipeline_suite(|tm| SprsCsc::try_new(build(tm)).unwrap(), |v| v.to_vec());
@@ -187,6 +194,82 @@ fn sprs_backend_suite() {
         }
         SprsCsc::try_new(triplets.to_csc::<u64>()).unwrap()
     });
+}
+
+#[test]
+fn row_normalization_accepts_f32_views_and_alternate_indices() {
+    let build = |raw: &[Vec<f32>]| -> CsMat<f32> {
+        let mut triplets = TriMat::new((raw.len(), raw[0].len()));
+        for (i, row) in raw.iter().enumerate() {
+            for (j, &value) in row.iter().enumerate() {
+                if value != 0.0 {
+                    triplets.add_triplet(i, j, value);
+                }
+            }
+        }
+        triplets.to_csc()
+    };
+    common::run_row_normalization_f32_suite(build, |v| v.to_vec());
+    common::run_row_normalization_f32_suite(|raw| build(raw).to_csr(), |v| v.to_vec());
+    let mut matrix = CsMatI::<f32, u32, u64>::new((2, 2), vec![0, 1, 2], vec![1, 0], vec![3., -2.]);
+    let spec = lazymatrix::RowNormalization::standardize();
+    let params = spec.fit(&matrix).unwrap();
+    let expected = vec![-1., -1.];
+    assert_eq!(
+        params
+            .view()
+            .apply_frozen(matrix.view())
+            .matvec(&vec![1.; 2])
+            .unwrap(),
+        vec![0.; 2]
+    );
+    assert_eq!(
+        spec.fit_apply(matrix.view_mut())
+            .unwrap()
+            .matvec(&vec![1., 0.])
+            .unwrap(),
+        expected
+    );
+    let matrix = matrix.to_csc();
+    assert_eq!(
+        params
+            .view()
+            .apply_frozen(&matrix)
+            .matvec(&vec![1., 0.])
+            .unwrap(),
+        expected
+    );
+}
+
+#[test]
+fn row_background_ranges_preserve_ieee_arithmetic() {
+    use lazymatrix::RowNormalizationParams;
+    for (values, center, scale, weights) in [
+        (vec![1e308; 2], 1e308, 1e-308, vec![0., 1.]),
+        (vec![], -1e308, 1e-308, vec![0., 1.]),
+        (vec![], -1e-308, 1., vec![1e308; 2]),
+        (vec![], 0., 1., vec![f64::INFINITY, 1.]),
+    ] {
+        let indices = (0..values.len()).collect();
+        let matrix = CsMat::new((1, 2), vec![0, values.len()], indices, values);
+        for source in [matrix.clone(), matrix.to_csc()] {
+            let expected: f64 = (0..2)
+                .map(|j| ((source.get(0, j).copied().unwrap_or(0.) - center) / scale) * weights[j])
+                .sum();
+            let params =
+                RowNormalizationParams::from_parts(1, Some(vec![center]), Some(vec![scale]));
+            let actual = params
+                .view()
+                .apply_frozen(&source)
+                .matvec(&weights)
+                .unwrap()[0];
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                approx::assert_relative_eq!(actual, expected, epsilon = 1e-12);
+            }
+        }
+    }
 }
 
 #[test]
@@ -480,6 +563,7 @@ fn sprs_sliced_and_transposed_views_use_local_dimensions() {
             })
             .collect();
         let v = common::random_vec(58, matrix.cols());
+        common::check_row_normalization(&matrix, &dense, |v| v.to_vec());
         let u = common::random_vec(59, matrix.rows());
         for center in [Centering::None, Centering::Mean, Centering::Min] {
             for scale in [

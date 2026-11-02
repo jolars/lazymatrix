@@ -19,12 +19,13 @@ mod row;
 /// [crate-level documentation](crate) for the math.
 ///
 /// The fitted parameter type selects the axis and scalar. Column normalization
-/// retains the backend's existing operator capabilities. Row fitting and vector
-/// products require [`crate::MatrixRead`] and currently support dense storage
-/// only. See [`crate::RowNormalization`] for the row capability limits.
-/// Ordered recipes use [`crate::NormalizationChainParams`]. Mixed chains share
-/// the dense row capability limits; column-only chains also support sparse and
-/// chunked storage. Every stage remains visible through [`Self::normalization`].
+/// retains the backend's existing operator capabilities. Row fitting uses
+/// [`crate::RowStats`], and vector products use [`crate::RowNormalizationKernel`]
+/// over dense and sparse storage. See [`crate::RowNormalization`] for the row
+/// capability limits. Ordered recipes use [`crate::NormalizationChainParams`].
+/// Mixed and row-only chains require dense storage; column-only chains also
+/// support sparse and chunked storage. Every stage remains visible through
+/// [`Self::normalization`].
 ///
 /// Access centers and scales through [`Self::normalization`]. Each component is
 /// independently optional. Negative scales and nonfinite values are preserved.
@@ -57,8 +58,7 @@ impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
     ///
     /// Scales use centered values when centering is active. Exact computed zero
     /// scales become one; negative and nonfinite values are preserved. Column
-    /// recipes use [`crate::ColumnStats`], while row recipes require dense
-    /// indexed access through [`crate::MatrixRead`].
+    /// recipes use [`crate::ColumnStats`], while row recipes use [`crate::RowStats`].
     /// To fit parameters separately, use [`crate::ColumnNormalization::fit`]
     /// or [`crate::RowNormalization::fit`].
     ///

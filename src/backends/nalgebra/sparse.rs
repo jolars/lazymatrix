@@ -14,6 +14,8 @@ use nalgebra_sparse::CscMatrix;
 use nalgebra_sparse::ops::Op;
 use nalgebra_sparse::ops::serial::spmm_csc_dense;
 
+crate::row_normalization::sparse!(CscMatrix<F>);
+
 use crate::SparseColumnRef;
 use crate::backends::support::{
     MaybeSend, MaybeSync, collect_columns, max_or_nan, min_or_nan, range_or_nan, sparse_column_sd,

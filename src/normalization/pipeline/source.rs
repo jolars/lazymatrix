@@ -1,6 +1,6 @@
 //! Native raw traversal for column-only pipelines.
 
-use crate::{ColumnStats, MatrixErrorType, MatrixRead, MatrixShape, Scalar};
+use crate::{MatrixErrorType, MatrixRead, MatrixShape, Scalar};
 
 #[derive(Clone, Copy)]
 pub(crate) enum Layout {
@@ -11,7 +11,7 @@ pub(crate) enum Layout {
     SparseColumns,
 }
 
-pub(crate) trait Source<F: Scalar>: MatrixShape + MatrixErrorType + ColumnStats<F> {
+pub(crate) trait Source<F: Scalar>: MatrixShape + MatrixErrorType {
     fn layout(&self) -> Layout {
         Layout::Full
     }
@@ -101,10 +101,7 @@ pub(crate) fn sparse<F: Scalar>(
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all"))]
 macro_rules! sparse_source {
     ($matrix:ty, $csc:expr, $borrow:path) => {
-        impl<F: crate::Scalar> crate::normalization::pipeline::Source<F> for $matrix
-        where
-            Self: crate::ColumnStats<F>,
-        {
+        impl<F: crate::Scalar> crate::normalization::pipeline::Source<F> for $matrix {
             fn layout(&self) -> crate::normalization::pipeline::source::Layout {
                 if $csc {
                     crate::normalization::pipeline::source::Layout::SparseColumns

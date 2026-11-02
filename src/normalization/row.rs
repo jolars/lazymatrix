@@ -1,6 +1,11 @@
-//! Dense row fitting with bounded workspace.
+//! Row fitting with bounded workspace.
 
 use crate::{Centering, MatrixRead, RowNormalization, RowNormalizationStats, Scalar, Scaling};
+
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+mod sparse;
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+pub(crate) use sparse::{product as sparse_product, stats as sparse_stats};
 
 fn row_values<M: MatrixRead<F> + ?Sized, F: Scalar>(
     matrix: &M,
@@ -21,7 +26,7 @@ fn extrema<F: Scalar>(values: impl Iterator<Item = F>) -> (F, F) {
         .unwrap_or_else(|| (F::nan(), F::nan()))
 }
 
-pub(super) fn fit<M: MatrixRead<F> + ?Sized, F: Scalar>(
+pub(crate) fn fit<M: MatrixRead<F> + ?Sized, F: Scalar>(
     matrix: &M,
     spec: RowNormalization,
 ) -> RowNormalizationStats<F> {
@@ -85,14 +90,6 @@ pub(super) fn fit<M: MatrixRead<F> + ?Sized, F: Scalar>(
                 })
                 .collect::<Vec<_>>(),
         ),
-    }
-    .map(|mut scales| {
-        for scale in &mut scales {
-            if *scale == F::zero() {
-                *scale = F::one();
-            }
-        }
-        scales
-    });
+    };
     (centers, scales)
 }

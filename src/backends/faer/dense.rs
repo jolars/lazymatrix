@@ -874,3 +874,7 @@ crate::normalization::pipeline::dense_source!(Mat<F>);
 crate::normalization::pipeline::dense_source!(MatRef<'_, F>);
 
 crate::normalization::pipeline::dense_source!(MatMut<'_, F>);
+
+crate::row_normalization::dense!(Mat<F>);
+crate::row_normalization::dense!(MatRef<'_, F>);
+crate::row_normalization::dense!(MatMut<'_, F>);
