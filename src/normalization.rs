@@ -1,5 +1,7 @@
 mod row;
 
+use std::marker::PhantomData;
+
 mod private {
     pub trait Params {
         fn assert_shape(&self, nrows: usize, ncols: usize);
@@ -171,9 +173,10 @@ impl ColumnNormalization {
     /// zero scales become one; negative and nonfinite values are preserved.
     /// No normalized design matrix is materialized.
     ///
-    /// Apply the parameters with [`crate::LazyMatrix::from_parts`], or use
-    /// [`crate::LazyMatrix::new`] to fit and wrap in one call. Column parameters
-    /// can be reused on new samples with the same number of columns.
+    /// Apply the parameters with [`ColumnNormalizationParams::apply`], borrowing
+    /// them through [`ColumnNormalizationParams::view`] for reuse. Use
+    /// [`Self::fit_apply`] to fit and wrap in one call. Column parameters can be
+    /// reused on new samples with the same number of columns.
     ///
     /// # Errors
     /// Returns the backend error if computing normalization statistics fails.
@@ -185,13 +188,14 @@ impl ColumnNormalization {
     /// ```
     /// # #[cfg(feature = "ndarray_v0_17")]
     /// # {
-    /// use lazymatrix::{ColumnNormalization, LazyMatrix, MatVec};
+    /// use lazymatrix::{ColumnNormalization, MatVec};
     /// use ndarray::array;
     ///
     /// let training = array![[1.0, 2.0], [3.0, 6.0]];
     /// let params = ColumnNormalization::standardize().fit(&training).unwrap();
     /// let validation = array![[5.0, 10.0]];
-    /// let valid = LazyMatrix::from_parts(validation.view(), params);
+    /// let train = params.view().apply(&training);
+    /// let valid = params.view().apply(&validation);
     /// assert_eq!(valid.matvec(&array![1.0, 1.0]).unwrap(), array![6.0]);
     /// # }
     /// ```
@@ -206,6 +210,29 @@ impl ColumnNormalization {
             centers,
             scales.map(replace_zero_scales),
         ))
+    }
+
+    /// Fit column parameters and apply them lazily, owning the fitted vectors.
+    ///
+    /// The data handle is moved into the operator. Pass a reference or backend
+    /// view to borrow the data. The result does not borrow this recipe or any
+    /// temporary parameter object. This uses the same fitting path as
+    /// [`Self::fit`] and [`crate::LazyMatrix::new`].
+    ///
+    /// # Errors
+    /// Returns the backend error if computing normalization statistics fails.
+    ///
+    /// # Panics
+    /// Panics if the backend returns parameter vectors with incorrect lengths.
+    pub fn fit_apply<M, F>(
+        self,
+        data: M,
+    ) -> Result<crate::LazyMatrix<M, ColumnNormalizationParams<F>>, M::Error>
+    where
+        M: crate::ColumnStats<F> + crate::MatrixShape,
+        F: crate::Scalar,
+    {
+        Ok(self.fit(&data)?.apply(data))
     }
 
     /// Subtract each column's mean and divide by its population standard deviation.
@@ -365,7 +392,8 @@ impl RowNormalization {
     /// normalized design matrix.
     ///
     /// Apply the parameters to the same rows with
-    /// [`crate::LazyMatrix::from_parts`], or use [`crate::LazyMatrix::new`] to fit
+    /// [`RowNormalizationParams::apply_frozen`], borrowing them through
+    /// [`RowNormalizationParams::view`] for reuse. Use [`Self::fit_apply`] to fit
     /// and wrap in one call. Fit new samples independently, even when their row
     /// count matches the fitting data.
     ///
@@ -376,14 +404,14 @@ impl RowNormalization {
     /// ```
     /// # #[cfg(feature = "ndarray_v0_17")]
     /// # {
-    /// use lazymatrix::{Centering, LazyMatrix, MatVec, RowNormalization, Scaling};
+    /// use lazymatrix::{Centering, MatVec, RowNormalization, Scaling};
     /// use ndarray::array;
     ///
     /// let data = array![[3.0, 4.0], [0.0, 0.0]];
     /// let recipe = RowNormalization::new(Centering::None, Scaling::L2);
     /// let params = recipe.fit(&data).unwrap();
     /// assert_eq!(params.scales(), Some([5.0, 1.0].as_slice()));
-    /// let rows = LazyMatrix::from_parts(data.view(), params);
+    /// let rows = params.view().apply_frozen(&data);
     /// assert_eq!(rows.matvec(&array![1.0, 1.0]).unwrap(), array![1.4, 0.0]);
     /// # }
     /// ```
@@ -398,6 +426,26 @@ impl RowNormalization {
             centers,
             scales,
         ))
+    }
+
+    /// Fit each input row independently and apply its parameters lazily.
+    ///
+    /// The result owns the fitted vectors and stores the supplied data handle.
+    /// Pass a reference or backend view to borrow the data. New samples need
+    /// their own call to this method or [`Self::fit`].
+    ///
+    /// # Errors
+    /// Returns the backend's `Result` type for consistency with column fitting.
+    /// Dense indexed reads are infallible, so this method always returns `Ok`.
+    pub fn fit_apply<M, F>(
+        self,
+        data: M,
+    ) -> Result<crate::LazyMatrix<M, RowNormalizationParams<F>>, M::Error>
+    where
+        M: crate::MatrixRead<F> + crate::MatrixErrorType,
+        F: crate::Scalar,
+    {
+        Ok(self.fit(&data)?.apply_frozen(data))
     }
 
     /// Subtract each row's mean and divide by its population standard deviation.
@@ -444,12 +492,22 @@ pub(crate) fn sd_divisor<F: crate::Scalar>(nrows: usize, df: usize) -> F {
 /// Present scales are nonzero. Computed normalization replaces exact zero
 /// scales with one before constructing these parameters. Explicit parameters
 /// preserve negative scales and nonfinite values.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ColumnNormalizationParams<F = f64> {
+///
+/// The default storage owns its vectors. [`Self::view`] borrows the same values
+/// without allocation; applying that view shares them across lazy operators.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColumnNormalizationParams<F = f64, S = Vec<F>> {
     ncols: usize,
-    pub(crate) centers: Option<Vec<F>>,
-    pub(crate) scales: Option<Vec<F>>,
+    centers: Option<S>,
+    scales: Option<S>,
+    scalar: PhantomData<F>,
 }
+
+/// A borrowed view of validated column normalization parameters.
+///
+/// Created by [`ColumnNormalizationParams::view`]. Copying the view copies only
+/// slice handles, never the fitted values.
+pub type ColumnNormalizationParamsView<'a, F = f64> = ColumnNormalizationParams<F, &'a [F]>;
 
 impl<F: crate::Scalar> ColumnNormalizationParams<F> {
     /// Construct validated explicit parameters.
@@ -466,9 +524,12 @@ impl<F: crate::Scalar> ColumnNormalizationParams<F> {
             ncols,
             centers,
             scales,
+            scalar: PhantomData,
         }
     }
+}
 
+impl<F: crate::Scalar, S: AsRef<[F]>> ColumnNormalizationParams<F, S> {
     /// Number of columns these parameters describe.
     pub fn ncols(&self) -> usize {
         self.ncols
@@ -476,17 +537,66 @@ impl<F: crate::Scalar> ColumnNormalizationParams<F> {
 
     /// Fitted column centers, if centering is active.
     pub fn centers(&self) -> Option<&[F]> {
-        self.centers.as_deref()
+        self.centers.as_ref().map(AsRef::as_ref)
     }
 
     /// Fitted column scales, if scaling is active.
     pub fn scales(&self) -> Option<&[F]> {
-        self.scales.as_deref()
+        self.scales.as_ref().map(AsRef::as_ref)
     }
 
-    /// Recover the fitted centers and scales without copying.
-    pub fn into_parts(self) -> ColumnNormalizationStats<F> {
+    /// Borrow the fitted values without allocating or copying them.
+    ///
+    /// The view retains the fitted column count, including when both
+    /// normalization components are inactive.
+    ///
+    /// A borrowed operator cannot outlive these parameters:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{ColumnNormalizationParams, ColumnNormalizationParamsView,
+    ///                  LazyMatrix, MatrixShape};
+    /// fn escaped<M: MatrixShape>(data: M)
+    ///     -> LazyMatrix<M, ColumnNormalizationParamsView<'static>>
+    /// {
+    ///     let params = ColumnNormalizationParams::from_parts(data.ncols(), None, None);
+    ///     params.view().apply(data)
+    /// }
+    /// ```
+    pub fn view(&self) -> ColumnNormalizationParamsView<'_, F> {
+        ColumnNormalizationParams {
+            ncols: self.ncols,
+            centers: self.centers(),
+            scales: self.scales(),
+            scalar: PhantomData,
+        }
+    }
+
+    /// Apply these parameters unchanged, moving their storage into a lazy operator.
+    ///
+    /// Use `params.view().apply(data)` to borrow the fitted values, or
+    /// `params.apply(data)` to move owned vectors. The data handle may itself be
+    /// an owned matrix, reference, or backend view. Application performs no
+    /// fitting, data reads, or parameter copies.
+    ///
+    /// # Panics
+    /// Panics if the data's column count differs from the fitted column count.
+    pub fn apply<M: crate::MatrixShape>(self, data: M) -> crate::LazyMatrix<M, Self> {
+        crate::LazyMatrix::from_parts(data, self)
+    }
+
+    /// Recover the stored centers and scales without copying.
+    ///
+    /// Owned parameters return vectors; views return borrowed slices.
+    pub fn into_parts(self) -> (Option<S>, Option<S>) {
         (self.centers, self.scales)
+    }
+
+    pub(crate) fn copy_owned(&self) -> ColumnNormalizationParams<F> {
+        ColumnNormalizationParams::from_parts(
+            self.ncols,
+            self.centers().map(<[F]>::to_vec),
+            self.scales().map(<[F]>::to_vec),
+        )
     }
 }
 
@@ -497,12 +607,22 @@ impl<F: crate::Scalar> ColumnNormalizationParams<F> {
 /// reapplied to matrices with the same row count, but they describe the fitted
 /// rows, not a transformation learned across samples. Fit new samples' row
 /// parameters independently.
-#[derive(Clone, Debug, PartialEq)]
-pub struct RowNormalizationParams<F = f64> {
+///
+/// The default storage owns its vectors. [`Self::view`] borrows the same values
+/// without allocation. Both forms use [`Self::apply_frozen`] to reapply them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RowNormalizationParams<F = f64, S = Vec<F>> {
     nrows: usize,
-    centers: Option<Vec<F>>,
-    scales: Option<Vec<F>>,
+    centers: Option<S>,
+    scales: Option<S>,
+    scalar: PhantomData<F>,
 }
+
+/// A borrowed view of validated parameters for particular rows.
+///
+/// Created by [`RowNormalizationParams::view`]. The view describes the same
+/// fitted rows; fit new samples independently.
+pub type RowNormalizationParamsView<'a, F = f64> = RowNormalizationParams<F, &'a [F]>;
 
 impl<F: crate::Scalar> RowNormalizationParams<F> {
     /// Construct validated explicit parameters without changing their values.
@@ -528,9 +648,12 @@ impl<F: crate::Scalar> RowNormalizationParams<F> {
             nrows,
             centers,
             scales,
+            scalar: PhantomData,
         }
     }
+}
 
+impl<F: crate::Scalar, S: AsRef<[F]>> RowNormalizationParams<F, S> {
     /// Number of rows these parameters describe.
     pub fn nrows(&self) -> usize {
         self.nrows
@@ -538,25 +661,70 @@ impl<F: crate::Scalar> RowNormalizationParams<F> {
 
     /// Fitted row centers, if centering is active.
     pub fn centers(&self) -> Option<&[F]> {
-        self.centers.as_deref()
+        self.centers.as_ref().map(AsRef::as_ref)
     }
 
     /// Fitted row scales, if scaling is active.
     pub fn scales(&self) -> Option<&[F]> {
-        self.scales.as_deref()
+        self.scales.as_ref().map(AsRef::as_ref)
     }
 
-    /// Recover the fitted centers and scales without copying.
-    pub fn into_parts(self) -> RowNormalizationStats<F> {
+    /// Borrow these rows' fitted values without allocating or copying them.
+    ///
+    /// Borrowed row parameters retain the same capability limits as owned ones:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{MatMatInto, MatrixRead, MatrixWrite, RowNormalizationParams};
+    /// fn batched<M: MatMatInto<f64> + MatrixRead<f64>, D: MatrixRead<f64> + MatrixWrite<f64>>(
+    ///     params: &RowNormalizationParams, data: M, rhs: &D, out: &mut D,
+    /// ) {
+    ///     params.view().apply_frozen(data).matmat_into(rhs, out).unwrap();
+    /// }
+    /// ```
+    pub fn view(&self) -> RowNormalizationParamsView<'_, F> {
+        RowNormalizationParams {
+            nrows: self.nrows,
+            centers: self.centers(),
+            scales: self.scales(),
+            scalar: PhantomData,
+        }
+    }
+
+    /// Reapply these rows' parameters unchanged, moving storage into a lazy operator.
+    ///
+    /// Use `params.view().apply_frozen(data)` to borrow the fitted values, or
+    /// `params.apply_frozen(data)` to move owned vectors. This performs no fitting,
+    /// data reads, or parameter copies. Fit new samples independently, even when
+    /// their row count matches these parameters.
+    ///
+    /// # Panics
+    /// Panics if the data's row count differs from the fitted row count.
+    ///
+    /// Row parameters deliberately require the frozen name:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{MatrixShape, RowNormalizationParams};
+    /// fn ambiguous<M: MatrixShape>(params: RowNormalizationParams, data: M) {
+    ///     let _ = params.view().apply(data);
+    /// }
+    /// ```
+    pub fn apply_frozen<M: crate::MatrixShape>(self, data: M) -> crate::LazyMatrix<M, Self> {
+        crate::LazyMatrix::from_parts(data, self)
+    }
+
+    /// Recover the stored centers and scales without copying.
+    ///
+    /// Owned parameters return vectors; views return borrowed slices.
+    pub fn into_parts(self) -> (Option<S>, Option<S>) {
         (self.centers, self.scales)
     }
 }
 
-impl<F: crate::Scalar> NormalizationParams for ColumnNormalizationParams<F> {
+impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for ColumnNormalizationParams<F, S> {
     type Scalar = F;
 }
 
-impl<F: crate::Scalar> private::Params for ColumnNormalizationParams<F> {
+impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for ColumnNormalizationParams<F, S> {
     fn assert_shape(&self, _nrows: usize, ncols: usize) {
         assert_eq!(
             ncols, self.ncols,
@@ -565,11 +733,11 @@ impl<F: crate::Scalar> private::Params for ColumnNormalizationParams<F> {
     }
 }
 
-impl<F: crate::Scalar> NormalizationParams for RowNormalizationParams<F> {
+impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for RowNormalizationParams<F, S> {
     type Scalar = F;
 }
 
-impl<F: crate::Scalar> private::Params for RowNormalizationParams<F> {
+impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for RowNormalizationParams<F, S> {
     fn assert_shape(&self, nrows: usize, _ncols: usize) {
         assert_eq!(
             nrows, self.nrows,

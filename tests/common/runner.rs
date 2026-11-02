@@ -102,7 +102,7 @@ where
         + lazymatrix::WeightedColumnSumsKernel<f64>
         + ColumnStats<f64>,
 {
-    use lazymatrix::WeightedGramInto;
+    use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto};
     run_intercept_gram_suite(&build);
 
     for (n, p, density) in [
@@ -145,6 +145,15 @@ where
                 let lazy =
                     LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap();
                 lazy.weighted_gram_into(&weights, &mut out).unwrap();
+                let shared = lazy.normalization().view().apply(&matrix);
+                shared.weighted_gram_into(&weights, &mut out).unwrap();
+                let mut expected_sums = vec![f64::NAN; p];
+                lazy.weighted_column_sums_into(&weights, &mut expected_sums)
+                    .unwrap();
+                shared
+                    .weighted_column_sums_into(&weights, &mut sums)
+                    .unwrap();
+                assert_parameter_bits(Some(&sums), Some(&expected_sums));
                 assert_gram(
                     &out,
                     &materialize(
@@ -501,6 +510,12 @@ pub fn run_row_normalization_suite<M, V>(
                     &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
                     &to_v,
                 );
+                let shared = lazy.normalization().view().apply_frozen(&matrix);
+                check_row_normalized_products(
+                    &shared,
+                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
+                    &to_v,
+                );
             }
         }
         for centers in [None, Some(vec![0.75; tm.nrows])] {
@@ -513,6 +528,12 @@ pub fn run_row_normalization_suite<M, V>(
                 let lazy = LazyMatrix::from_row_parts(&matrix, centers.clone(), scales.clone());
                 check_row_normalized_products(
                     &lazy,
+                    &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
+                    &to_v,
+                );
+                let shared = lazy.normalization().view().apply_frozen(&matrix);
+                check_row_normalized_products(
+                    &shared,
                     &materialize_rows(&tm.dense, centers.as_deref(), scales.as_deref()),
                     &to_v,
                 );
@@ -665,8 +686,8 @@ fn materialize_rows<F: lazymatrix::Scalar>(
 }
 
 /// Compare row-normalized vector products against a materialized dense oracle.
-pub fn check_row_normalized_products<M, V, F>(
-    operator: &lazymatrix::LazyMatrix<M, lazymatrix::RowNormalizationParams<F>>,
+pub fn check_row_normalized_products<M, V, F, S: AsRef<[F]>>(
+    operator: &lazymatrix::LazyMatrix<M, lazymatrix::RowNormalizationParams<F, S>>,
     normalized: &[Vec<F>],
     to_v: impl Fn(&[F]) -> V,
 ) where
@@ -1139,7 +1160,9 @@ where
                 let normalized = materialize(&tm.dense, centers.as_deref(), scales.as_deref());
                 let lazy = LazyMatrix::from_column_parts(&matrix, centers, scales);
                 check_fused_operator(&lazy, &normalized, cols, &to_v);
-                let design = WithIntercept::new(&lazy);
+                let shared = lazy.normalization().view().apply(&matrix);
+                check_fused_operator(&shared, &normalized, cols, &to_v);
+                let design = WithIntercept::new(&shared);
                 let augmented: Vec<Vec<f64>> = normalized
                     .iter()
                     .map(|row| std::iter::once(1.0).chain(row.iter().copied()).collect())
@@ -1151,16 +1174,18 @@ where
                 let mut scratch = to_v(&vec![f64::NAN; cols]);
                 let mut forward = to_v(&vec![3.0; rows]);
                 let mut transpose = to_v(&vec![3.0; cols]);
-                lazy.matvec_scaled_with_workspace(2.0, &x, -1.0, &mut forward, &mut scratch)
+                shared
+                    .matvec_scaled_with_workspace(2.0, &x, -1.0, &mut forward, &mut scratch)
                     .unwrap();
-                lazy.mat_transpose_vec_scaled_with_workspace(
-                    2.0,
-                    &u,
-                    -1.0,
-                    &mut transpose,
-                    &mut scratch,
-                )
-                .unwrap();
+                shared
+                    .mat_transpose_vec_scaled_with_workspace(
+                        2.0,
+                        &u,
+                        -1.0,
+                        &mut transpose,
+                        &mut scratch,
+                    )
+                    .unwrap();
                 let mut expected = to_v(&vec![3.0; rows]);
                 lazy.matvec_scaled_into(2.0, &x, -1.0, &mut expected)
                     .unwrap();
@@ -1424,6 +1449,7 @@ pub fn run_backend_suite<M, V>(
         + SumEntries<f64>
         + ScaledSubSlice<f64>,
 {
+    column_parameter_application(&build, &to_v, &from_v);
     intercept_products(&build, &to_v, &from_v);
     vector_algebra(&to_v, &from_v);
     oracle_parity(&build, &to_v, &from_v);
@@ -1443,6 +1469,49 @@ pub fn run_backend_suite<M, V>(
     zero_scale_guard(&build, &to_v, &from_v);
     empty_and_nonfinite_stats(&build);
     shape_is_inferred(&build);
+}
+
+fn column_parameter_application<M, V>(
+    build: &impl Fn(&TestMatrix) -> M,
+    to_v: &impl Fn(&[f64]) -> V,
+    from_v: &impl Fn(&V) -> Vec<f64>,
+) where
+    M: MatVec<V> + MatVecInto<V> + MatTransposeVec<V> + MatTransposeVecInto<V> + ColumnStats<f64>,
+    V: Clone
+        + ElemDivAssign<f64>
+        + DotSlice<f64>
+        + SubScalarAssign<f64>
+        + SumEntries<f64>
+        + ScaledSubSlice<f64>,
+{
+    let training = build(&random_matrix(1201, 9, 4, 0.5));
+    let validation = random_matrix(1202, 3, 4, 0.3);
+    let valid_data = build(&validation);
+    let recipe = ColumnNormalization::standardize();
+    let params = recipe.fit(&training).unwrap();
+    let train = params.view().apply(&training);
+    let valid = params.view().apply(&valid_data);
+    let fitted = recipe.fit_apply(&training).unwrap();
+    assert_parameter_bits(
+        train.normalization().centers(),
+        fitted.normalization().centers(),
+    );
+    assert_parameter_bits(
+        train.normalization().scales(),
+        fitted.normalization().scales(),
+    );
+    assert_eq!(
+        train.normalization().centers().unwrap().as_ptr(),
+        valid.normalization().centers().unwrap().as_ptr()
+    );
+    let normalized = materialize(&validation.dense, params.centers(), params.scales());
+    check_transpose_products(&valid, &normalized, to_v, from_v);
+    let centers = params.centers().unwrap().as_ptr();
+    let scales = params.scales().unwrap().as_ptr();
+    let owned = params.apply(valid_data);
+    assert_eq!(owned.normalization().centers().unwrap().as_ptr(), centers);
+    assert_eq!(owned.normalization().scales().unwrap().as_ptr(), scales);
+    check_transpose_products(&owned, &normalized, to_v, from_v);
 }
 
 fn transpose_products<M, V>(
@@ -1767,8 +1836,9 @@ fn lazy_rows_match_dense_oracle<M: SparseRows<f64>>(matrix: &M, tm: &TestMatrix)
                 lazy.normalization().centers(),
                 lazy.normalization().scales(),
             );
+            let shared = lazy.normalization().view().apply(matrix);
             for (i, expected_row) in expected.iter().enumerate() {
-                let row = lazy.row(i);
+                let row = shared.row(i);
                 let (columns, values) = matrix.sparse_row(i);
                 assert_eq!(row.len(), tm.ncols);
                 assert_eq!(row.is_empty(), tm.ncols == 0);
@@ -1878,8 +1948,9 @@ where
                 active_scales.as_deref(),
             );
 
+            let shared = lazy.normalization().view().apply(lazy.data());
             for j in 0..tm.ncols {
-                let column = lazy.column(j);
+                let column = shared.column(j);
                 let expected: Vec<f64> = dense.iter().map(|row| row[j]).collect();
                 let expected_dot = dot(&expected, &vector);
                 let expected_weighted_dot = expected
@@ -2198,8 +2269,9 @@ where
                 active_scales.as_deref(),
             );
 
+            let shared = lazy.normalization().view().apply(lazy.data());
             for j in 0..tm.ncols {
-                let column = lazy.sparse_column(j);
+                let column = shared.sparse_column(j);
                 assert_eq!(column.len(), tm.nrows);
                 assert!(!column.is_empty());
                 assert_eq!(
@@ -3681,9 +3753,20 @@ where
                     eager.normalization().scales().map(|x| x.len()),
                     lazy.normalization().scales().map(|x| x.len())
                 );
+                let shared = lazy.normalization().view().apply(&source);
+                let copied = shared.to_eager::<MaterializeOutput>().unwrap();
+                assert_close(&copied.data().values, &expected, EPS);
+                assert_parameter_bits(
+                    copied.normalization().centers(),
+                    lazy.normalization().centers(),
+                );
+                assert_parameter_bits(
+                    copied.normalization().scales(),
+                    lazy.normalization().scales(),
+                );
                 let mut out = MaterializeOutput::zeros(rows, cols);
                 out.values.fill(f64::NAN);
-                let borrowed = lazy.to_eager_into(&mut out).unwrap();
+                let borrowed = shared.to_eager_into(&mut out).unwrap();
                 assert_close(&borrowed.data().values, &expected, EPS);
             }
         }
@@ -3909,6 +3992,7 @@ where
             ] {
                 let lazy =
                     LazyMatrix::new(&matrix, ColumnNormalization::new(centering, scaling)).unwrap();
+                let shared = lazy.normalization().view().apply(&matrix);
                 let dense = materialize(
                     &tm.dense,
                     lazy.normalization().centers(),
@@ -3922,118 +4006,124 @@ where
                     (0..n, p..p),
                     (n..n, p..p),
                 ] {
-                    let view = lazy.submatrix(rows.clone(), cols.clone());
-                    assert_eq!((view.nrows(), view.ncols()), (rows.len(), cols.len()));
-                    assert_parameter_bits(
-                        view.centers(),
-                        lazy.normalization().centers().map(|c| &c[cols.clone()]),
-                    );
-                    assert_parameter_bits(
-                        view.scales(),
-                        lazy.normalization().scales().map(|s| &s[cols.clone()]),
-                    );
-                    if let Some(centers) = lazy.normalization().centers() {
-                        assert_eq!(
-                            view.centers().unwrap().as_ptr(),
-                            centers[cols.clone()].as_ptr()
+                    for view in [
+                        lazy.submatrix(rows.clone(), cols.clone()),
+                        shared.submatrix(rows.clone(), cols.clone()),
+                    ] {
+                        assert_eq!((view.nrows(), view.ncols()), (rows.len(), cols.len()));
+                        assert_parameter_bits(
+                            view.centers(),
+                            lazy.normalization().centers().map(|c| &c[cols.clone()]),
                         );
-                    }
-                    let mut output = RectangleOutput::new(rows.len(), cols.len());
-                    let eager = view.to_eager_into(&mut output).unwrap();
-                    assert_parameter_bits(eager.normalization().centers(), view.centers());
-                    assert_parameter_bits(eager.normalization().scales(), view.scales());
-                    let expected: Vec<_> = rows
-                        .clone()
-                        .flat_map(|i| {
-                            cols.clone().map({
-                                let dense = &dense;
-                                move |j| dense[i][j]
+                        assert_parameter_bits(
+                            view.scales(),
+                            lazy.normalization().scales().map(|s| &s[cols.clone()]),
+                        );
+                        if let Some(centers) = lazy.normalization().centers() {
+                            assert_eq!(
+                                view.centers().unwrap().as_ptr(),
+                                centers[cols.clone()].as_ptr()
+                            );
+                        }
+                        let mut output = RectangleOutput::new(rows.len(), cols.len());
+                        let eager = view.to_eager_into(&mut output).unwrap();
+                        assert_parameter_bits(eager.normalization().centers(), view.centers());
+                        assert_parameter_bits(eager.normalization().scales(), view.scales());
+                        let expected: Vec<_> = rows
+                            .clone()
+                            .flat_map(|i| {
+                                cols.clone().map({
+                                    let dense = &dense;
+                                    move |j| dense[i][j]
+                                })
                             })
-                        })
-                        .collect();
-                    assert_close(&output.values, &expected, EPS);
-                    let x: Vec<_> = (0..cols.len()).map(|j| j as f64 - 1.25).collect();
-                    let u: Vec<_> = (0..rows.len()).map(|i| i as f64 * 0.5 - 0.75).collect();
-                    let forward: Vec<_> = rows
-                        .clone()
-                        .map(|i| {
-                            cols.clone()
-                                .enumerate()
-                                .map(|(j, col)| dense[i][col] * x[j])
-                                .sum()
-                        })
-                        .collect();
-                    let transpose: Vec<_> = cols
-                        .clone()
-                        .map(|j| {
-                            rows.clone()
-                                .enumerate()
-                                .map(|(i, row)| dense[row][j] * u[i])
-                                .sum()
-                        })
-                        .collect();
-                    let ax = view.matvec(&x).unwrap();
-                    let atu = view.mat_transpose_vec(&u).unwrap();
-                    let transposed = Transpose::new(&view);
-                    assert_close(&transposed.matvec(&u).unwrap(), &transpose, EPS);
-                    assert_close(&transposed.mat_transpose_vec(&x).unwrap(), &forward, EPS);
-                    assert_close(&ax, &forward, EPS);
-                    assert_close(&atu, &transpose, EPS);
-                    let left: f64 = ax.iter().zip(&u).map(|(a, b)| a * b).sum();
-                    let right: f64 = atu.iter().zip(&x).map(|(a, b)| a * b).sum();
-                    approx::assert_abs_diff_eq!(left, right, epsilon = EPS);
-                    let native = view.matvec(&to_v(&x)).unwrap();
-                    assert_close(
-                        &(0..native.len()).map(|i| native.get(i)).collect::<Vec<_>>(),
-                        &forward,
-                        EPS,
-                    );
-                    let native_t = view.mat_transpose_vec(&to_v(&u)).unwrap();
-                    assert_close(
-                        &(0..native_t.len())
-                            .map(|i| native_t.get(i))
-                            .collect::<Vec<_>>(),
-                        &transpose,
-                        EPS,
-                    );
-                    for (alpha, beta) in [(1.0, 0.0), (-0.5, 2.0), (0.0, 0.0), (0.0, -2.0)] {
-                        let old = if beta == 0.0 { f64::NAN } else { 3.0 };
-                        let mut y = vec![old; rows.len()];
-                        let mut yt = vec![old; cols.len()];
-                        view.matvec_scaled_into(alpha, &x, beta, &mut y).unwrap();
-                        view.mat_transpose_vec_scaled_into(alpha, &u, beta, &mut yt)
-                            .unwrap();
-                        let expected = |values: &[f64]| {
-                            values
-                                .iter()
-                                .map(|&v| alpha * v + if beta == 0.0 { 0.0 } else { beta * old })
-                                .collect::<Vec<_>>()
-                        };
-                        assert_close(&y, &expected(&forward), EPS);
-                        assert_close(&yt, &expected(&transpose), EPS);
+                            .collect();
+                        assert_close(&output.values, &expected, EPS);
+                        let x: Vec<_> = (0..cols.len()).map(|j| j as f64 - 1.25).collect();
+                        let u: Vec<_> = (0..rows.len()).map(|i| i as f64 * 0.5 - 0.75).collect();
+                        let forward: Vec<_> = rows
+                            .clone()
+                            .map(|i| {
+                                cols.clone()
+                                    .enumerate()
+                                    .map(|(j, col)| dense[i][col] * x[j])
+                                    .sum()
+                            })
+                            .collect();
+                        let transpose: Vec<_> = cols
+                            .clone()
+                            .map(|j| {
+                                rows.clone()
+                                    .enumerate()
+                                    .map(|(i, row)| dense[row][j] * u[i])
+                                    .sum()
+                            })
+                            .collect();
+                        let ax = view.matvec(&x).unwrap();
+                        let atu = view.mat_transpose_vec(&u).unwrap();
+                        let transposed = Transpose::new(&view);
+                        assert_close(&transposed.matvec(&u).unwrap(), &transpose, EPS);
+                        assert_close(&transposed.mat_transpose_vec(&x).unwrap(), &forward, EPS);
+                        assert_close(&ax, &forward, EPS);
+                        assert_close(&atu, &transpose, EPS);
+                        let left: f64 = ax.iter().zip(&u).map(|(a, b)| a * b).sum();
+                        let right: f64 = atu.iter().zip(&x).map(|(a, b)| a * b).sum();
+                        approx::assert_abs_diff_eq!(left, right, epsilon = EPS);
+                        let native = view.matvec(&to_v(&x)).unwrap();
+                        assert_close(
+                            &(0..native.len()).map(|i| native.get(i)).collect::<Vec<_>>(),
+                            &forward,
+                            EPS,
+                        );
+                        let native_t = view.mat_transpose_vec(&to_v(&u)).unwrap();
+                        assert_close(
+                            &(0..native_t.len())
+                                .map(|i| native_t.get(i))
+                                .collect::<Vec<_>>(),
+                            &transpose,
+                            EPS,
+                        );
+                        for (alpha, beta) in [(1.0, 0.0), (-0.5, 2.0), (0.0, 0.0), (0.0, -2.0)] {
+                            let old = if beta == 0.0 { f64::NAN } else { 3.0 };
+                            let mut y = vec![old; rows.len()];
+                            let mut yt = vec![old; cols.len()];
+                            view.matvec_scaled_into(alpha, &x, beta, &mut y).unwrap();
+                            view.mat_transpose_vec_scaled_into(alpha, &u, beta, &mut yt)
+                                .unwrap();
+                            let expected = |values: &[f64]| {
+                                values
+                                    .iter()
+                                    .map(|&v| {
+                                        alpha * v + if beta == 0.0 { 0.0 } else { beta * old }
+                                    })
+                                    .collect::<Vec<_>>()
+                            };
+                            assert_close(&y, &expected(&forward), EPS);
+                            assert_close(&yt, &expected(&transpose), EPS);
+                        }
+                        let mut y = vec![f64::NAN; rows.len()];
+                        let mut yt = vec![f64::NAN; cols.len()];
+                        view.matvec_into(&x, &mut y).unwrap();
+                        view.mat_transpose_vec_into(&u, &mut yt).unwrap();
+                        assert_close(&y, &forward, EPS);
+                        assert_close(&yt, &transpose, EPS);
+                        let nested = view.submatrix(0..view.nrows(), 0..view.ncols());
+                        assert_close(&nested.matvec(&x).unwrap(), &forward, EPS);
+                        let mut untouched = vec![42.0; rows.len()];
+                        assert!(
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                view.matvec_scaled_into(
+                                    0.0,
+                                    &vec![0.0; cols.len() + 1],
+                                    0.0,
+                                    &mut untouched,
+                                )
+                                .unwrap();
+                            }))
+                            .is_err()
+                        );
+                        assert!(untouched.iter().all(|&v| v == 42.0));
                     }
-                    let mut y = vec![f64::NAN; rows.len()];
-                    let mut yt = vec![f64::NAN; cols.len()];
-                    view.matvec_into(&x, &mut y).unwrap();
-                    view.mat_transpose_vec_into(&u, &mut yt).unwrap();
-                    assert_close(&y, &forward, EPS);
-                    assert_close(&yt, &transpose, EPS);
-                    let nested = view.submatrix(0..view.nrows(), 0..view.ncols());
-                    assert_close(&nested.matvec(&x).unwrap(), &forward, EPS);
-                    let mut untouched = vec![42.0; rows.len()];
-                    assert!(
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            view.matvec_scaled_into(
-                                0.0,
-                                &vec![0.0; cols.len() + 1],
-                                0.0,
-                                &mut untouched,
-                            )
-                            .unwrap();
-                        }))
-                        .is_err()
-                    );
-                    assert!(untouched.iter().all(|&v| v == 42.0));
                 }
             }
         }
@@ -4174,8 +4264,9 @@ fn submatrix_columns_match_dense<M: RawColumns<f64>>(build: &impl Fn(&TestMatrix
         lazy.normalization().centers(),
         lazy.normalization().scales(),
     );
+    let shared = lazy.normalization().view().apply(lazy.data());
     for (rows, cols) in [(1..4, 0..4), (0..4, 1..3), (4..4, 0..4)] {
-        let view = lazy.submatrix(rows.clone(), cols.clone());
+        let view = shared.submatrix(rows.clone(), cols.clone());
         for j in 0..view.ncols() {
             let column = view.column(j);
             let expected: Vec<_> = rows.clone().map(|i| dense[i][cols.start + j]).collect();

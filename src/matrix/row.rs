@@ -5,7 +5,9 @@ use crate::{
     MatrixRead, RowNormalizationParams, Scalar, VectorOwned, VectorView, VectorViewMut,
 };
 
-impl<M: MatrixRead<F> + MatrixErrorType, F: Scalar> LazyMatrix<M, RowNormalizationParams<F>> {
+impl<M: MatrixRead<F> + MatrixErrorType, F: Scalar, S: AsRef<[F]>>
+    LazyMatrix<M, RowNormalizationParams<F, S>>
+{
     fn entry(&self, row: usize, column: usize) -> F {
         let mut value = self.data.get(row, column);
         if let Some(centers) = self.normalization().centers() {
@@ -18,7 +20,7 @@ impl<M: MatrixRead<F> + MatrixErrorType, F: Scalar> LazyMatrix<M, RowNormalizati
     }
 }
 
-impl<M, V, F> MatVec<V> for LazyMatrix<M, RowNormalizationParams<F>>
+impl<M, V, F, S: AsRef<[F]>> MatVec<V> for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
     M: MatrixRead<F> + MatrixErrorType,
     F: Scalar,
@@ -32,7 +34,7 @@ where
     }
 }
 
-impl<M, X, Y, F> MatVecInto<X, Y> for LazyMatrix<M, RowNormalizationParams<F>>
+impl<M, X, Y, F, S: AsRef<[F]>> MatVecInto<X, Y> for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
     M: MatrixRead<F> + MatrixErrorType,
     F: Scalar,
@@ -54,7 +56,7 @@ where
     }
 }
 
-impl<M, V, F> MatTransposeVec<V> for LazyMatrix<M, RowNormalizationParams<F>>
+impl<M, V, F, S: AsRef<[F]>> MatTransposeVec<V> for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
     M: MatrixRead<F> + MatrixErrorType,
     F: Scalar,
@@ -72,7 +74,8 @@ where
     }
 }
 
-impl<M, X, Y, F> MatTransposeVecInto<X, Y> for LazyMatrix<M, RowNormalizationParams<F>>
+impl<M, X, Y, F, S: AsRef<[F]>> MatTransposeVecInto<X, Y>
+    for LazyMatrix<M, RowNormalizationParams<F, S>>
 where
     M: MatrixRead<F> + MatrixErrorType,
     F: Scalar,

@@ -79,5 +79,55 @@ fn benchmark_weighted_norms(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_sprs, benchmark_weighted_norms);
+fn benchmark_parameter_views(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sprs_parameter_views");
+    let (nrows, ncols) = (10_000, 1_000);
+    let mut triplets = sprs::TriMat::new((nrows, ncols));
+    for j in 0..ncols {
+        for i in (0..nrows).step_by(100) {
+            triplets.add_triplet((i + 17 * j) % nrows, j, (i % 13) as f64 - 6.0);
+        }
+    }
+    let csc = triplets.to_csc::<usize>();
+    let csr = csc.to_csr();
+    group.throughput(Throughput::Elements(csc.nnz() as u64));
+    for (layout, matrix) in [("csc", &csc), ("csr", &csr)] {
+        let owned = ColumnNormalization::standardize()
+            .fit_apply(matrix)
+            .unwrap();
+        let view = owned.normalization().view().apply(matrix);
+        let v = vec![1.0; ncols];
+        let u = vec![1.0; nrows];
+        let mut y = vec![0.0; nrows];
+        let mut z = vec![0.0; ncols];
+        group.bench_function(BenchmarkId::new("owned_forward", layout), |b| {
+            b.iter(|| owned.matvec_into(black_box(&v), black_box(&mut y)).unwrap());
+        });
+        group.bench_function(BenchmarkId::new("view_forward", layout), |b| {
+            b.iter(|| view.matvec_into(black_box(&v), black_box(&mut y)).unwrap());
+        });
+        group.bench_function(BenchmarkId::new("owned_transpose", layout), |b| {
+            b.iter(|| {
+                owned
+                    .mat_transpose_vec_into(black_box(&u), black_box(&mut z))
+                    .unwrap()
+            });
+        });
+        group.bench_function(BenchmarkId::new("view_transpose", layout), |b| {
+            b.iter(|| {
+                view.mat_transpose_vec_into(black_box(&u), black_box(&mut z))
+                    .unwrap()
+            });
+        });
+    }
+    group.finish();
+}
+
+// Keep new setup allocations after the established groups to preserve their fixtures.
+criterion_group!(
+    benches,
+    benchmark_sprs,
+    benchmark_weighted_norms,
+    benchmark_parameter_views
+);
 criterion_main!(benches);

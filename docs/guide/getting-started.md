@@ -162,21 +162,57 @@ let y = eager.matvec(&array![1.0, -1.0]).unwrap();
 dense destination. For owned writable dense inputs, `into_eager` normalizes the
 existing storage in place. An eager operator retains the fitted parameters and
 uses its normalized values directly.
-`EagerMatrix<M, P>` retains the same fitted parameter type. Both wrappers expose
-it through `normalization()`, and `into_parts()` returns `(data, params)` without
+`to_eager` and `to_eager_into` copy fitted metadata into owned parameter vectors,
+including when the lazy operator borrows parameters. `into_eager` retains the
+supplied parameter storage, including any borrows. Both wrappers expose metadata
+through `normalization()`, and `into_parts()` returns `(data, params)` without
 copying. Eager data already contains normalized values; lazy data remains raw.
 
 ## Reuse fitted parameters
 
-Apply training column parameters to new observations rather than fitting the prediction
-data again:
+Fit column parameters independently, then share them between training and
+validation operators:
+
+```rust
+let recipe = ColumnNormalization::standardize();
+let params = recipe.fit(&x).unwrap();
+let training = params.view().apply(&x);
+let x_valid = array![[2.0, 1.0], [0.0, 3.0]];
+let validation = params.view().apply(&x_valid);
+```
+
+Fitting returns owned vectors without retaining the fitting data. `.view()`
+borrows those vectors without allocation, and `.apply(data)` consumes the view
+to construct a lazy operator. The operator retains the borrowed slices and the
+supplied data handle. It checks the column count and performs no fitting or
+parameter copies. A reference and a backend matrix view both borrow data without
+copying it.
+
+Use `params.apply(data)` to move owned parameters into an operator. Use
+`recipe.fit_apply(data)` to fit and wrap in one call. Both forms let a function
+return an operator owning its parameters without borrowing local fitted values.
+The data handle can still borrow an input matrix.
+
+The parameter types default to `Vec<F>` storage. Their view aliases are
+`ColumnNormalizationParamsView<'a, F>` and `RowNormalizationParamsView<'a, F>`,
+with `&'a [F]` storage. Both representations share each axis's capabilities.
+Row parameters use `.apply_frozen(data)` on owned values or views to emphasize
+that they describe particular rows. Fit new samples independently, even when
+their row count matches the training data:
+
+```rust
+let row_recipe = RowNormalization::standardize();
+let row_params = row_recipe.fit(&x).unwrap();
+let frozen = row_params.view().apply_frozen(&x);
+let new_rows = row_recipe.fit_apply(&x_valid).unwrap();
+```
+
+Parameters retained by an existing lazy or eager operator can also be borrowed
+for new observations:
 
 ```rust
 let x_new = array![[2.0, 1.0], [0.0, 3.0]];
-let prediction = LazyMatrix::from_parts(
-    x_new.view(),
-    eager.normalization().clone(),
-);
+let prediction = eager.normalization().view().apply(&x_new);
 let y_new = prediction.matvec(&array![1.0, -1.0]).unwrap();
 ```
 

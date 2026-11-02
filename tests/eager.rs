@@ -140,6 +140,51 @@ fn consuming_conversion_reuses_dense_storage() {
 }
 
 #[test]
+fn consuming_conversion_retains_borrowed_parameter_storage() {
+    let params =
+        ColumnNormalizationParams::from_parts(2, Some(vec![2.0, 4.0]), Some(vec![2.0, -2.0]));
+    let source = source();
+    let data_ptr = source.values.as_ptr();
+    let center_ptr = params.centers().unwrap().as_ptr();
+    let eager = params.view().apply(source).into_eager();
+    assert_eq!(eager.data().values.as_ptr(), data_ptr);
+    assert_eq!(
+        eager.normalization().centers().unwrap().as_ptr(),
+        center_ptr
+    );
+    assert_eq!(eager.matvec(&vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
+    let (_, view) = eager.into_parts();
+    assert_eq!(view.into_parts().0.unwrap().as_ptr(), center_ptr);
+}
+
+#[test]
+fn materialization_owns_metadata_independently_of_borrowed_parameters() {
+    let copied = {
+        let params =
+            ColumnNormalizationParams::from_parts(2, Some(vec![2.0, 4.0]), Some(vec![2.0, -2.0]));
+        let lazy = params.view().apply(source());
+        let eager: EagerMatrix<Dense> = lazy.to_eager().unwrap();
+        assert_ne!(
+            eager.normalization().centers().unwrap().as_ptr(),
+            params.centers().unwrap().as_ptr()
+        );
+        eager
+    };
+    assert_eq!(copied.matvec(&vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
+    let mut destination = Dense::zeros(2, 2);
+    let copied_into = {
+        let params =
+            ColumnNormalizationParams::from_parts(2, Some(vec![2.0, 4.0]), Some(vec![2.0, -2.0]));
+        params
+            .view()
+            .apply(source())
+            .to_eager_into(&mut destination)
+            .unwrap()
+    };
+    assert_eq!(copied_into.matvec(&vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
+}
+
+#[test]
 fn reusable_output_provides_a_working_borrowed_operator() {
     let lazy = LazyMatrix::from_column_parts(source(), None, Some(vec![2.0, -2.0]));
     let mut destination = Dense::zeros(2, 2);

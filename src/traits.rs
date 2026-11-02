@@ -76,9 +76,10 @@ pub(crate) use operator::scale_output;
 pub(crate) use operator::{mat_transpose_vec_normalized_into, matvec_normalized_into};
 
 pub use crate::normalization::{
-    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationStats,
-    NormalizationParams, NormalizationRecipe, QuantileRange, RowNormalization,
-    RowNormalizationParams, RowNormalizationStats, Scaling,
+    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
+    ColumnNormalizationStats, NormalizationParams, NormalizationRecipe, QuantileRange,
+    RowNormalization, RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats,
+    Scaling,
 };
 pub use blocks::{DenseBlock, ReadBlock};
 pub use columns::{Columns, LogicalColumn, RawColumn, RawColumns, SparseColumns};

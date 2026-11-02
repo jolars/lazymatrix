@@ -56,7 +56,9 @@ use crate::{
 /// ```
 #[derive(Debug)]
 pub struct Submatrix<'a, M, F = f64> {
-    parent: &'a LazyMatrix<M, ColumnNormalizationParams<F>>,
+    data: &'a M,
+    centers: Option<&'a [F]>,
+    scales: Option<&'a [F]>,
     rows: Range<usize>,
     columns: Range<usize>,
 }
@@ -64,7 +66,9 @@ pub struct Submatrix<'a, M, F = f64> {
 impl<M, F> Clone for Submatrix<'_, M, F> {
     fn clone(&self) -> Self {
         Self {
-            parent: self.parent,
+            data: self.data,
+            centers: self.centers,
+            scales: self.scales,
             rows: self.rows.clone(),
             columns: self.columns.clone(),
         }
@@ -86,7 +90,7 @@ pub(crate) fn validate_ranges(
     );
 }
 
-impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
+impl<M: MatrixShape, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalizationParams<F, S>> {
     /// Borrow a rectangle of this normalized matrix without refitting parameters.
     ///
     /// Empty ranges are allowed. Construction reads no entries and allocates
@@ -98,7 +102,9 @@ impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
     pub fn submatrix(&self, rows: Range<usize>, columns: Range<usize>) -> Submatrix<'_, M, F> {
         validate_ranges(self, &rows, &columns);
         Submatrix {
-            parent: self,
+            data: self.data(),
+            centers: self.normalization().centers(),
+            scales: self.normalization().scales(),
             rows,
             columns,
         }
@@ -116,17 +122,11 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
     }
     /// Borrow the selected columns' original centers.
     pub fn centers(&self) -> Option<&'a [F]> {
-        self.parent
-            .normalization()
-            .centers()
-            .map(|v| &v[self.columns.clone()])
+        self.centers.map(|v| &v[self.columns.clone()])
     }
     /// Borrow the selected columns' original scales.
     pub fn scales(&self) -> Option<&'a [F]> {
-        self.parent
-            .normalization()
-            .scales()
-            .map(|v| &v[self.columns.clone()])
+        self.scales.map(|v| &v[self.columns.clone()])
     }
     /// Select a rectangle using coordinates relative to this view.
     ///
@@ -135,7 +135,9 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
     pub fn submatrix(&self, rows: Range<usize>, columns: Range<usize>) -> Self {
         validate_ranges(self, &rows, &columns);
         Self {
-            parent: self.parent,
+            data: self.data,
+            centers: self.centers,
+            scales: self.scales,
             rows: self.rows.start + rows.start..self.rows.start + rows.end,
             columns: self.columns.start + columns.start..self.columns.start + columns.end,
         }
@@ -154,7 +156,7 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
         assert!(j < self.ncols(), "column index out of bounds");
         LazyColumn::new(
             FilteredRawColumn {
-                raw: self.parent.data().raw_column(self.columns.start + j),
+                raw: self.data.raw_column(self.columns.start + j),
                 rows: self.rows.clone(),
             },
             self.centers().map_or_else(F::zero, |c| c[j]),
@@ -170,10 +172,10 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
         M: SparseColumns<F>,
     {
         assert!(j < self.ncols(), "column index out of bounds");
-        let (indices, values) = self.parent.data().sparse_column(self.columns.start + j);
+        let (indices, values) = self.data.sparse_column(self.columns.start + j);
         LazyColumn::new(
             FilteredRawColumn {
-                raw: SparseColumnRef::new(indices, values, self.parent.nrows()),
+                raw: SparseColumnRef::new(indices, values, self.data.nrows()),
                 rows: self.rows.clone(),
             },
             self.centers().map_or_else(F::zero, |c| c[j]),
@@ -192,7 +194,7 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
         M: SparseRows<F>,
     {
         assert!(i < self.nrows(), "row index out of bounds");
-        let (indices, values) = self.parent.data().sparse_row(self.rows.start + i);
+        let (indices, values) = self.data.sparse_row(self.rows.start + i);
         SubmatrixRow {
             indices,
             values,
@@ -230,7 +232,7 @@ impl<M: SubmatrixKernel<F>, F: Scalar> WeightedColumnSumsInto<F> for Submatrix<'
         W: VectorView<F> + ?Sized,
         O: VectorViewMut<F> + ?Sized,
     {
-        self.parent.data().submatrix_weighted_column_sums_into(
+        self.data.submatrix_weighted_column_sums_into(
             self.rows.clone(),
             self.columns.clone(),
             self.centers(),
@@ -247,7 +249,7 @@ impl<M: SubmatrixKernel<F>, F: Scalar> WeightedGramInto<F> for Submatrix<'_, M, 
         W: VectorView<F> + ?Sized,
         O: MatrixWrite<F> + ?Sized,
     {
-        self.parent.data().submatrix_weighted_gram_into(
+        self.data.submatrix_weighted_gram_into(
             self.rows.clone(),
             self.columns.clone(),
             self.centers(),
@@ -276,7 +278,7 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
     ) -> Result<EagerMatrix<D, ColumnNormalizationParams<F>>, M::Error> {
         crate::materialize::validate_allocation::<F>(self.nrows(), self.ncols());
         let mut data = D::zeros(self.nrows(), self.ncols());
-        self.parent.data().materialize_submatrix_into(
+        self.data.materialize_submatrix_into(
             self.rows.clone(),
             self.columns.clone(),
             self.centers(),
@@ -298,7 +300,7 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
         out: &'b mut D,
     ) -> Result<EagerMatrix<&'b mut D, ColumnNormalizationParams<F>>, M::Error> {
         crate::materialize::validate_output(self, out, self.centers(), self.scales());
-        self.parent.data().materialize_submatrix_into(
+        self.data.materialize_submatrix_into(
             self.rows.clone(),
             self.columns.clone(),
             self.centers(),
@@ -359,7 +361,7 @@ macro_rules! products {
                     crate::traits::scale_output(beta, out);
                     return Ok(());
                 }
-                self.parent.data().$kernel(
+                self.data.$kernel(
                     self.rows.clone(),
                     self.columns.clone(),
                     self.centers(),

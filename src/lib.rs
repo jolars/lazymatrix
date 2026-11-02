@@ -41,8 +41,18 @@
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
-//! without retaining the input data. Apply them with [`LazyMatrix::from_parts`];
-//! [`LazyMatrix::new`] uses the same fitting path and wraps the data in one call.
+//! without retaining the input data. Use `params.view().apply(data)` to share
+//! column parameters, or `params.apply(data)` to move them into a lazy operator.
+//! Row parameters use `apply_frozen(data)` to reapply values for particular rows.
+//! Both recipes provide `fit_apply(data)` to fit and wrap in one call, using the
+//! same fitting path as [`LazyMatrix::new`]. Application performs no fitting or
+//! parameter copies and stores the supplied owned or borrowed data handle.
+//!
+//! [`ColumnNormalizationParamsView`] and [`RowNormalizationParamsView`] borrow
+//! the fitted vectors as slices. They share the owned forms' operator
+//! capabilities and must not outlive their source parameters. A consuming
+//! application of owned parameters can return an operator without borrowing
+//! temporary fitted values.
 //!
 //! The fitted parameter type selects the axis and scalar:
 //! `LazyMatrix<M, ColumnNormalizationParams<F>>` or
@@ -556,9 +566,10 @@ pub use indexed_rows::{IndexedRawColumn, IndexedRows};
 pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
-    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationStats,
-    NormalizationParams, NormalizationRecipe, QuantileRange, RowNormalization,
-    RowNormalizationParams, RowNormalizationStats, Scaling,
+    Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
+    ColumnNormalizationStats, NormalizationParams, NormalizationRecipe, QuantileRange,
+    RowNormalization, RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats,
+    Scaling,
 };
 pub use row::LazyRow;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};

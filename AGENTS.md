@@ -51,7 +51,9 @@ eager conversion may materialize dense storage. Eager operators must not apply
 their retained fitted parameters again. Materialization must use bounded
 workspace rather than a second full design matrix.
 
-- Store centers and scales as `Vec<F>`.
+- Store owned centers and scales as `Vec<F>`; parameter views borrow slices.
+  Application consumes owned parameters or explicit `.view()` values without
+  fitting or copying. Row application uses the explicit `.apply_frozen()` name.
 - Replace only exact computed zero scales with one. Explicit construction must
   panic on positive and negative zero scales, while preserving negative scales and
   IEEE nonfinite values.

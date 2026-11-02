@@ -1,11 +1,12 @@
-//! Public fitting works without a backend dependency or retained input storage.
+//! Fitting and application work for external consumers without backend dependencies.
 
 use std::{cell::Cell, convert::Infallible};
 
 use lazymatrix::{
-    ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationStats, ColumnStats,
-    LazyMatrix, MatrixErrorType, MatrixRead, MatrixShape, NormalizationParams, NormalizationRecipe,
-    QuantileRange, RowNormalization, RowNormalizationParams, Scalar,
+    ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
+    ColumnNormalizationStats, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto,
+    MatrixErrorType, MatrixRead, MatrixShape, NormalizationParams, NormalizationRecipe,
+    QuantileRange, RowNormalization, RowNormalizationParams, RowNormalizationParamsView, Scalar,
 };
 
 struct Statistics<F> {
@@ -165,4 +166,243 @@ fn fitting_infers_f32_and_owns_parameters() {
 #[test]
 fn fitting_infers_f64_and_owns_parameters() {
     check_fitting::<f64>();
+}
+
+fn borrowed_columns<'a, M: MatrixShape, F: Scalar>(
+    params: &'a ColumnNormalizationParams<F>,
+    data: M,
+) -> LazyMatrix<M, ColumnNormalizationParamsView<'a, F>> {
+    params.view().apply(data)
+}
+
+fn borrowed_rows<'a, M: MatrixShape, F: Scalar>(
+    params: &'a RowNormalizationParams<F>,
+    data: M,
+) -> LazyMatrix<M, RowNormalizationParamsView<'a, F>> {
+    params.view().apply_frozen(data)
+}
+
+fn owned_columns<M: MatrixShape + ColumnStats<F>, F: Scalar>(
+    recipe: ColumnNormalization,
+    data: M,
+) -> Result<LazyMatrix<M, ColumnNormalizationParams<F>>, M::Error> {
+    recipe.fit_apply(data)
+}
+
+fn owned_rows<M: MatrixRead<F> + MatrixErrorType, F: Scalar>(
+    recipe: RowNormalization,
+    data: M,
+) -> Result<LazyMatrix<M, RowNormalizationParams<F>>, M::Error> {
+    recipe.fit_apply(data)
+}
+
+fn check_application<F: Scalar>() {
+    let value = |v| F::from_f64(v).unwrap();
+    let source = Statistics {
+        centers: vec![value(1.0), value(2.0)],
+        scales: vec![value(-2.0), value(3.0)],
+        calls: Cell::new(0),
+    };
+    let params = fit_recipe(&source, ColumnNormalization::standardize()).unwrap();
+    let centers = params.centers().unwrap().as_ptr();
+    let scales = params.scales().unwrap().as_ptr();
+    let first = borrowed_columns(&params, &source);
+    let second = params.view().apply(Shape(7, 2));
+    let (raw, view) = first.into_parts();
+    let rebuilt = LazyMatrix::from_parts(raw, view);
+    for view in [rebuilt.normalization(), second.normalization()] {
+        assert_eq!(view.centers().unwrap().as_ptr(), centers);
+        assert_eq!(view.scales().unwrap().as_ptr(), scales);
+        assert_eq!(view.ncols(), 2);
+    }
+    let (c, s) = view.into_parts();
+    assert_eq!(c.unwrap().as_ptr(), centers);
+    assert_eq!(s.unwrap().as_ptr(), scales);
+    assert_eq!(source.calls.get(), 1);
+    let moved = params.apply(&source);
+    assert_eq!(moved.normalization().centers().unwrap().as_ptr(), centers);
+    assert_eq!(moved.normalization().scales().unwrap().as_ptr(), scales);
+    let fitted = owned_columns(ColumnNormalization::standardize(), source).unwrap();
+    assert_eq!(fitted.data().calls.get(), 2);
+
+    let mut source = Dense {
+        values: [[value(1.0), value(3.0)], [value(10.0), value(14.0)]],
+        reads: Cell::new(0),
+    };
+    let params = fit_recipe(&source, RowNormalization::standardize()).unwrap();
+    let reads = source.reads.get();
+    let centers = params.centers().unwrap().as_ptr();
+    let scales = params.scales().unwrap().as_ptr();
+    let first = borrowed_rows(&params, &source);
+    let second = params.view().apply_frozen(Shape(2, 7));
+    assert_eq!(first.normalization().centers().unwrap().as_ptr(), centers);
+    assert_eq!(second.normalization().scales().unwrap().as_ptr(), scales);
+    assert_eq!(source.reads.get(), reads);
+    let mut forward = vec![F::nan(); 2];
+    let mut transpose = vec![F::nan(); 2];
+    first
+        .matvec_into(&vec![F::one(), value(2.0)], &mut forward)
+        .unwrap();
+    first
+        .mat_transpose_vec_into(&vec![F::one(), value(2.0)], &mut transpose)
+        .unwrap();
+    assert_eq!(forward, vec![F::one(); 2]);
+    assert_eq!(transpose, vec![value(-3.0), value(3.0)]);
+    let after_products = source.reads.get();
+    let (_, view) = first.into_parts();
+    let (c, s) = view.into_parts();
+    assert_eq!(c.unwrap().as_ptr(), centers);
+    assert_eq!(s.unwrap().as_ptr(), scales);
+    assert_eq!(source.reads.get(), after_products);
+    let moved = params.apply_frozen(&mut source);
+    assert_eq!(moved.normalization().centers().unwrap().as_ptr(), centers);
+    assert_eq!(moved.normalization().scales().unwrap().as_ptr(), scales);
+    assert_eq!(moved.data().reads.get(), after_products);
+    let fitted = owned_rows(RowNormalization::standardize(), source).unwrap();
+    assert_eq!(fitted.data().reads.get(), after_products + reads);
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn application_infers_f32_and_shares_or_moves_vectors() {
+    check_application::<f32>();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn application_infers_f64_and_shares_or_moves_vectors() {
+    check_application::<f64>();
+}
+
+struct Shape(usize, usize);
+
+impl MatrixShape for Shape {
+    fn nrows(&self) -> usize {
+        self.0
+    }
+    fn ncols(&self) -> usize {
+        self.1
+    }
+}
+
+#[test]
+fn application_checks_the_fitted_axis_without_reading_data() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    for n in [0, 2] {
+        for active in [false, true] {
+            let centers = active.then(|| vec![-0.0; n]);
+            let scales = active.then(|| vec![-2.0; n]);
+            let columns =
+                ColumnNormalizationParams::<f64>::from_parts(n, centers.clone(), scales.clone());
+            let rows = RowNormalizationParams::<f64>::from_parts(n, centers, scales);
+            let column_view = columns.view();
+            let row_view = rows.view();
+            assert_eq!(column_view.apply(Shape(7, n)).nrows(), 7);
+            assert_eq!(row_view.apply_frozen(Shape(n, 7)).ncols(), 7);
+            assert!(catch_unwind(AssertUnwindSafe(|| column_view.apply(Shape(n, n + 1)))).is_err());
+            assert!(
+                catch_unwind(AssertUnwindSafe(|| row_view.apply_frozen(Shape(n + 1, n)))).is_err()
+            );
+            assert!(catch_unwind(AssertUnwindSafe(|| columns.apply(Shape(n, n + 1)))).is_err());
+            assert!(catch_unwind(AssertUnwindSafe(|| rows.apply_frozen(Shape(n + 1, n)))).is_err());
+        }
+    }
+}
+
+#[test]
+fn views_preserve_explicit_ieee_values() {
+    let centers = vec![-0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
+    let scales = vec![-2.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN];
+    let columns =
+        ColumnNormalizationParams::from_parts(4, Some(centers.clone()), Some(scales.clone()));
+    let rows = RowNormalizationParams::from_parts(4, Some(centers.clone()), Some(scales.clone()));
+    let c = columns.view().apply(Shape(3, 4));
+    let r = rows.view().apply_frozen(Shape(4, 3));
+    for (actual, expected) in [
+        (c.normalization().centers(), &centers),
+        (c.normalization().scales(), &scales),
+        (r.normalization().centers(), &centers),
+        (r.normalization().scales(), &scales),
+    ] {
+        assert_eq!(
+            actual
+                .unwrap()
+                .iter()
+                .map(|v| v.to_bits())
+                .collect::<Vec<_>>(),
+            expected.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ReadError;
+
+impl std::fmt::Display for ReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("injected read failure")
+    }
+}
+impl std::error::Error for ReadError {}
+
+#[derive(Debug)]
+struct Failing;
+
+impl MatrixShape for Failing {
+    fn nrows(&self) -> usize {
+        2
+    }
+    fn ncols(&self) -> usize {
+        2
+    }
+}
+impl MatrixErrorType for Failing {
+    type Error = ReadError;
+}
+impl<F: Scalar> ColumnStats<F> for Failing {
+    fn normalization_stats(
+        &self,
+        _: ColumnNormalization,
+    ) -> Result<ColumnNormalizationStats<F>, ReadError> {
+        Err(ReadError)
+    }
+    unused_statistics!(
+        col_medians, col_quantile_ranges(range: QuantileRange), col_means,
+        col_sds(df: usize), col_mins, col_ranges, col_maxabs, col_l1, col_l2,
+        col_l1_centered(centers: &[F]), col_l2_centered(centers: &[F]),
+        col_maxabs_centered(centers: &[F]),
+    );
+}
+impl MatVecInto<Vec<f64>> for Failing {
+    fn matvec_into(&self, _: &Vec<f64>, out: &mut Vec<f64>) -> Result<(), ReadError> {
+        out[0] = 42.0;
+        Err(ReadError)
+    }
+}
+impl MatTransposeVecInto<Vec<f64>> for Failing {
+    fn mat_transpose_vec_into(&self, _: &Vec<f64>, out: &mut Vec<f64>) -> Result<(), ReadError> {
+        out[0] = 42.0;
+        Err(ReadError)
+    }
+}
+
+#[test]
+fn fitting_and_borrowed_products_preserve_backend_errors() {
+    let recipe = ColumnNormalization::standardize();
+    let fitted: Result<ColumnNormalizationParams<f32>, _> = recipe.fit(&Failing);
+    assert_eq!(fitted.unwrap_err(), ReadError);
+    let fitted: Result<LazyMatrix<_, ColumnNormalizationParams<f64>>, _> =
+        recipe.fit_apply(Failing);
+    assert_eq!(fitted.unwrap_err(), ReadError);
+    let params = ColumnNormalizationParams::from_parts(2, Some(vec![3.0; 2]), Some(vec![2.0; 2]));
+    let lazy = params.view().apply(Failing);
+    let mut out = vec![99.0; 2];
+    assert_eq!(lazy.matvec_into(&vec![1.0; 2], &mut out), Err(ReadError));
+    assert_eq!(out, vec![42.0, 99.0]);
+    out.fill(99.0);
+    assert_eq!(
+        lazy.mat_transpose_vec_into(&vec![1.0; 2], &mut out),
+        Err(ReadError)
+    );
+    assert_eq!(out, vec![42.0, 99.0]);
 }

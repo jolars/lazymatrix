@@ -355,8 +355,8 @@ where
     Ok(())
 }
 
-impl<M: MatMatInto<F>, F: Scalar> MatMatInto<F>
-    for LazyMatrix<M, crate::ColumnNormalizationParams<F>>
+impl<M: MatMatInto<F>, F: Scalar, S: AsRef<[F]>> MatMatInto<F>
+    for LazyMatrix<M, crate::ColumnNormalizationParams<F, S>>
 {
     fn matmat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
     where
@@ -371,8 +371,8 @@ impl<M: MatMatInto<F>, F: Scalar> MatMatInto<F>
         )
     }
 }
-impl<M: MatTransposeMatInto<F>, F: Scalar> MatTransposeMatInto<F>
-    for LazyMatrix<M, crate::ColumnNormalizationParams<F>>
+impl<M: MatTransposeMatInto<F>, F: Scalar, S: AsRef<[F]>> MatTransposeMatInto<F>
+    for LazyMatrix<M, crate::ColumnNormalizationParams<F, S>>
 {
     fn mat_transpose_mat_into<R, O>(&self, rhs: &R, out: &mut O) -> Result<(), Self::Error>
     where

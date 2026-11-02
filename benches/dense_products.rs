@@ -1,4 +1,4 @@
-//! Isolate traversal and division costs without changing the public product API.
+//! Compare traversal, division, and owned or borrowed normalization parameters.
 
 use std::hint::black_box;
 
@@ -177,6 +177,7 @@ fn bench_matrix<M, V>(
     ] {
         let lazy =
             LazyMatrix::from_column_parts(matrix, Some(centers.clone()), scales.map(<[_]>::to_vec));
+        let shared = lazy.normalization().view().apply(matrix);
         for transpose in [false, true] {
             let direction = if transpose { "transpose" } else { "forward" };
             let name =
@@ -210,6 +211,7 @@ fn bench_matrix<M, V>(
                 "terms128",
                 "moved_scaling",
                 "operator",
+                "operator_view",
             ] {
                 let run = |out: &mut V| match method {
                     "terms128" => terms(
@@ -226,6 +228,10 @@ fn bench_matrix<M, V>(
                         lazy.mat_transpose_vec_into(black_box(&x), out).unwrap()
                     }
                     "operator" => lazy.matvec_into(black_box(&x), out).unwrap(),
+                    "operator_view" if transpose => {
+                        shared.mat_transpose_vec_into(black_box(&x), out).unwrap()
+                    }
+                    "operator_view" => shared.matvec_into(black_box(&x), out).unwrap(),
                     "panel32" => candidate::<32, _>(
                         rows,
                         columns,

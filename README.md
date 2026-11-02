@@ -55,18 +55,25 @@ The operator borrows the original matrix and keeps the fitted centers and
 scales. Use `ColumnNormalization::min_max()` for min-max scaling to `[0, 1]` on
 fitted data or `ColumnNormalization::robust()` for median centering and
 interquartile-range scaling. `ColumnNormalization::new(center, scale)` accepts
-custom combinations, with centering and scaling independently optional. Reuse
-fitted parameters on new observations with `LazyMatrix::from_parts`.
+custom combinations, with centering and scaling independently optional.
 
 Fit parameters independently of a matrix wrapper with `.fit(&data)`. The
 parameters own their centers and scales and do not retain the fitting data:
 
 ```rust
 let params = ColumnNormalization::standardize().fit(&x)?;
-let training = LazyMatrix::from_parts(x.view(), params.clone());
+let training = params.view().apply(&x);
 let validation_data = array![[3.0, 2.0]];
-let validation = LazyMatrix::from_parts(validation_data.view(), params);
+let validation = params.view().apply(&validation_data);
 ```
+
+Both operators borrow the same fitted vectors without copying them. Application
+checks the column count and uses the supplied values unchanged, without fitting.
+Call `params.apply(data)` to move owned parameters into an operator, or
+`recipe.fit_apply(data)?` to fit and apply in one call. Each operator stores the
+supplied data handle, which can be an owned matrix, reference, or backend view.
+Borrowed parameters must outlive their operators; owned parameters can leave the
+scope where they were fitted.
 
 Supply explicit vectors with `LazyMatrix::from_column_parts`; the column count
 comes from the matrix:
@@ -90,9 +97,8 @@ let training = LazyMatrix::new(
     IndexedRows::new(x.view(), &training_rows),
     ColumnNormalization::standardize(),
 )?;
-let validation = LazyMatrix::from_parts(
+let validation = training.normalization().view().apply(
     IndexedRows::new(x.view(), &held_out_rows),
-    training.normalization().clone(),
 );
 ```
 
@@ -140,10 +146,11 @@ Row normalization offers the same centering and scaling choices and common
 recipes as column normalization. Each parameter vector has one entry per row.
 Norm scaling leaves zero rows unchanged, and new samples need independently
 fitted row parameters. Use `LazyMatrix::from_row_parts(data, centers, scales)`
-for explicit vectors; the row count comes from the matrix. Use
-`LazyMatrix::from_parts(data, params)` to apply previously fitted parameters for
-the same rows. To fit row parameters separately, call `spec.fit(&data)`; the
-returned parameters own their vectors and do not retain the input matrix.
+for explicit vectors; the row count comes from the matrix. To fit row parameters
+separately, call `spec.fit(&data)`. Reapply them unchanged to the same rows with
+`params.view().apply_frozen(data)`, or move their vectors with
+`params.apply_frozen(data)`. Use `spec.fit_apply(data)?` to fit and wrap each new
+set of rows independently.
 
 The parameter type identifies the axis and scalar:
 `LazyMatrix<M, ColumnNormalizationParams<f64>>` or
@@ -153,6 +160,11 @@ and scales through `matrix.normalization()`. `matrix.into_parts()` returns the
 raw data and the fitted parameter object without copying, and
 `LazyMatrix::from_parts(data, params)` rebuilds the lazy operator. `EagerMatrix`
 uses the same typed metadata API for its already normalized data.
+
+Both parameter types have a storage parameter that defaults to `Vec<F>`.
+Their `.view()` methods return `ColumnNormalizationParamsView<'a, F>` or
+`RowNormalizationParamsView<'a, F>`, using borrowed slices. Owned parameters and
+views share each axis's operator capabilities.
 
 The initial row operator supports allocating and reusable forward and transpose
 vector products across every dense backend release, including strided views.

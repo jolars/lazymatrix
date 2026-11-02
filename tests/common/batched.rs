@@ -129,6 +129,8 @@ where
             lazy.normalization().scales(),
         );
         check_batched(&lazy, &normalized);
+        let shared = lazy.normalization().view().apply(&matrix);
+        check_batched(&shared, &normalized);
         let augmented: Vec<Vec<f64>> = normalized
             .iter()
             .map(|row| std::iter::once(1.).chain(row.iter().copied()).collect())

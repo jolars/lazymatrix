@@ -151,7 +151,9 @@ impl<M: MatrixShape, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
         let normalization = ColumnNormalizationParams::from_parts(data.ncols(), centers, scales);
         Self::from_parts(data, normalization)
     }
+}
 
+impl<M: MatrixShape, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalizationParams<F, S>> {
     /// Borrow one lazily normalized column without copying.
     pub fn column(&self, j: usize) -> LazyColumn<M::Column<'_>, F>
     where
@@ -248,7 +250,7 @@ where
     }
 }
 
-impl<M, F> Columns<F> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, F, S: AsRef<[F]>> Columns<F> for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: RawColumns<F>,
@@ -263,7 +265,7 @@ where
     }
 }
 
-impl<M, V, F> MatVec<V> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, V, F, S: AsRef<[F]>> MatVec<V> for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: MatVec<V>,
@@ -276,7 +278,7 @@ where
     }
 }
 
-impl<M, X, Y, F> MatVecInto<X, Y> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, X, Y, F, S: AsRef<[F]>> MatVecInto<X, Y> for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: MatVecInto<X, Y>,
@@ -294,7 +296,7 @@ where
     }
 }
 
-impl<M, V, F> MatTransposeVec<V> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, V, F, S: AsRef<[F]>> MatTransposeVec<V> for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: MatTransposeVec<V>,
@@ -310,7 +312,8 @@ where
     }
 }
 
-impl<M, X, Y, F> MatTransposeVecInto<X, Y> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, X, Y, F, S: AsRef<[F]>> MatTransposeVecInto<X, Y>
+    for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: MatTransposeVecInto<X, Y>,
@@ -328,7 +331,7 @@ where
     }
 }
 
-impl<M, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     M: MatrixShape,
 {
@@ -374,17 +377,12 @@ where
         ) {
             return result;
         }
-        if let Some(scales) = self
-            .normalization
-            .scales
-            .as_ref()
-            .filter(|_| alpha != F::zero())
-        {
+        if let Some(scales) = self.normalization.scales().filter(|_| alpha != F::zero()) {
             for (j, &scale) in scales.iter().enumerate() {
                 scratch.set(j, x.get(j) / scale);
             }
             self.data.matvec_scaled_into(alpha, scratch, beta, out)?;
-            if let Some(centers) = &self.normalization.centers {
+            if let Some(centers) = self.normalization.centers() {
                 let correction: F = (0..self.ncols()).map(|j| scratch.get(j) * centers[j]).sum();
                 for i in 0..out.len() {
                     out.set(i, out.get(i) - alpha * correction);
@@ -392,12 +390,7 @@ where
             }
         } else {
             self.data.matvec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self
-                .normalization
-                .centers
-                .as_ref()
-                .filter(|_| alpha != F::zero())
-            {
+            if let Some(centers) = self.normalization.centers().filter(|_| alpha != F::zero()) {
                 let correction: F = (0..self.ncols()).map(|j| x.get(j) * centers[j]).sum();
                 for i in 0..out.len() {
                     out.set(i, out.get(i) - alpha * correction);
@@ -450,25 +443,16 @@ where
         ) {
             return result;
         }
-        if let Some(scales) = self
-            .normalization
-            .scales
-            .as_ref()
-            .filter(|_| alpha != F::zero())
-        {
+        if let Some(scales) = self.normalization.scales().filter(|_| alpha != F::zero()) {
             self.data
                 .mat_transpose_vec_scaled_into(F::one(), x, F::zero(), scratch)?;
-            let total = if self.normalization.centers.is_some() {
+            let total = if self.normalization.centers().is_some() {
                 x.sum()
             } else {
                 F::zero()
             };
             for (j, &scale) in scales.iter().enumerate() {
-                let center = self
-                    .normalization
-                    .centers
-                    .as_ref()
-                    .map_or_else(F::zero, |c| c[j]);
+                let center = self.normalization.centers().map_or_else(F::zero, |c| c[j]);
                 let product = alpha * ((scratch.get(j) - center * total) / scale);
                 out.set(
                     j,
@@ -482,12 +466,7 @@ where
         } else {
             self.data
                 .mat_transpose_vec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self
-                .normalization
-                .centers
-                .as_ref()
-                .filter(|_| alpha != F::zero())
-            {
+            if let Some(centers) = self.normalization.centers().filter(|_| alpha != F::zero()) {
                 let total = x.sum();
                 for (j, &center) in centers.iter().enumerate() {
                     out.set(j, out.get(j) - alpha * center * total);
@@ -498,7 +477,8 @@ where
     }
 }
 
-impl<M, X, Y, F> MatVecScaledInto<X, Y, F> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, X, Y, F, S: AsRef<[F]>> MatVecScaledInto<X, Y, F>
+    for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     X: VectorOwned<F>,
@@ -526,17 +506,12 @@ where
         ) {
             return result;
         }
-        if self.normalization.scales.is_some() && alpha != F::zero() {
+        if self.normalization.scales().is_some() && alpha != F::zero() {
             let mut scratch = X::owned_from_fn(self.ncols(), |_| F::zero());
             self.matvec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
         } else {
             self.data.matvec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self
-                .normalization
-                .centers
-                .as_ref()
-                .filter(|_| alpha != F::zero())
-            {
+            if let Some(centers) = self.normalization.centers().filter(|_| alpha != F::zero()) {
                 let correction: F = (0..self.ncols()).map(|j| x.get(j) * centers[j]).sum();
                 for i in 0..out.len() {
                     out.set(i, out.get(i) - alpha * correction);
@@ -547,7 +522,8 @@ where
     }
 }
 
-impl<M, X, Y, F> MatTransposeVecScaledInto<X, Y, F> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, X, Y, F, S: AsRef<[F]>> MatTransposeVecScaledInto<X, Y, F>
+    for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     X: VectorView<F>,
@@ -581,18 +557,13 @@ where
         ) {
             return result;
         }
-        if self.normalization.scales.is_some() && alpha != F::zero() {
+        if self.normalization.scales().is_some() && alpha != F::zero() {
             let mut scratch = Y::owned_from_fn(self.ncols(), |_| F::zero());
             self.mat_transpose_vec_scaled_with_workspace(alpha, x, beta, out, &mut scratch)
         } else {
             self.data
                 .mat_transpose_vec_scaled_into(alpha, x, beta, out)?;
-            if let Some(centers) = self
-                .normalization
-                .centers
-                .as_ref()
-                .filter(|_| alpha != F::zero())
-            {
+            if let Some(centers) = self.normalization.centers().filter(|_| alpha != F::zero()) {
                 let total = x.sum();
                 for (j, &center) in centers.iter().enumerate() {
                     out.set(j, out.get(j) - alpha * center * total);
@@ -607,7 +578,8 @@ impl<M: crate::MatrixErrorType, P> crate::MatrixErrorType for LazyMatrix<M, P> {
     type Error = M::Error;
 }
 
-impl<M, F> crate::WeightedGramInto<F> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, F, S: AsRef<[F]>> crate::WeightedGramInto<F>
+    for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: crate::WeightedGramKernel<F>,
@@ -634,7 +606,8 @@ where
     }
 }
 
-impl<M, F> crate::WeightedColumnSumsInto<F> for LazyMatrix<M, ColumnNormalizationParams<F>>
+impl<M, F, S: AsRef<[F]>> crate::WeightedColumnSumsInto<F>
+    for LazyMatrix<M, ColumnNormalizationParams<F, S>>
 where
     F: Scalar,
     M: crate::WeightedColumnSumsKernel<F>,
@@ -661,11 +634,14 @@ where
     }
 }
 
-impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
+impl<M: crate::MaterializeDense<F>, F: Scalar, S: AsRef<[F]>>
+    LazyMatrix<M, ColumnNormalizationParams<F, S>>
+{
     /// Allocate normalized dense storage in the selected backend.
     ///
     /// Sparse and storage-backed inputs are explicitly materialized. Fitted
-    /// statistics are retained without recomputation. This requires O(nrows *
+    /// metadata is copied into owned vectors, including when this operator
+    /// borrows its parameters. Statistics are not recomputed. This requires O(nrows *
     /// ncols) output storage, plus backend workspace. Allocation size overflow
     /// panics; allocation failures follow the selected backend's behavior.
     ///
@@ -689,7 +665,7 @@ impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, ColumnNormalization
         )?;
         Ok(crate::EagerMatrix::from_normalized(
             data,
-            self.normalization.clone(),
+            self.normalization.copy_owned(),
         ))
     }
 
@@ -733,16 +709,19 @@ impl<M: crate::MaterializeDense<F>, F: Scalar> LazyMatrix<M, ColumnNormalization
         )?;
         Ok(crate::EagerMatrix::from_normalized(
             out,
-            self.normalization.clone(),
+            self.normalization.copy_owned(),
         ))
     }
 }
 
-impl<M: crate::DenseNormalize<F>, F: Scalar> LazyMatrix<M, ColumnNormalizationParams<F>> {
+impl<M: crate::DenseNormalize<F>, F: Scalar, S: AsRef<[F]>>
+    LazyMatrix<M, ColumnNormalizationParams<F, S>>
+{
     /// Consume writable dense data, normalizing it in its existing allocation.
     ///
     /// Mutable views modify their borrowed storage. All statistics have already
     /// been fitted, and no new statistics or full matrix allocation are needed.
+    /// The fitted parameter storage is retained unchanged, including any borrows.
     ///
     /// Borrowed immutable and sparse storage do not support in-place conversion:
     ///
@@ -752,7 +731,7 @@ impl<M: crate::DenseNormalize<F>, F: Scalar> LazyMatrix<M, ColumnNormalizationPa
     ///     let _ = matrix.into_eager();
     /// }
     /// ```
-    pub fn into_eager(mut self) -> crate::EagerMatrix<M, ColumnNormalizationParams<F>> {
+    pub fn into_eager(mut self) -> crate::EagerMatrix<M, ColumnNormalizationParams<F, S>> {
         self.data
             .normalize_in_place(self.normalization.centers(), self.normalization.scales());
         crate::EagerMatrix::from_normalized(self.data, self.normalization)

@@ -81,30 +81,35 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - Use the same fitting paths, validation, and numerical policies as the
     existing constructors.
 
-- [ ] Apply fitted parameters without cloning their vectors.
-  - Add column parameter `.apply(data)` that returns a lazy operator borrowing
-    the parameters. Support several operators sharing the same fitted values:
+- [x] Apply fitted parameters with explicit ownership and borrowed views.
+  - Generalize `ColumnNormalizationParams<F, S = Vec<F>>` and
+    `RowNormalizationParams<F, S = Vec<F>>` over parameter storage. Owned forms
+    keep vectors; `.view()` returns `ColumnNormalizationParamsView<'a, F>` or
+    `RowNormalizationParamsView<'a, F>` with borrowed slices. Keep fields private
+    and construction validated.
+  - Make column `.apply(data)` consume its receiver and retain its storage in
+    the lazy operator. Borrow explicitly to share fitted values without copying:
 
     ```rust
     let params = ColumnNormalization::standardize().fit(&training)?;
-    let train = params.apply(training.view());
-    let valid = params.apply(validation.view());
+    let train = params.view().apply(&training);
+    let valid = params.view().apply(&validation);
     ```
 
-  - Provide owning application through `.into_apply(data)` and a recipe
-    `.fit_apply(data)` convenience. Define return types and lifetimes so that
-    callers can return owning operators without borrowing temporary parameters.
-
-  - Name frozen row application `.apply_frozen(data)`. Row parameters describe
-    particular rows; fit new samples independently, even when row counts match.
-    Make the frozen semantics explicit for owning row application as well.
-
+  - Use `params.apply(data)` to move owned vectors. Add recipe `.fit_apply(data)`
+    to fit and return an operator owning its parameters. Each form stores the
+    supplied data handle, which can be an owned matrix, reference, or backend
+    view. Returning owned parameters must not borrow temporary fitted values.
+  - Name consuming row application `.apply_frozen(data)` on both owned
+    parameters and views. Row parameters describe particular rows; fit new
+    samples independently, even when row counts match.
   - Preserve `from_parts`, `from_column_parts`, and `from_row_parts`.
     Application uses supplied values unchanged, checks dimensions, and performs
-    no fitting. Share kernels between operators with owned and borrowed
-    parameters.
+    no fitting or data reads. Share kernels and existing axis capabilities
+    between owned parameters and borrowed views, including submatrices and
+    column eager conversion.
 
-- [ ] Validate fitting and application signatures with external consumers.
+- [x] Validate fitting and application signatures with external consumers.
   - Check scalar inference for `f32` and `f64`, generic recipes and matrices,
     fallible backend errors, and owned and borrowed data and parameters.
   - Cover shared-parameter reuse, lifetimes, dimension validation, and parity
@@ -158,8 +163,8 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     let recipe = RowNormalization::standardize()
         .then(ColumnNormalization::standardize());
     let fitted = recipe.fit(&training)?;
-    let train = fitted.apply_frozen(training.view());
-    let valid = fitted.for_new_samples(validation.view())?;
+    let train = fitted.view().apply_frozen(training.view());
+    let valid = fitted.view().for_new_samples(validation.view())?;
     ```
 
   - Fit each stage on the logical output of all preceding stages. Reversing the
@@ -181,7 +186,8 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     rows. Use a fallible `.for_new_samples(data)` to fit row stages at the
     correct points while reusing fitted training column stages. Avoid an
     ambiguous plain `.apply()` on mixed pipelines.
-  - Define ownership and lifetimes for both operations, including newly fitted
+  - Follow single-axis ownership: consume owned fitted stages or explicit
+    `.view()` values. Define lifetimes for both operations, including newly fitted
     row values and borrowed training column parameters. Keep all refitting in
     explicit preparation calls; ordinary products only execute fitted stages.
   - Implement only sequences whose intermediate statistics and products have
