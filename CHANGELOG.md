@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+This version introduces row normalization for dense and sparse matrices, along
+with ordered normalization recipes. To support both axes consistently, I have
+reworked the API and taken the opportunity to simplify how matrices store and
+expose fitted parameters. This brings several breaking changes to the Rust API:
+
+- `Normalization`, `NormalizationParams`, and `NormalizationStats` are renamed
+  `ColumnNormalization`, `ColumnNormalizationParams`, and
+  `ColumnNormalizationStats`. The name `NormalizationParams` now denotes a trait
+  shared by fitted column, row, and chain parameters.
+- `LazyMatrix<M, F>` and `EagerMatrix<M, F>` now take a fitted parameter type as
+  their second generic argument. For example, use
+  `LazyMatrix<M, ColumnNormalizationParams<F>>` for column normalization or
+  `LazyMatrix<M, RowNormalizationParams<F>>` for row normalization.
+- `LazyMatrix::from_normalization(data, params)` becomes
+  `LazyMatrix::from_parts(data, params)`. The old
+  `from_parts(data, centers, scales)` becomes `from_column_parts(...)`, with
+  `from_row_parts(...)` available for rows. The `with_centers` and `with_scales`
+  shortcuts are removed.
+- Both matrix wrappers expose fitted centers and scales through
+  `normalization().centers()` and `normalization().scales()` instead of
+  matrix-level accessors.
+- Both wrappers now return `(data, params)` from `into_parts()` instead of
+  `(data, centers, scales)`.
+
+Normalization recipes can now fit parameters separately with `.fit()` or fit and
+wrap data with `.fit_apply()`. Fitted parameters can own their vectors or share
+them through `.view()`, so training and validation operators can reuse column
+normalization without copying parameters or refitting.
+
+Recipes also compose with `.then()`, with each stage fitting the output of its
+predecessors. For new samples, `.for_new_samples()` reuses training column
+parameters and refits row stages, while `.apply_frozen()` reapplies all fitted
+stages unchanged. Chains containing row stages currently require dense storage.
+
 ## [0.9.0](https://github.com/jolars/lazymatrix/compare/v0.8.1...v0.9.0) (2026-10-29)
 
 ### Breaking changes
