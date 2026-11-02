@@ -37,7 +37,12 @@ X_tilde^T u = S^-1(X^T u - c sum(u))
 ```
 
 Row normalization uses `D^-1(X - r1^T)` and currently supports dense fitting
-and vector products only. Select the axis through `ColumnNormalizationParams`
+and vector products only. Ordered recipes compose with `.then()`. Fitted
+`NormalizationChainParams` preserve stage order and retain row recipes for
+`.for_new_samples()`, which refits row stages while reusing training column
+parameters. `.apply_frozen()` reuses every stage unchanged. Mixed chains require
+dense storage; column-only chains also support sparse and chunked storage.
+Select the axis through `ColumnNormalizationParams`
 or `RowNormalizationParams`, and inspect centers and scales through
 `normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`
 from `into_parts()`.

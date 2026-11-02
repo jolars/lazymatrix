@@ -17,6 +17,58 @@ use crate::traits::{
     MatVecScaledInto, MatrixShape, Scalar, VectorView, VectorViewMut,
 };
 
+impl<F, I, IP, IS, DS, Iptr> crate::normalization::pipeline::Source<F>
+    for CsMatBase<F, I, IP, IS, DS, Iptr>
+where
+    F: Scalar,
+    I: SpIndex,
+    Iptr: SpIndex,
+    IP: Deref<Target = [Iptr]>,
+    IS: Deref<Target = [I]>,
+    DS: Deref<Target = [F]>,
+    Self: crate::ColumnStats<F>,
+{
+    fn layout(&self) -> crate::normalization::pipeline::source::Layout {
+        if self.is_csc() {
+            crate::normalization::pipeline::source::Layout::SparseColumns
+        } else {
+            crate::normalization::pipeline::source::Layout::SparseRows
+        }
+    }
+
+    fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
+        crate::normalization::pipeline::sparse(
+            self.rows(),
+            self.cols(),
+            self.is_csc(),
+            |outer, f| {
+                for (i, &value) in self.outer_view(outer).unwrap().iter() {
+                    f(i, value);
+                }
+            },
+            visit,
+        );
+        Ok(())
+    }
+}
+
+macro_rules! pipeline_source {
+    ($wrapper:ident) => {
+        impl<M: crate::normalization::pipeline::Source<F>, F: Scalar>
+            crate::normalization::pipeline::Source<F> for $wrapper<M>
+        {
+            fn layout(&self) -> crate::normalization::pipeline::source::Layout {
+                self.as_inner().layout()
+            }
+            fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
+                self.as_inner().visit(visit)
+            }
+        }
+    };
+}
+pipeline_source!(SprsCsc);
+pipeline_source!(SprsCsr);
+
 macro_rules! batched_products {
     ($trait:ident, $product:ident, $transpose:expr) => {
         impl<F, I, IP, IS, DS, Iptr> crate::$trait<F> for CsMatBase<F, I, IP, IS, DS, Iptr>

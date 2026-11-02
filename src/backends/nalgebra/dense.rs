@@ -14,6 +14,20 @@ use crate::traits::{
     VectorViewMut,
 };
 
+impl<F, R, C, S> crate::normalization::pipeline::Source<F> for Matrix<F, R, C, S>
+where
+    F: Scalar + nalgebra::Scalar,
+    R: Dim,
+    C: Dim,
+    S: RawStorage<F, R, C>,
+    Self: ColumnStats<F> + crate::MatrixErrorType,
+{
+    fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
+        crate::normalization::pipeline::source::dense(self, visit);
+        Ok(())
+    }
+}
+
 impl<F, R, S> VectorView<F> for Matrix<F, R, U1, S>
 where
     F: Scalar + nalgebra::Scalar,

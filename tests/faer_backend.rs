@@ -170,7 +170,7 @@ macro_rules! backend_suite {
                 use faer::sparse::{
                     SparseColMatMut, SparseColMatRef, SymbolicSparseColMat, SymbolicSparseColMatRef,
                 };
-                use lazymatrix::{RawColumns, SparseColumns};
+                use lazymatrix::{MatTransposeVec, MatVec, RawColumns, SparseColumns};
                 let mut rows = vec![99; 20];
                 let mut values = vec![f64::NAN; 20];
                 rows[1..5].copy_from_slice(&[2, 0, 2, 0]);
@@ -189,6 +189,22 @@ macro_rules! backend_suite {
                 let symbolic =
                     SymbolicSparseColMat::new_unsorted_checked(3, 4, offsets, Some(counts), rows);
                 let mut matrix = SparseColMat::new(symbolic, values);
+                let recipe = lazymatrix::ColumnNormalization::robust()
+                    .then(lazymatrix::ColumnNormalization::min_max());
+                let pipeline = lazymatrix::LazyMatrix::new(&matrix, recipe).unwrap();
+                let oracle =
+                    lazymatrix::LazyMatrix::new(Mat::from_fn(3, 4, |i, j| dense[i][j]), recipe)
+                        .unwrap();
+                common::assert_close(
+                    &from_col(&pipeline.matvec(&to_col(&[1.; 4])).unwrap()),
+                    &from_col(&oracle.matvec(&to_col(&[1.; 4])).unwrap()),
+                    1e-12,
+                );
+                common::assert_close(
+                    &from_col(&pipeline.mat_transpose_vec(&to_col(&[1.; 3])).unwrap()),
+                    &from_col(&oracle.mat_transpose_vec(&to_col(&[1.; 3])).unwrap()),
+                    1e-12,
+                );
                 check_csc_view(&matrix, &dense);
                 check_csc_view(&matrix.as_ref(), &dense);
                 check_csc_view(&matrix.rb_mut(), &dense);
@@ -344,6 +360,7 @@ macro_rules! backend_suite {
             #[test]
             fn csr_backend_suite() {
                 common::run_submatrix_suite(build_csr, to_col);
+                common::run_column_pipeline_suite(build_csr, to_col);
                 common::run_backend_suite(build_csr, to_col, from_col);
                 common::run_fused_suite(build_csr, to_col);
                 common::run_materialization_suite(build_csr);
@@ -385,6 +402,24 @@ macro_rules! backend_suite {
                 );
                 let mut matrix =
                     SparseRowMat::new(symbolic, vec![2.0, 0.0, -3.0, 99.0, 99.0, 4.0, 99.0]);
+                let recipe = lazymatrix::ColumnNormalization::robust()
+                    .then(lazymatrix::ColumnNormalization::standardize());
+                let pipeline = lazymatrix::LazyMatrix::new(&matrix, recipe).unwrap();
+                let oracle = lazymatrix::LazyMatrix::new(
+                    Mat::from_fn(3, 2, |i, j| [[0., -1.], [0., 0.], [4., 0.]][i][j]),
+                    recipe,
+                )
+                .unwrap();
+                common::assert_close(
+                    &from_col(&pipeline.matvec(&to_col(&[1.; 2])).unwrap()),
+                    &from_col(&oracle.matvec(&to_col(&[1.; 2])).unwrap()),
+                    1e-12,
+                );
+                common::assert_close(
+                    &from_col(&pipeline.mat_transpose_vec(&to_col(&[1.; 3])).unwrap()),
+                    &from_col(&oracle.mat_transpose_vec(&to_col(&[1.; 3])).unwrap()),
+                    1e-12,
+                );
                 common::batched::check_batched(
                     &matrix,
                     &[vec![0., -1.], vec![0., 0.], vec![4., 0.]],
@@ -583,6 +618,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn row_normalization() {
+                common::run_dense_pipeline_suite(build_dense, to_col);
                 use lazymatrix::{MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto};
                 common::run_row_normalization_suite(build_dense, to_col);
                 common::run_row_normalization_f32_suite(
@@ -644,9 +680,11 @@ macro_rules! backend_suite {
                 common::run_dense_centered_product_suite(build_dense, to_col);
                 common::run_gram_suite(build);
                 common::run_gram_suite(build_dense);
+                common::run_column_pipeline_suite(build, to_col);
                 common::run_backend_suite(build, to_col, from_col);
                 common::run_sparse_columns_suite(build);
                 common::run_logical_columns_suite(build);
+                common::run_column_pipeline_suite(build_dense, to_col);
                 common::run_backend_suite(build_dense, to_col, from_col);
                 common::run_logical_columns_suite(build_dense);
             }

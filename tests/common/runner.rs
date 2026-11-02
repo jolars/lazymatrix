@@ -7,6 +7,11 @@
 #[path = "batched.rs"]
 pub mod batched;
 
+#[path = "pipeline.rs"]
+mod pipeline;
+#[allow(unused_imports)]
+pub use pipeline::{run_column_pipeline_suite, run_dense_pipeline_suite};
+
 use lazymatrix::VectorView;
 use lazymatrix::{
     Centering, ColumnNormalization, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm,
@@ -562,6 +567,7 @@ where
     M: lazymatrix::MatrixRead<f64> + lazymatrix::MatrixErrorType,
     V: lazymatrix::VectorOwned<f64, Owned = V> + lazymatrix::VectorViewMut<f64>,
 {
+    pipeline::check_dense_pipeline_view(matrix, &to_v);
     use lazymatrix::RowNormalization;
     let raw: Vec<Vec<_>> = (0..matrix.nrows())
         .map(|i| (0..matrix.ncols()).map(|j| matrix.get(i, j)).collect())

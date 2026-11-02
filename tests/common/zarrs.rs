@@ -33,6 +33,7 @@ fn zarrs_backend_suite() {
         common::batched::run_batched_suite(|tm| build(tm, chunks));
         common::run_materialization_suite(|tm| build(tm, chunks));
         common::run_fused_suite(|tm| build(tm, chunks), |v| v.to_vec());
+        common::run_column_pipeline_suite(|tm| build(tm, chunks), |v| v.to_vec());
         common::run_backend_suite(|tm| build(tm, chunks), |v| v.to_vec(), |v| v.clone());
     }
 }
@@ -780,6 +781,48 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
                 lazy.mat_transpose_vec(&y).unwrap();
                 assert_scans(&store, &matrix, 1);
             }
+        }
+    }
+}
+
+#[test]
+fn column_pipelines_share_training_values_and_propagate_stage_failures() {
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let recipe = ColumnNormalization::standardize().then(ColumnNormalization::standardize());
+        let fitted = recipe.fit(&matrix).unwrap();
+        assert_scans(&store, &matrix, 4);
+        store.reset();
+        let lazy = fitted.view().for_new_samples(&matrix).unwrap();
+        assert_scans(&store, &matrix, 0);
+        let expected = lazy.matvec(&vec![1.; 3]).unwrap();
+        assert_scans(&store, &matrix, 1);
+        store.reset();
+        let mut output = vec![f64::NAN; 5];
+        store.fail_after.store(2, Ordering::Relaxed);
+        assert!(lazy.matvec_into(&vec![1.; 3], &mut output).is_err());
+        assert_eq!(store.keys.lock().unwrap().len(), 3);
+        store.reset();
+        lazy.matvec_into(&vec![1.; 3], &mut output).unwrap();
+        assert_eq!(output, expected);
+        store.reset();
+        let mut transpose = vec![f64::NAN; 3];
+        store.fail_after.store(2, Ordering::Relaxed);
+        assert!(
+            lazy.mat_transpose_vec_into(&vec![1.; 5], &mut transpose)
+                .is_err()
+        );
+        assert_eq!(store.keys.lock().unwrap().len(), 3);
+        store.reset();
+        lazy.mat_transpose_vec_into(&vec![1.; 5], &mut transpose)
+            .unwrap();
+        assert_scans(&store, &matrix, 1);
+        for fail_after in [0, 7, 13, 19] {
+            store.reset();
+            store.fail_after.store(fail_after, Ordering::Relaxed);
+            let error = recipe.fit(&matrix).unwrap_err();
+            assert!(error.to_string().contains("injected read failure"));
+            assert_eq!(store.keys.lock().unwrap().len(), fail_after + 1);
         }
     }
 }

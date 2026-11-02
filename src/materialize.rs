@@ -24,13 +24,6 @@ pub(crate) fn validate_output<F: Scalar>(
     crate::gram::validate_normalization(source.ncols(), centers, scales);
 }
 
-#[cfg(any(
-    feature = "faer_all",
-    feature = "nalgebra_all",
-    feature = "ndarray_all",
-    feature = "sprs_all",
-    feature = "zarrs_all"
-))]
 pub(crate) fn normalized<F: Scalar>(
     mut value: F,
     column: usize,

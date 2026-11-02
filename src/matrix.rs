@@ -12,7 +12,7 @@ use crate::traits::{
 
 mod row;
 
-/// A matrix presented with lazy row or column normalization.
+/// A matrix presented with lazy row, column, or ordered normalization.
 ///
 /// The underlying matrix `data` is never modified or densified; the centers and
 /// scales are folded into the matrix–vector products on the fly. See the
@@ -22,6 +22,9 @@ mod row;
 /// retains the backend's existing operator capabilities. Row fitting and vector
 /// products require [`crate::MatrixRead`] and currently support dense storage
 /// only. See [`crate::RowNormalization`] for the row capability limits.
+/// Ordered recipes use [`crate::NormalizationChainParams`]. Mixed chains share
+/// the dense row capability limits; column-only chains also support sparse and
+/// chunked storage. Every stage remains visible through [`Self::normalization`].
 ///
 /// Access centers and scales through [`Self::normalization`]. Each component is
 /// independently optional. Negative scales and nonfinite values are preserved.

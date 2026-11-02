@@ -127,7 +127,7 @@ let row_scales = rows.normalization().scales().unwrap();
 The fitted type is `RowNormalizationParams<f64>`, with one center and scale per
 row. Row normalization supports dense fitting and forward and transpose vector
 products, including strided views. Fit new samples' row parameters independently.
-Ordered composition with column normalization remains planned.
+Compose row and column recipes as described below.
 
 `LazyMatrix<M, P>` stores its fitted parameter object as `P`. The default is
 `ColumnNormalizationParams<f64>`, so ordinary column-only type annotations can
@@ -145,6 +145,92 @@ let explicit = LazyMatrix::from_column_parts(
 let (data, params) = explicit.into_parts();
 let restored = LazyMatrix::from_parts(data, params);
 ```
+
+## Compose normalization recipes
+
+Use `.then()` to apply recipes from left to right. Each stage fits the logical
+output of its predecessors, so reversing the order changes the fitted
+transformation. Repeated axes are supported. Later stages can change statistics
+established by earlier stages.
+
+```rust
+use lazymatrix::{ColumnNormalization, RowNormalization};
+use ndarray::array;
+
+let training = array![[1., 3., 2.], [7., 3., 8.], [2., 8., 5.]];
+let validation = array![[100., 120., 90.]];
+let recipe = RowNormalization::standardize()
+    .then(ColumnNormalization::standardize());
+let fitted = recipe.fit(&training).unwrap();
+let train = fitted.view().apply_frozen(training.view());
+let valid = fitted.view().for_new_samples(validation.view()).unwrap();
+```
+
+Use `apply_frozen` to apply every saved stage unchanged to matching rows and
+columns. Use `for_new_samples` to refit each row stage on the validation data
+after applying its predecessors, while reusing training column parameters.
+This distinction applies even when training and validation have the same number
+of rows. Products never refit parameters.
+
+Both methods consume their receiver. Calling them on `fitted.view()` borrows
+training parameters without copying. New-sample preparation owns the new row
+values, and its borrowed column values cannot outlive `fitted`. Calling either
+method on owned fitted parameters moves the column vectors into the result.
+`LazyMatrix::new(data, recipe)?` and `recipe.fit_apply(data)?` fit and wrap in one
+call.
+
+`normalization()` exposes a `NormalizationChainParams` tree in recipe order.
+Inspect each prefix or suffix with `first()` and `next()`. Column stages contain
+`ColumnNormalizationParams`. Row stages contain `FittedRowNormalization`, whose
+`recipe()` and `parameters()` accessors expose the saved row recipe and
+`RowNormalizationParams`.
+
+Construct explicit stages without fitting:
+
+```rust
+use lazymatrix::{
+    ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+    RowNormalization, RowNormalizationParams,
+};
+
+let rows = FittedRowNormalization::from_parts(
+    RowNormalization::standardize(),
+    RowNormalizationParams::from_parts(3, Some(vec![2., 6., 5.]), None),
+);
+let columns = ColumnNormalizationParams::from_parts(
+    3, None, Some(vec![1., 2., 3.]),
+);
+let fitted = NormalizationChainParams::from_parts(rows, columns);
+let train = fitted.view().apply_frozen(training.view());
+let (raw, fitted) = train.into_parts();
+let restored = LazyMatrix::from_parts(raw, fitted);
+```
+
+The explicit row recipe controls future new-sample fitting; it does not change
+the supplied saved values. Dimension mismatches panic before reads or writes.
+
+Mixed and row-only chains require dense indexed access and support strided views.
+Column-only chains use native scans across every supported dense, CSC, CSR, and
+Zarr release. Chains expose allocating and reusable forward and transpose vector
+products. Fused products, batched products, weighted operations, borrowed logical
+rows and columns, and eager conversion remain separate capabilities planned for
+chains.
+
+Fitting stores each stage's fitted vectors. Dense products apply the ordered
+stages before accumulation and need no design buffer. Sparse column fitting
+coalesces duplicate cells before transforming them and includes transformed
+implicit zeros. CSR scans use O(ncols) workspace; CSC scans use at most one
+working column. Exact quantiles use repeated scans with O(ncols) state after
+the first stage.
+
+Sparse products use stored entries and sums over missing index ranges, requiring
+O(nrows + ncols) workspace and logarithmic range queries per stored cell.
+They avoid scanning every logical cell during ordinary finite arithmetic.
+Exceptional IEEE arithmetic can descend through missing ranges to evaluate
+individual contributions. Zarr scans chunks serially, retaining fill values
+and excluding edge padding; chunk and outer-shard storage adds to the fitted
+vectors and column-statistics workspace. No path materializes an intermediate
+design matrix.
 
 ## Materialize explicitly
 

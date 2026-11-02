@@ -194,6 +194,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn row_normalization() {
+                common::run_dense_pipeline_suite(build, |values| Array1::from_vec(values.to_vec()));
                 use lazymatrix::RowNormalization;
                 for build in [build, build_fortran] {
                     common::run_row_normalization_suite(build, |values| Array1::from_vec(values.to_vec()));
@@ -230,7 +231,8 @@ macro_rules! backend_suite {
                 common::run_eager_product_suite::<_, Array2<f64>, _>(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
                 common::run_fused_suite(build, |v| Array1::from_vec(v.to_vec()));
                 common::run_dense_centered_product_suite(build, |v| Array1::from_vec(v.to_vec()));
-                    common::run_backend_suite(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
+                    common::run_column_pipeline_suite(build, |values| Array1::from_vec(values.to_vec()));
+                common::run_backend_suite(build, |v| Array1::from_vec(v.to_vec()), |v| v.to_vec());
                     common::run_logical_columns_suite(build);
                 }
             }

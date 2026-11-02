@@ -122,6 +122,12 @@ pub struct ZarrMatrix<A, F = f64> {
     scalar: PhantomData<F>,
 }
 
+impl<A: ZarrArray<F>, F: Scalar> crate::normalization::pipeline::Source<F> for ZarrMatrix<A, F> {
+    fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
+        self.for_each_value(visit)
+    }
+}
+
 impl<A: ZarrArray<F>, F: Scalar> ZarrMatrix<A, F> {
     /// Wrap an opened array after checking its rank, shape, and scalar type.
     ///

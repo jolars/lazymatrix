@@ -291,3 +291,5 @@ impl<F: Scalar> crate::SubmatrixKernel<F> for CsrMatrix<F> {
 }
 
 crate::indexed_rows_kernels::sparse_source!(CsrMatrix<F>, false, crate::SparseRows::sparse_row);
+
+crate::normalization::pipeline::sparse_source!(CsrMatrix<F>, false, crate::SparseRows::sparse_row);

@@ -168,9 +168,50 @@ views share each axis's operator capabilities.
 
 The initial row operator supports allocating and reusable forward and transpose
 vector products across every dense backend release, including strided views.
-Sparse and Zarr support, composition with column normalization, additional
-operator capabilities, and Python bindings remain in [the
-roadmap](TODO.md#row-normalization).
+Sparse and Zarr row support, additional operator capabilities, and Python
+bindings remain in [the roadmap](TODO.md#row-normalization).
+
+## Ordered normalization
+
+Compose recipes with `.then()`, reading from left to right. For example, fit
+row standardization before column standardization:
+
+```rust
+use lazymatrix::{ColumnNormalization, RowNormalization};
+use ndarray::array;
+
+let training = array![[1., 3., 2.], [7., 3., 8.], [2., 8., 5.]];
+let validation = array![[100., 120., 90.]];
+let recipe = RowNormalization::standardize()
+    .then(ColumnNormalization::standardize());
+let fitted = recipe.fit(&training).unwrap();
+let train = fitted.view().apply_frozen(training.view());
+let valid = fitted.view().for_new_samples(validation.view()).unwrap();
+```
+
+Every stage fits the logical output of its predecessors. Reversing the order
+changes the transformation. Repeated axes are supported, and later stages can
+change statistics established by earlier stages. Use `LazyMatrix::new(data,
+recipe)?` or `recipe.fit_apply(data)?` to fit and wrap in one call.
+
+`apply_frozen` reuses every saved value for matching rows and columns.
+`for_new_samples` fits new row parameters at each row stage while reusing
+training column parameters. It owns the new row values and borrows the saved
+column values when called on a view. Both methods consume their receiver; call
+them on owned fitted parameters to move the column vectors instead.
+
+`normalization()` exposes a `NormalizationChainParams` tree with `first()` and
+`next()` accessors. Row stages retain their recipe and `RowNormalizationParams`
+inside `FittedRowNormalization`; inspect them with `recipe()` and `parameters()`.
+Column stages contain `ColumnNormalizationParams`. `into_parts()` and
+`LazyMatrix::from_parts` preserve the fitted sequence without refitting.
+
+Mixed and row-only chains support dense backends and strided views. Column-only
+chains also support sparse CSC and CSR storage and chunked Zarr arrays. Chains
+currently expose allocating and reusable forward and transpose vector products.
+They preserve storage and use bounded workspace, without materializing an
+intermediate design matrix. See the [guide](https://lazymatrix.org/guide/getting-started#compose-normalization-recipes)
+for scan costs and explicit fitted stages.
 
 ## Features
 

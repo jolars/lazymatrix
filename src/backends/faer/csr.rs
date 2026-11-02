@@ -604,3 +604,17 @@ crate::indexed_rows_kernels::sparse_source!(
     false,
     crate::SparseRows::sparse_row
 );
+
+crate::normalization::pipeline::sparse_source!(SparseRowMat<usize, F>, false, crate::SparseRows::sparse_row);
+
+crate::normalization::pipeline::sparse_source!(
+    SparseRowMatRef<'_, usize, F>,
+    false,
+    crate::SparseRows::sparse_row
+);
+
+crate::normalization::pipeline::sparse_source!(
+    SparseRowMatMut<'_, usize, F>,
+    false,
+    crate::SparseRows::sparse_row
+);

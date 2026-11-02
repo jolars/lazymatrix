@@ -1,4 +1,7 @@
+pub(crate) mod pipeline;
 mod row;
+
+pub use pipeline::{FittedRowNormalization, NormalizationChain, NormalizationChainParams};
 
 use std::marker::PhantomData;
 
@@ -16,7 +19,7 @@ mod private {
 ///
 /// The parameter type identifies the axis and scalar. This trait is sealed;
 /// use [`ColumnNormalizationParams`] or [`RowNormalizationParams`] to supply
-/// custom fitted values.
+/// custom fitted values, or [`NormalizationChainParams`] for ordered stages.
 pub trait NormalizationParams: private::Params {
     /// Scalar used by the fitted centers and scales.
     type Scalar: crate::Scalar;
@@ -28,6 +31,8 @@ pub trait NormalizationParams: private::Params {
 /// recipes require [`crate::ColumnStats`]; row recipes require dense indexed
 /// access through [`crate::MatrixRead`]. Implementing those capabilities enables
 /// fitting for a downstream backend without implementing this trait directly.
+/// Mixed and row-only chains require dense indexed access. Column-only chains
+/// use the supported backend adapters' native scans.
 pub trait NormalizationRecipe<M: crate::MatrixErrorType, P: NormalizationParams>:
     private::Recipe<M, P>
 {

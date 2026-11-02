@@ -8,6 +8,9 @@ publish = false
 [dependencies]
 lazymatrix = { path = "../..", default-features = false }
 
+[dev-dependencies]
+approx = "0.5"
+
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
 

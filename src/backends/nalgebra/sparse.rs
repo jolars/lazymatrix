@@ -455,3 +455,9 @@ crate::indexed_rows_kernels::sparse_source!(
     true,
     crate::SparseColumns::sparse_column
 );
+
+crate::normalization::pipeline::sparse_source!(
+    CscMatrix<F>,
+    true,
+    crate::SparseColumns::sparse_column
+);

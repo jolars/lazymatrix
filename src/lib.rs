@@ -36,8 +36,8 @@
 //! their borrowed, potentially strided views through [`MatrixRead`]. Fitting
 //! uses at most one working row, and products normalize entries before
 //! accumulation without materializing the design. New samples need independently
-//! fitted row parameters. Sparse and Zarr support, composition with column
-//! normalization, and additional operator capabilities remain future work.
+//! fitted row parameters. Sparse and Zarr row support and additional operator
+//! capabilities remain future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -53,6 +53,45 @@
 //! capabilities and must not outlive their source parameters. A consuming
 //! application of owned parameters can return an operator without borrowing
 //! temporary fitted values.
+//!
+//! # Ordered normalization
+//!
+//! Compose recipes with [`.then()`](RowNormalization::then), reading from left
+//! to right. Each stage fits the logical output of its predecessors:
+//!
+//! ```
+//! # #[cfg(feature = "ndarray_v0_17")]
+//! # {
+//! use lazymatrix::{ColumnNormalization, RowNormalization};
+//! use ndarray::array;
+//! let training = array![[1., 3., 2.], [7., 3., 8.], [2., 8., 5.]];
+//! let validation = array![[100., 120., 90.]];
+//! let recipe = RowNormalization::standardize()
+//!     .then(ColumnNormalization::standardize());
+//! let fitted = recipe.fit(&training).unwrap();
+//! let train = fitted.view().apply_frozen(training.view());
+//! let valid = fitted.view().for_new_samples(validation.view()).unwrap();
+//! # }
+//! ```
+//!
+//! Repeated axes are supported. Reversing the order changes the transformation,
+//! and later stages may change statistics established by earlier stages.
+//! [`apply_frozen`](NormalizationChainParams::apply_frozen) reuses every saved
+//! stage for matching rows and columns. [`for_new_samples`](NormalizationChainParams::for_new_samples)
+//! refits row stages after their predecessors while reusing training column
+//! parameters. New row values are owned; views borrow training column values.
+//! Ordinary products only execute fitted stages.
+//!
+//! [`NormalizationChainParams`] preserves the recipe tree. Its `first()` and
+//! `next()` accessors expose column parameters and [`FittedRowNormalization`]
+//! stages, which retain the row recipe and its axis-specific parameters.
+//! [`LazyMatrix::from_parts`] reconstructs a pipeline without refitting.
+//! Mixed and row-only chains support dense indexed access; column-only chains
+//! also support native sparse CSC/CSR and Zarr scans. Chains currently expose
+//! allocating and reusable forward and transpose vector products, with bounded
+//! workspace and no intermediate normalized design matrix. Sparse products use
+//! transformed implicit backgrounds and missing index ranges; exceptional IEEE
+//! cases can evaluate individual missing contributions.
 //!
 //! The fitted parameter type selects the axis and scalar:
 //! `LazyMatrix<M, ColumnNormalizationParams<F>>` or
@@ -567,9 +606,9 @@ pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
-    ColumnNormalizationStats, NormalizationParams, NormalizationRecipe, QuantileRange,
-    RowNormalization, RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats,
-    Scaling,
+    ColumnNormalizationStats, FittedRowNormalization, NormalizationChain, NormalizationChainParams,
+    NormalizationParams, NormalizationRecipe, QuantileRange, RowNormalization,
+    RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats, Scaling,
 };
 pub use row::LazyRow;
 pub use submatrix::{FilteredRawColumn, Submatrix, SubmatrixRow, SubmatrixSparseColumn};

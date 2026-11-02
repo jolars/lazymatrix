@@ -19,6 +19,10 @@ mod row_normalization;
 mod normalization_fitting;
 
 #[cfg(test)]
+#[path = "../../normalization_pipeline.rs"]
+mod normalization_pipeline;
+
+#[cfg(test)]
 mod tests {
     use std::{cell::Cell, convert::Infallible};
 

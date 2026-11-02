@@ -517,3 +517,17 @@ crate::indexed_rows_kernels::sparse_source!(
     true,
     crate::SparseColumns::sparse_column
 );
+
+crate::normalization::pipeline::sparse_source!(SparseColMat<usize, F>, true, crate::SparseColumns::sparse_column);
+
+crate::normalization::pipeline::sparse_source!(
+    SparseColMatRef<'_, usize, F>,
+    true,
+    crate::SparseColumns::sparse_column
+);
+
+crate::normalization::pipeline::sparse_source!(
+    SparseColMatMut<'_, usize, F>,
+    true,
+    crate::SparseColumns::sparse_column
+);

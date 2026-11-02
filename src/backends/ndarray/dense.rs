@@ -13,6 +13,18 @@ use crate::traits::{
     MatVecInto, MatVecScaledInto, MatrixShape, RawColumns, Scalar,
 };
 
+impl<F, S> crate::normalization::pipeline::Source<F> for ArrayBase<S, Ix2>
+where
+    F: Scalar,
+    S: Data<Elem = F>,
+    Self: ColumnStats<F> + crate::MatrixErrorType,
+{
+    fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
+        crate::normalization::pipeline::source::dense(self, visit);
+        Ok(())
+    }
+}
+
 impl<S: Data> MatrixShape for ArrayBase<S, Ix2> {
     fn nrows(&self) -> usize {
         self.shape()[0]

@@ -111,6 +111,7 @@ macro_rules! backend_suite {
             #[test]
             fn csr_backend_suite() {
                 common::run_submatrix_suite(build_csr, to_dvec);
+                common::run_column_pipeline_suite(build_csr, to_dvec);
                 common::run_backend_suite(build_csr, to_dvec, from_dvec);
                 common::run_fused_suite(build_csr, to_dvec);
                 common::run_materialization_suite(build_csr);
@@ -243,6 +244,7 @@ macro_rules! backend_suite {
 
             #[test]
             fn row_normalization() {
+                common::run_dense_pipeline_suite(build_dense, to_dvec);
                 use lazymatrix::{MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto};
                 common::run_row_normalization_suite(build_dense, to_dvec);
                 common::run_row_normalization_f32_suite(
@@ -309,9 +311,11 @@ macro_rules! backend_suite {
                 common::run_fused_suite(build_dense, to_dvec);
                 common::run_dense_centered_product_suite(build_dense, to_dvec);
                 common::run_gram_suite(build);
+                common::run_column_pipeline_suite(build, to_dvec);
                 common::run_backend_suite(build, to_dvec, from_dvec);
                 common::run_sparse_columns_suite(build);
                 common::run_logical_columns_suite(build);
+                common::run_column_pipeline_suite(build_dense, to_dvec);
                 common::run_backend_suite(build_dense, to_dvec, from_dvec);
                 common::run_logical_columns_suite(build_dense);
             }

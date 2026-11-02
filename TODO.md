@@ -152,7 +152,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - Migrate Rust consumers, Python's native extension, tests, and documentation
     together, preferring the consistent API over backward compatibility.
 
-- [ ] Compose normalization recipes with `.then()`, read from left to right.
+- [x] Compose normalization recipes with `.then()`, read from left to right.
   - Support explicit fitting of an ordered recipe chain and retain
     `LazyMatrix::new(data, recipe)` as a convenience.
 
@@ -177,7 +177,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - Apply the fitted transformation lazily, preserving sparse storage and
     bounded workspace without materializing intermediate design matrices.
 
-- [ ] Represent reusable fitted pipelines in the same order as their recipes.
+- [x] Represent reusable fitted pipelines in the same order as their recipes.
   - Retain the axis-specific `RowNormalizationParams` and
     `ColumnNormalizationParams` types. Retain row recipes alongside fitted
     values so that the pipeline can fit new rows. Have `normalization()` expose
@@ -194,7 +194,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     supported bounded-workspace paths. Unsupported capabilities should fail at
     compile time; composable recipe syntax alone does not imply backend support.
 
-- [ ] Validate ordered normalization against an eager dense oracle.
+- [x] Validate ordered normalization against an eager dense oracle.
   - Cover both axis orders, repeated stages, explicit and computed parameters,
     frozen application, new-sample row fitting with reused column parameters,
     borrowed and owning operators, the adjoint identity, and existing zero,

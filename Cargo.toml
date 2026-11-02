@@ -203,3 +203,13 @@ required-features = ["faer_all", "nalgebra_all", "ndarray_all", "sprs_all", "zar
 name = "indexed_rows"
 harness = false
 required-features = ["ndarray_all", "sprs_all"]
+
+[[bench]]
+name = "normalization_pipeline"
+harness = false
+required-features = ["ndarray_all", "sprs_all"]
+
+[[bench]]
+name = "normalization_pipeline_memory"
+harness = false
+required-features = ["ndarray_all", "sprs_all"]

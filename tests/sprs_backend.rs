@@ -24,6 +24,103 @@ fn build(tm: &TestMatrix) -> CsMat<f64> {
 }
 
 #[test]
+fn column_pipeline_background_ranges_preserve_ieee_arithmetic() {
+    use lazymatrix::{ColumnNormalizationParams, NormalizationChainParams};
+    let cases = [
+        // Fully stored columns must never evaluate their infinite background.
+        (
+            CsMat::new_csc((2, 1), vec![0, 2], vec![0, 1], vec![1e308; 2]),
+            1e308,
+            1e-308,
+            vec![0., 1.],
+        ),
+        // A range containing a zero coefficient cannot hide infinity times zero.
+        (
+            CsMat::new_csc((2, 1), vec![0, 0], vec![], vec![]),
+            -1e308,
+            1e-308,
+            vec![0., 1.],
+        ),
+        // Scaling before summation avoids overflow in the unscaled range sum.
+        (
+            CsMat::new_csc((2, 1), vec![0, 0], vec![], vec![]),
+            -1e-308,
+            1.,
+            vec![1e308; 2],
+        ),
+        // Zero background still participates in IEEE multiplication.
+        (
+            CsMat::new_csc((2, 1), vec![0, 0], vec![], vec![]),
+            0.,
+            1.,
+            vec![f64::INFINITY, 1.],
+        ),
+    ];
+    for (source, center, scale, weights) in cases {
+        for matrix in [source.clone(), source.to_csr()] {
+            let first =
+                ColumnNormalizationParams::from_parts(1, Some(vec![center]), Some(vec![scale]));
+            let next = ColumnNormalizationParams::from_parts(1, None, Some(vec![-2.]));
+            let params = NormalizationChainParams::from_parts(first, next);
+            let expected: f64 = (0..2)
+                .map(|i| {
+                    (((matrix.get(i, 0).copied().unwrap_or(0.) - center) / scale) / -2.)
+                        * weights[i]
+                })
+                .sum();
+            let op = params.view().apply_frozen(&matrix);
+            let actual = op.mat_transpose_vec(&weights).unwrap()[0];
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                approx::assert_relative_eq!(actual, expected, epsilon = 1e-12);
+            }
+        }
+    }
+    let source = CsMat::new_csc(
+        (2, 2),
+        vec![0, 2, 4],
+        vec![0, 1, 0, 1],
+        vec![1e16 + 4., 1e16 + 6., 1e16 + 8., 1e16 + 10.],
+    );
+    for matrix in [source.clone(), source.to_csr()] {
+        let params = NormalizationChainParams::from_parts(
+            ColumnNormalizationParams::from_parts(2, Some(vec![1e16; 2]), None),
+            ColumnNormalizationParams::from_parts(2, Some(vec![3.; 2]), None),
+        );
+        let op = params.view().apply_frozen(&matrix);
+        assert_eq!(op.matvec(&vec![1.; 2]).unwrap(), vec![6., 10.]);
+        assert_eq!(op.mat_transpose_vec(&vec![1.; 2]).unwrap(), vec![4., 12.]);
+        let new = params.view().for_new_samples(&matrix).unwrap();
+        assert_eq!(
+            new.normalization().first().centers().unwrap().as_ptr(),
+            params.first().centers().unwrap().as_ptr()
+        );
+    }
+}
+
+#[test]
+fn f32_column_chains_accept_alternate_indices_and_parameter_views() {
+    use lazymatrix::{ColumnNormalizationParams, NormalizationChainParams};
+    let matrix = CsMatI::<f32, u32, u64>::new((2, 2), vec![0, 1, 2], vec![1, 0], vec![3., -2.]);
+    let recipe = ColumnNormalization::standardize().then(ColumnNormalization::min_max());
+    let params = recipe.fit(&matrix).unwrap();
+    let op = params.view().apply_frozen(matrix.view());
+    assert_eq!(op.matvec(&vec![2_f32, -1.]).unwrap(), vec![1., 0.]);
+    let explicit = NormalizationChainParams::from_parts(
+        ColumnNormalizationParams::from_parts(2, None, Some(vec![-2_f32; 2])),
+        ColumnNormalizationParams::from_parts(2, Some(vec![-1_f32; 2]), None),
+    );
+    assert_eq!(
+        explicit
+            .apply_frozen(&matrix)
+            .matvec(&vec![1_f32; 2])
+            .unwrap(),
+        vec![0.5, 3.]
+    );
+}
+
+#[test]
 fn column_stats_support_f32_storage_orientations_and_index_widths() {
     let matrix = CsMat::new_csc((2, 1), vec![0, 2], vec![0, 1], vec![1.0_f32, 3.0]);
     common::check_column_stats_f32(&matrix);
@@ -38,6 +135,13 @@ fn column_stats_support_f32_storage_orientations_and_index_widths() {
 
 #[test]
 fn sprs_backend_suite() {
+    common::run_column_pipeline_suite(build, |v| v.to_vec());
+    common::run_column_pipeline_suite(|tm| build(tm).to_csr(), |v| v.to_vec());
+    common::run_column_pipeline_suite(|tm| SprsCsc::try_new(build(tm)).unwrap(), |v| v.to_vec());
+    common::run_column_pipeline_suite(
+        |tm| SprsCsr::try_new(build(tm).to_csr()).unwrap(),
+        |v| v.to_vec(),
+    );
     common::batched::run_batched_suite(build);
     common::batched::run_batched_suite(|tm| build(tm).to_csr());
     common::batched::run_batched_suite(|tm| SprsCsc::try_new(build(tm)).unwrap());

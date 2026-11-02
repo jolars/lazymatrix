@@ -868,3 +868,9 @@ crate::indexed_rows_kernels::dense_source!(Mat<F>);
 crate::indexed_rows_kernels::dense_source!(MatRef<'_, F>);
 
 crate::indexed_rows_kernels::dense_source!(MatMut<'_, F>);
+
+crate::normalization::pipeline::dense_source!(Mat<F>);
+
+crate::normalization::pipeline::dense_source!(MatRef<'_, F>);
+
+crate::normalization::pipeline::dense_source!(MatMut<'_, F>);
