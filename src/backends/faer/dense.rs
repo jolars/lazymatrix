@@ -21,6 +21,12 @@ impl<F: Scalar> VectorView<F> for Col<F> {
     fn get(&self, index: usize) -> F {
         self[index]
     }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        self.as_ref()
+            .try_as_col_major()
+            .map(|column| column.as_slice())
+    }
 }
 
 impl<F: Scalar> VectorViewMut<F> for Col<F> {
@@ -37,6 +43,10 @@ impl<F: Scalar> VectorView<F> for ColRef<'_, F> {
     fn get(&self, index: usize) -> F {
         self[index]
     }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        self.try_as_col_major().map(|column| column.as_slice())
+    }
 }
 
 impl<F: Scalar> VectorView<F> for ColMut<'_, F> {
@@ -46,6 +56,12 @@ impl<F: Scalar> VectorView<F> for ColMut<'_, F> {
 
     fn get(&self, index: usize) -> F {
         self[index]
+    }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        self.as_ref()
+            .try_as_col_major()
+            .map(|column| column.as_slice())
     }
 }
 
@@ -62,6 +78,10 @@ impl<F: Scalar> RawColumn<F> for ColRef<'_, F> {
 
     fn stored_len(&self) -> usize {
         self.nrows()
+    }
+
+    fn dense_values(&self) -> Option<&[F]> {
+        self.contiguous_values()
     }
 
     fn for_each_stored(&self, mut f: impl FnMut(usize, F)) {

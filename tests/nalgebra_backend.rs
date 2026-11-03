@@ -340,12 +340,86 @@ macro_rules! backend_suite {
 
             #[test]
             fn dense_column_reductions() {
-                common::run_column_reductions_suite::<f32, _>(|v| {
-                    DMatrix::from_column_slice(v.len(), 1, v)
-                });
-                common::run_column_reductions_suite::<f64, _>(|v| {
-                    DMatrix::from_column_slice(v.len(), 1, v)
-                });
+                common::run_column_reductions_suite::<f32, _, _>(
+                    |v| DMatrix::from_column_slice(v.len(), 1, v),
+                    DVector::from_column_slice,
+                );
+                common::run_column_reductions_suite::<f64, _, _>(
+                    |v| DMatrix::from_column_slice(v.len(), 1, v),
+                    DVector::from_column_slice,
+                );
+            }
+
+            #[test]
+            fn contiguous_column_and_vector_slices_preserve_view_offsets() {
+                use lazymatrix::RawColumns;
+                for len in [0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 65] {
+                    let mut storage =
+                        DMatrix::from_fn(len + 7, 4, |i, j| (i + j * 100) as f64 / 8.0);
+                    let expected: Vec<_> = (3..3 + len).map(|i| storage[(i, 1)]).collect();
+                    let ptr = &storage[(3, 1)] as *const f64;
+                    let view = storage.view_with_steps((3, 1), (len, 2), (0, 1));
+                    let column = view.raw_column(0);
+                    common::check_contiguous_column(&column, &expected, ptr);
+                    common::check_contiguous_vector(&column, &expected, ptr);
+
+                    let range = storage.column(1);
+                    let range = range.rows(3, len);
+                    common::check_contiguous_vector(&range, &expected, ptr);
+                    let view = storage.view_mut((3, 1), (len, 2));
+                    common::check_contiguous_column(&view.raw_column(0), &expected, ptr);
+                    let mut range = storage.column_mut(1);
+                    let vector = range.rows_mut(3, len);
+                    common::check_contiguous_column(&vector, &expected, ptr);
+                    common::check_contiguous_vector(&vector, &expected, ptr);
+
+                    let mut owned = DVector::from_column_slice(&expected);
+                    let ptr = owned.as_ptr();
+                    common::check_contiguous_column(&owned, &expected, ptr);
+                    common::check_contiguous_vector(&owned, &expected, ptr);
+                    let view: DVectorView<'_, f64> = owned.as_view();
+                    common::check_contiguous_vector(&view, &expected, ptr);
+                    let view: DVectorViewMut<'_, f64> = owned.as_view_mut();
+                    common::check_contiguous_vector(&view, &expected, ptr);
+                }
+                let fixed = nalgebra::SVector::<f64, 3>::new(1.0, 2.0, 3.0);
+                common::check_contiguous_column(&fixed, &[1.0, 2.0, 3.0], fixed.as_ptr());
+                common::check_contiguous_vector(&fixed, &[1.0, 2.0, 3.0], fixed.as_ptr());
+            }
+
+            #[test]
+            fn column_reductions_preserve_strided_logical_order() {
+                use lazymatrix::{RawColumn, RawColumns, VectorView};
+                let mut storage = DMatrix::from_fn(70, 4, |i, j| (i + j * 3) as f64 / 8.0);
+                let contiguous = storage.view_with_steps((3, 1), (33, 1), (0, 1));
+                let strided = storage.view_with_steps((3, 1), (33, 1), (1, 0));
+                assert!(contiguous.raw_column(0).dense_values().is_some());
+                assert!(strided.raw_column(0).dense_values().is_none());
+                let vector_storage = DVector::from_fn(70, |i, _| i as f64 / 16.0);
+                let vector = vector_storage.rows_with_step(2, 33, 0);
+                let strided_vector = vector_storage.rows_with_step(2, 33, 1);
+                assert!(vector.contiguous_values().is_some());
+                assert!(strided_vector.contiguous_values().is_none());
+                for matrix in [contiguous, strided] {
+                    let raw: Vec<_> = (0..33).map(|i| matrix[(i, 0)]).collect();
+                    for input in [vector, strided_vector] {
+                        let values: Vec<_> = (0..33).map(|i| input[i]).collect();
+                        common::check_column_reduction_view(&matrix, &input, &raw, &values);
+                    }
+                }
+                let mut vector_storage = vector_storage;
+                let raw: Vec<_> = (0..33).map(|i| storage[(i + 3, 1)]).collect();
+                let values: Vec<_> = (0..33).map(|i| vector_storage[i + 2]).collect();
+                let input = vector_storage.rows_mut(2, 33);
+                let matrix = storage.view_mut((3, 1), (33, 1));
+                common::check_column_reduction_view(&matrix, &input, &raw, &values);
+                let matrix = storage.view_with_steps_mut((3, 1), (33, 1), (1, 0));
+                assert!(matrix.raw_column(0).dense_values().is_none());
+                let raw: Vec<_> = (0..33).map(|i| matrix[(i, 0)]).collect();
+                let input = vector_storage.rows_with_step_mut(2, 33, 1);
+                assert!(input.contiguous_values().is_none());
+                let values: Vec<_> = (0..33).map(|i| input[i]).collect();
+                common::check_column_reduction_view(&matrix, &input, &raw, &values);
             }
 
             #[test]

@@ -733,12 +733,74 @@ macro_rules! backend_suite {
 
             #[test]
             fn dense_column_reductions() {
-                common::run_column_reductions_suite::<f32, _>(|v| {
-                    Mat::from_fn(v.len(), 1, |i, _| v[i])
-                });
-                common::run_column_reductions_suite::<f64, _>(|v| {
-                    Mat::from_fn(v.len(), 1, |i, _| v[i])
-                });
+                common::run_column_reductions_suite::<f32, _, _>(
+                    |v| Mat::from_fn(v.len(), 1, |i, _| v[i]),
+                    |v| Col::from_fn(v.len(), |i| v[i]),
+                );
+                common::run_column_reductions_suite::<f64, _, _>(
+                    |v| Mat::from_fn(v.len(), 1, |i, _| v[i]),
+                    |v| Col::from_fn(v.len(), |i| v[i]),
+                );
+            }
+
+            #[test]
+            fn contiguous_column_and_vector_slices_preserve_view_offsets() {
+                use lazymatrix::RawColumns;
+                for len in [0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 65] {
+                    let mut storage = Mat::from_fn(len + 7, 4, |i, j| (i + j * 100) as f64 / 8.0);
+                    let expected: Vec<_> = (3..3 + len).map(|i| storage[(i, 1)]).collect();
+                    let ptr = &storage[(3, 1)] as *const f64;
+                    let view = storage.as_ref().submatrix(3, 1, len, 2);
+                    let column = view.raw_column(0);
+                    common::check_contiguous_column(&column, &expected, ptr);
+                    common::check_contiguous_vector(&column, &expected, ptr);
+
+                    let range = storage.col(1).subrows(3, len);
+                    common::check_contiguous_vector(&range, &expected, ptr);
+                    let view = storage.as_mut().submatrix_mut(3, 1, len, 2);
+                    common::check_contiguous_column(&view.raw_column(0), &expected, ptr);
+                    let vector = storage.col_mut(1).subrows_mut(3, len);
+                    common::check_contiguous_vector(&vector, &expected, ptr);
+
+                    let mut owned = Col::from_fn(len, |i| expected[i]);
+                    let ptr = owned.as_ptr();
+                    common::check_contiguous_vector(&owned, &expected, ptr);
+                    common::check_contiguous_vector(&owned.as_ref(), &expected, ptr);
+                    common::check_contiguous_vector(&owned.as_mut(), &expected, ptr);
+                }
+            }
+
+            #[test]
+            fn column_reductions_preserve_strided_logical_order() {
+                use lazymatrix::{RawColumn, RawColumns, VectorView};
+                let mut storage = Mat::from_fn(40, 3, |i, j| (i + j * 3) as f64 / 8.0);
+                let rows = Mat::from_fn(2, 33, |i, j| (i + j * 5) as f64 / 16.0);
+                let contiguous = storage.as_ref().submatrix(3, 1, 33, 1);
+                let reversed = contiguous.reverse_rows();
+                let transposed = rows.as_ref().submatrix(1, 0, 1, 33).transpose();
+                assert!(contiguous.raw_column(0).dense_values().is_some());
+                for matrix in [reversed, transposed] {
+                    assert!(matrix.raw_column(0).dense_values().is_none());
+                }
+                let vector = storage.col(2).subrows(3, 33);
+                let reversed_vector = vector.reverse_rows();
+                let strided_vector = rows.row(0).transpose();
+                for input in [reversed_vector, strided_vector] {
+                    assert!(input.contiguous_values().is_none());
+                }
+                for matrix in [contiguous, reversed, transposed] {
+                    let raw: Vec<_> = (0..33).map(|i| matrix[(i, 0)]).collect();
+                    for input in [vector, reversed_vector, strided_vector] {
+                        let values: Vec<_> = (0..33).map(|i| input[i]).collect();
+                        common::check_column_reduction_view(&matrix, &input, &raw, &values);
+                    }
+                }
+                let mut vector_storage = Col::from_fn(40, |i| i as f64 / 16.0);
+                let input = vector_storage.as_mut().subrows_mut(3, 33);
+                let values: Vec<_> = (0..33).map(|i| input[i]).collect();
+                let raw: Vec<_> = (0..33).map(|i| storage[(i + 3, 1)]).collect();
+                let matrix = storage.as_mut().submatrix_mut(3, 1, 33, 1);
+                common::check_column_reduction_view(&matrix, &input, &raw, &values);
             }
 
             #[test]

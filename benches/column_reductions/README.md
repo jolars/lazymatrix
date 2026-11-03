@@ -1,11 +1,12 @@
 # Dense column reductions
 
-Contiguous ndarray columns now use allocation-free reductions with eight
-independent accumulators for raw sums, cached-sum dots, and directly centered
-squared norms. This covers ndarray 0.15, 0.16, and 0.17. The core shares the
-reduction implementation through optional `RawColumn::dense_values` and
-`VectorView::contiguous_values` hooks. Other storage and vector layouts retain
-their default implementations.
+Contiguous columns now use allocation-free reductions with eight independent
+accumulators for raw sums, cached-sum dots, and directly centered squared norms.
+This covers ndarray 0.15–0.17, faer 0.22–0.24, and nalgebra 0.32–0.35. The core
+shares the reduction implementation through optional `RawColumn::dense_values`
+and `VectorView::contiguous_values` hooks. Both owned and borrowed contiguous
+vectors expose the vector hook. Other storage and vector layouts retain their
+default implementations.
 
 Reduction order follows the usual backend convention: rounding, cancellation,
 and intermediate overflow may differ from sequential accumulation. The dense
@@ -13,7 +14,77 @@ fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
 
-## Production measurements
+## Faer and nalgebra adapter measurements
+
+The adapter comparison uses baseline revision `ac5f2e4`, before these backends
+expose the hooks, and the working source identified in
+[`adapter_metadata.json`](adapter_metadata.json). Both release builds and all
+measurements ran in one exclusive `compute bench` window on CPU 2, with Rust
+1.98.1, 16 codegen units, and the `faer,nalgebra` features. The measured releases
+are faer 0.24.4 and nalgebra 0.35.0. Correctness tests exercise every supported
+release through the same shared adapter implementations.
+
+Each input has 5,000 rows and 1,000 columns, with `f64` values drawn uniformly
+from [-1, 1) using `ChaCha8Rng` and seed 8421. The inputs have identity
+normalization. Four blocks alternate baseline and candidate process order.
+Each process checks every column result before collecting three observations
+of five complete passes, alternating operation and method order by observation.
+The table shows medians of 12 observations, in milliseconds per pass over all
+1,000 contiguous columns. Cached dots use a borrowed contiguous backend vector.
+
+| Backend  | Operation      | Baseline | Candidate | Native |
+| -------- | -------------- | -------: | --------: | -----: |
+| faer     | Sum            |    2.854 |     0.603 |  0.587 |
+| faer     | Squared norm   |    2.885 |     0.670 |  0.601 |
+| faer     | Cached-sum dot |    3.512 |     1.715 |  1.325 |
+| nalgebra | Sum            |    2.852 |     0.617 |  3.116 |
+| nalgebra | Squared norm   |    2.887 |     0.672 |  0.723 |
+| nalgebra | Cached-sum dot |    3.553 |     1.743 |  2.157 |
+
+Contiguous sums improve by 4.6–4.7 times, squared norms by 4.3 times, and cached
+dots by about twice. Offset borrowed ranges show similar gains. Owned backend
+vectors also benefit. The native controls use faer's `sum`, `squared_norm_l2`,
+and `inner_prod`, and nalgebra's `sum`, `norm_squared`, and `dot`, on the same
+borrowed layouts.
+
+[`adapter_timings.csv`](adapter_timings.csv) preserves all 2,160 observations,
+including row-major storage, reversed faer rows, nalgebra rows with stride two,
+and strided input vectors. Noncontiguous columns retain the existing reductions
+and measure within 1% of baseline. Strided vectors retain the existing dot path,
+while sums and norms still benefit when their columns are contiguous.
+
+[`adapter_errors.csv`](adapter_errors.csv) records the maximum absolute and
+scaled errors for every process, layout, operation, and method. All 720 groups
+of 1,000 column comparisons pass against independent sequential indexed
+arithmetic. The maximum absolute error is 1.44e-11, and the maximum error divided
+by `1 + abs(expected)` is 9.42e-14. No numerical check runs inside a timed pass.
+Input construction, owned-vector copies, and cached vector sums are also outside
+timing. These measurements cover individual raw reductions; the ndarray consumer
+fit measurements below remain separate.
+
+Reproduce the comparison from the repository root:
+
+```sh
+compute bench --reason "Faer and nalgebra column reductions" -- \
+    bash benches/column_reductions/run-adapters.sh \
+    target/adapter-column-reductions ac5f2e4
+```
+
+The script exports the baseline from Git and copies the same benchmark into it.
+It uses separate Cargo target directories and rejects identical binaries before
+measuring. It writes the combined timing and error CSVs, source and binary hashes,
+compiler information, CPU information, and sampling settings to the output
+directory. Override `PROBE_CPU`, `PROBE_ROWS`, `PROBE_COLS`, `PROBE_BLOCKS`,
+`PROBE_SAMPLES`, or `PROBE_PASSES` as needed. The baseline revision is the second
+argument.
+
+Validation passed all 129 faer and nalgebra adapter tests, formatting, Clippy,
+Rustdoc, Python checks and packaging, release checks, and website checks. The core
+backend combinations also passed, including every supported version enabled
+together with and without parallelism. The remaining individual-release,
+coexistence, and BLAS checks were not completed in this run.
+
+## ndarray production measurements
 
 The production comparison uses the same preserved inputs, CPU 2, release
 configuration, nine observations of 30 passes, and alternating method order as

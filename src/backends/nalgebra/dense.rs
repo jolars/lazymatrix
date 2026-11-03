@@ -68,6 +68,16 @@ where
     fn get(&self, index: usize) -> F {
         self[index]
     }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        if self.strides().0 == 1 {
+            // A single column with unit row stride contains exactly nrows
+            // consecutive initialized entries, even in a view with column gaps.
+            Some(unsafe { std::slice::from_raw_parts(self.as_ptr(), self.nrows()) })
+        } else {
+            None
+        }
+    }
 }
 
 impl<F, R, S> VectorViewMut<F> for Matrix<F, R, U1, S>
@@ -93,6 +103,10 @@ where
 
     fn stored_len(&self) -> usize {
         self.nrows()
+    }
+
+    fn dense_values(&self) -> Option<&[F]> {
+        self.contiguous_values()
     }
 
     fn for_each_stored(&self, mut f: impl FnMut(usize, F)) {

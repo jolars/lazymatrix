@@ -276,25 +276,20 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     Python Shrinkage fits with independently checked objectives, KKT violations,
     and certificate feasibility. Python timings include owned input copies.
 
-- [ ] Extend dense column-reduction fast paths to faer and nalgebra.
-  - Implement `RawColumn::dense_values` and `VectorView::contiguous_values` in
-    LazyMatrix's [faer](src/backends/faer/dense.rs) and
-    [nalgebra](src/backends/nalgebra/dense.rs) adapters for every supported
-    release. They currently inherit `None`. Expose contiguous columns and
-    owned and borrowed vectors so sums, squared norms, and cached dots can use
-    the shared reductions. Fast dots require both hooks.
-  - Borrow slices in O(1) time without allocating or gathering. Preserve
-    logical order, view offsets, and slice lengths. Keep noncontiguous views
-    on the existing paths.
-  - Add adapter tests for contiguous and strided views, borrowed ranges, and
-    hook availability. Reuse the shared reduction suite for `f32`, `f64`,
-    empty inputs, short tails, normalization, and exceptional values. Verify
-    every supported release and the full backend and feature matrix.
-  - Benchmark each backend before and after the change in one exclusive
-    compute window, including contiguous and strided layouts. Record sums,
-    squared norms, and cached dots against native reductions where available,
-    and check numerical agreement. The existing speedup measurements cover
-    ndarray only.
+- [x] Extend dense column-reduction fast paths to faer and nalgebra.
+  - faer 0.22–0.24 and nalgebra 0.32–0.35 expose borrowed contiguous columns
+    and owned and borrowed vectors through both reduction hooks. Slice access
+    takes O(1) time and preserves view offsets, lengths, and logical order.
+    Noncontiguous views retain their existing paths.
+  - Adapter tests check hook availability and borrowed ranges, including mutable,
+    strided, and reversed views. The shared reduction suite covers native vectors,
+    `f32`, `f64`, empty inputs, short tails, normalization, and exceptional values.
+  - The [adapter measurements](benches/column_reductions/README.md#faer-and-nalgebra-adapter-measurements)
+    compare baseline, candidate, and native reductions in one exclusive compute
+    window. Contiguous sums improve by 4.6–4.7 times, squared norms by 4.3 times,
+    and cached dots by about twice. Strided controls retain baseline performance,
+    and all numerical comparisons pass. Raw data and reproduction commands are
+    included in the report.
 
 ## Lazy design matrices
 

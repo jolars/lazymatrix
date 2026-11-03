@@ -2068,10 +2068,13 @@ where
 }
 
 /// Check reduction tails, normalization, indexed inputs, and floating-point types.
-pub fn run_column_reductions_suite<F, M>(build: impl Fn(&[F]) -> M)
-where
+pub fn run_column_reductions_suite<F, M, V>(
+    build: impl Fn(&[F]) -> M,
+    to_vector: impl Fn(&[F]) -> V,
+) where
     F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
     M: RawColumns<F>,
+    V: VectorView<F>,
 {
     let epsilon = F::epsilon() * F::from_u32(128).unwrap();
     let check = |actual: F, expected: F| {
@@ -2096,6 +2099,7 @@ where
         let vector: Vec<F> = (0..len)
             .map(|_| F::from_i32(rng.random_range(-16..=16)).unwrap() / F::from_u32(16).unwrap())
             .collect();
+        let native = to_vector(&vector);
         for center in [F::zero(), F::from_f64(0.375).unwrap()] {
             for scale in [F::one(), F::from_f64(-1.75).unwrap()] {
                 let matrix = LazyMatrix::from_column_parts(
@@ -2111,6 +2115,11 @@ where
                 check(column.dot(&vector), expected);
                 check(
                     column.dot_with_sum(&vector, vector.iter().copied().sum()),
+                    expected,
+                );
+                check(column.dot(&native), expected);
+                check(
+                    column.dot_with_sum(&native, vector.iter().copied().sum()),
                     expected,
                 );
                 let fallback = IndexedColumnVector { values: &vector };
@@ -2147,8 +2156,57 @@ where
         let column = matrix.column(0);
         check(column.sum(), raw.iter().copied().sum());
         check(column.dot(&[F::one(); 17]), raw.iter().copied().sum());
+        check(
+            column.dot_with_sum(&to_vector(&[F::one(); 17]), F::from_u32(17).unwrap()),
+            raw.iter().copied().sum(),
+        );
         check(column.norm_squared(), raw.iter().map(|&x| x * x).sum());
     }
+}
+
+/// Check that a vector hook borrows exactly the expected storage range.
+pub fn check_contiguous_vector<V: VectorView<f64>>(vector: &V, expected: &[f64], ptr: *const f64) {
+    let values = vector.contiguous_values().unwrap();
+    assert_eq!(values, expected);
+    assert_eq!(values.len(), vector.len());
+    assert_eq!(values.as_ptr(), ptr);
+}
+
+/// Check that a column hook borrows exactly the expected storage range.
+pub fn check_contiguous_column<C: lazymatrix::RawColumn<f64>>(
+    column: &C,
+    expected: &[f64],
+    ptr: *const f64,
+) {
+    let values = column.dense_values().unwrap();
+    assert_eq!(values, expected);
+    assert_eq!(values.len(), column.len());
+    assert_eq!(values.as_ptr(), ptr);
+}
+
+/// Compare reductions on borrowed layouts with an independent logical oracle.
+pub fn check_column_reduction_view<M: RawColumns<f64>, V: VectorView<f64>>(
+    matrix: &M,
+    vector: &V,
+    raw: &[f64],
+    input: &[f64],
+) {
+    let lazy = LazyMatrix::from_column_parts(matrix, Some(vec![0.375]), Some(vec![-1.75]));
+    let column = lazy.column(0);
+    let logical: Vec<_> = raw.iter().map(|x| (x - 0.375) / -1.75).collect();
+    let expected = dot(&logical, input);
+    approx::assert_relative_eq!(column.sum(), logical.iter().sum::<f64>(), epsilon = EPS);
+    approx::assert_relative_eq!(
+        column.norm_squared(),
+        dot(&logical, &logical),
+        epsilon = EPS
+    );
+    approx::assert_relative_eq!(column.dot(vector), expected, epsilon = EPS);
+    approx::assert_relative_eq!(
+        column.dot_with_sum(vector, input.iter().sum()),
+        expected,
+        epsilon = EPS
+    );
 }
 
 struct IndexedColumnVector<'a, F> {

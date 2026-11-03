@@ -219,3 +219,8 @@ required-features = ["ndarray_all", "sprs_all"]
 name = "normalization_pipeline_memory"
 harness = false
 required-features = ["ndarray_all", "sprs_all"]
+
+[[bench]]
+name = "adapter_column_reductions"
+harness = false
+required-features = ["faer_all", "nalgebra_all"]

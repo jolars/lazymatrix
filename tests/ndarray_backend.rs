@@ -239,8 +239,8 @@ macro_rules! backend_suite {
 
             #[test]
             fn dense_column_reductions() {
-                common::run_column_reductions_suite::<f32, _>(|v| Array2::from_shape_vec((v.len(), 1), v.to_vec()).unwrap());
-                common::run_column_reductions_suite::<f64, _>(|v| Array2::from_shape_vec((v.len(), 1), v.to_vec()).unwrap());
+                common::run_column_reductions_suite::<f32, _, _>(|v| Array2::from_shape_vec((v.len(), 1), v.to_vec()).unwrap(), |v| Array1::from_vec(v.to_vec()));
+                common::run_column_reductions_suite::<f64, _, _>(|v| Array2::from_shape_vec((v.len(), 1), v.to_vec()).unwrap(), |v| Array1::from_vec(v.to_vec()));
             }
 
             #[test]
