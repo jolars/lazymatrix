@@ -12,6 +12,8 @@ packages:
     repository: "lazymatrix"
     path: "python"
     metadata-path: "pyproject.toml"
+    # Keep the API landing page independent of README logos and badges.
+    overview: "API.md"
     targets:
       - id: "api"
         extractor: "python"

@@ -1,166 +1,160 @@
 # Python
 
-LazyMatrix for Python applies column normalization during matrix operations.
-It accepts NumPy arrays and SciPy CSR/CSC matrices and sparse arrays. Install it
-with:
+LazyMatrix lets you multiply by a centered and scaled matrix without storing
+its normalized entries. This is particularly useful for sparse input:
+subtracting column means would ordinarily turn implicit zeros into stored
+values and make the matrix dense.
+
+Use NumPy arrays or SciPy matrices and sparse arrays in CSR or CSC format.
+The optional PyTorch adapter applies fitted normalization in a trainable first
+layer.
+
+## Installation
 
 ```sh
 pip install lazymatrix
 ```
 
-Python 3.11 or newer is required. Prebuilt wheels cover Linux x86_64, macOS
-on Intel and Apple silicon, and Windows x86_64. Building from source requires
-Rust 1.89 or newer.
+Python 3.11 or newer is required. Prebuilt wheels are available for Linux
+x86_64, macOS on Intel and Apple silicon, and Windows x86_64. Installing from
+source also requires Rust 1.89 or newer.
 
 ## Normalize and multiply
 
+Arrange your data with observations in rows and features in columns. Fit column
+means and standard deviations with `standardize`:
+
 ```python
 import numpy as np
-from scipy import sparse
 from lazymatrix import standardize
+from scipy import sparse
 
 X = sparse.csr_matrix([[1.0, 0.0], [2.0, 3.0], [0.0, 4.0]])
 Z = standardize(X)
 
 beta = np.array([1.0, -1.0])
 prediction = Z @ beta
-gradient = Z.T @ prediction
-column = Z[:, 0]
+transpose_product = Z.T @ prediction
 ```
 
-`standardize` fits column means and population standard deviations immediately.
-Pass `df=1` for sample standard deviations; `df=0` is the default. The variance
-divisor is `nrows - df`, and scales are `NaN` when `nrows <= df`. `df` must be a
-nonnegative integer and affects scaling independently of centering.
-Pass `center=False` or `scale=False` to disable either component. Exact zero
-scales become one, so constant columns do not cause division by zero.
-Nonfinite values follow ordinary IEEE arithmetic; missing values are not ignored.
+`Z` has the same shape as `X`. Its products behave as though each column had
+been centered and scaled, while its raw data remains sparse. You can pass a
+NumPy array in place of `X` without changing the calls.
 
-`Z.shape`, `Z.ndim`, and `Z.dtype` describe the logical matrix. `Z.centers` and
-`Z.scales` return copies of the fitted parameters, or `None` when the component
-is disabled. These parameters describe the original columns even for `Z.T`.
+Vector products return NumPy arrays. Both `@` and `np.matmul` also accept dense
+matrices on either side, so you can multiply by several coefficient vectors at
+once. `Z.T` shares the same raw storage and fitted normalization.
 
-Both `@` and `np.matmul` support dense vectors and matrices on either side.
-Multiple right-hand sides currently use repeated vector products. `Z[:, j]`
-returns one normalized column as an independent dense array, including support
-for negative column indices. Other slicing and elementwise operations are not
-part of the initial API.
+Standardization uses population standard deviations by default. Pass `df=1`
+to use sample standard deviations, `center=False` to disable centering, or
+`scale=False` to disable scaling.
 
 ## Use SciPy solvers
 
-The adapter exposes forward and transpose products without materializing the
-normalized input:
+Expose the normalized matrix as a SciPy `LinearOperator` to use iterative
+solvers. For least squares with an intercept, center the response, solve for
+the coefficients, and add the response mean back to predictions:
 
 ```python
 from scipy.sparse.linalg import lsqr
 
-y = np.array([1.0, -2.0, 1.0])
-coefficients = lsqr(Z.aslinearoperator(), y)[0]
+y = np.array([1.0, 3.0, 2.0])
+intercept = y.mean()
+coefficients = lsqr(Z.aslinearoperator(), y - intercept)[0]
+prediction = intercept + Z @ coefficients
 ```
 
-## Memory and conversion
+The solver uses forward and transpose products without creating a normalized
+design matrix. The coefficients describe normalized features; keep the fitted
+normalization alongside them for prediction.
 
-LazyMatrix owns a copy of the raw input, so later changes to `X` do not change
-`Z`. Dense inputs require a full raw-data copy. Sparse copies remain sparse and
-are stored in canonical CSC form, with duplicates summed before normalization.
-All values and results use float64. Complex and nonnumeric inputs are rejected.
+## Reuse fitted parameters
 
-Products, transposes, and column reads do not construct a full normalized matrix.
-Call `Z.toarray()` when you explicitly want a dense copy:
+Apply the training centers and scales to validation or prediction data:
 
 ```python
-dense = Z.toarray()
+params = Z.normalization
+X_validation = sparse.csr_matrix([[4.0, 1.0], [0.0, -2.0]])
+validation = params.transform(X_validation)
+validation_prediction = intercept + validation @ coefficients
 ```
 
-Implicit conversion with `np.asarray(Z)` raises an error. Existing estimators
-that require a concrete NumPy array or SciPy sparse matrix need an explicit
-conversion or their own operator integration.
+`transform` creates a lazy operator using the saved parameters. It does not fit
+statistics on the new data. The new input must have `params.ncols` columns in
+the same feature order as the training input, but it can have a different
+number of rows and use dense or sparse storage.
+
+Keep using `params.transform` for new observations. Calling `standardize` or
+`LazyMatrix` on them would fit new statistics. The parameter object owns its
+centers and scales independently of the training matrix.
 
 ## Choose normalization methods
 
-`LazyMatrix` exposes all Rust column normalization choices. Centering and
-scaling are independent:
-
-| Option   | Values                     | Meaning                                     |
-| -------- | -------------------------- | ------------------------------------------- |
-| `center` | `False` or `"none"`        | No centering                                |
-| `center` | `True` or `"mean"`         | Column mean                                 |
-| `center` | `"min"`, `"median"`        | Column minimum or median                    |
-| `scale`  | `False` or `"none"`        | No scaling                                  |
-| `scale`  | `True` or `"sd"`           | Standard deviation using `nrows - df`       |
-| `scale`  | `"range"`                  | Maximum minus minimum                       |
-| `scale`  | `"quantile_range"`         | Upper minus lower linear quantile           |
-| `scale`  | `"maxabs"`, `"l1"`, `"l2"` | Maximum absolute value, L1 norm, or L2 norm |
+Use `LazyMatrix` to choose a different centering or scaling method:
 
 ```python
 from lazymatrix import LazyMatrix
 
 min_max = LazyMatrix(X, center="min", scale="range")
 robust = LazyMatrix(X, center="median", scale="quantile_range")
-custom_robust = LazyMatrix(
-    X, center="median", scale="quantile_range", quantile_range=(0.1, 0.9)
-)
 unit_columns = LazyMatrix(X, center=False, scale="l2")
 ```
 
-When centering is active, maximum-absolute, L1, and L2 scales use the **centered**
-columns, including implicit sparse zeros. Standard deviation, range, and
-quantile range are invariant to centering. `df` affects only standard deviations.
-These operations normalize columns; they do not normalize rows.
+| Goal            | Centering | Scaling               |
+| --------------- | --------- | --------------------- |
+| Standardization | Mean      | Standard deviation    |
+| Min-max scaling | Minimum   | Maximum minus minimum |
+| Robust scaling  | Median    | Interquartile range   |
+| Unit L2 norm    | None      | L2 norm               |
 
-Quantile bounds are probabilities satisfying `0 <= lower < upper <= 1` and
-default to `(0.25, 0.75)`, the interquartile range. Quantiles use exact linear
-interpolation at `(nrows - 1) * q`, including implicit zeros and summed duplicate
-cells. Fitting in Python uses the Rust dense or CSC backend with O(nrows) working
-storage for one column, without constructing a full normalized matrix. The
-Python binding converts CSR to canonical CSC as described above. Quantile fitting
-does not calibrate scales to standard-normal variance. All methods replace only
-exact zero scales with one and propagate NaNs; they do not skip missing values
-or detect near-constant columns using a tolerance.
+Centering and scaling are independent. Other scaling choices include the L1
+norm (`"l1"`) and maximum absolute value (`"maxabs"`). When centering is active,
+norms and maximum absolute values use the centered columns, including implicit
+sparse zeros.
 
-## Reuse fitted parameters
+Robust scaling uses the 25th and 75th percentiles by default. Pass
+`quantile_range=(0.1, 0.9)` for the 10th-to-90th percentile range. Bounds are
+probabilities satisfying `0 <= lower < upper <= 1`. Quantiles use exact linear
+interpolation, and quantile-range scaling does not target unit variance.
 
-Fit once on training data and reuse the fitted centers and scales unchanged:
+Min-max scaling maps finite, nonconstant training columns to `[0, 1]`. New
+observations can fall outside that interval; reusing the parameters does not
+clip them. See the [API reference](/reference/python/) for all method names and
+constructor options.
+
+## Memory and conversion
+
+LazyMatrix owns a copy of the raw input, so later changes to `X` do not affect
+`Z`. Dense input requires a full raw-data copy. Sparse input remains sparse and
+is stored in canonical CSC form, with duplicate entries summed. Stored values
+and results use float64.
+
+Products and transposes do not create a full normalized matrix. To inspect one
+column or explicitly materialize the matrix:
+
+```python
+column = Z[:, 0]
+dense = Z.toarray()
+```
+
+Both results are independent NumPy arrays. Materializing a sparse input can
+require much more memory than its stored data. `Z.centers` and `Z.scales` also
+return independent arrays, or `None` when the component is disabled.
+
+Implicit conversion with `np.asarray(Z)` raises an error. General slicing,
+mutation, and elementwise NumPy operations are unsupported. An estimator that
+requires a concrete array needs explicit conversion or its own operator
+integration.
+
+## Save fitted normalization
+
+Save the feature count and active parameter vectors in a NumPy archive. This
+keeps disabled components absent and preserves floating-point values without
+pickling:
 
 ```python
 from lazymatrix import NormalizationParams
 
-params = robust.normalization
-X_validation = sparse.csr_matrix([[4.0, 1.0], [0.0, -2.0]])
-validation = params.transform(X_validation)
-# Equivalent: LazyMatrix.from_normalization(X_validation, params)
-
-restored = NormalizationParams(
-    params.ncols, centers=params.centers, scales=params.scales
-)
-prediction = restored.transform(X_validation) @ np.ones(params.ncols)
-```
-
-`params.ncols` records the required feature count even when both components are
-inactive. The input's column count must match, and its feature order must match
-the training data. Parameter vectors must be one-dimensional with exactly
-`ncols` entries. Invalid dimensions and explicit positive or negative zero scales
-raise `ValueError`. Negative, tiny nonzero, and nonfinite values are preserved
-in float64. Parameters and transformed matrices own copies, and array properties
-return independent copies. Transposes export the original columns' parameters.
-
-A constant feature gets a fitted scale of one. With mean, minimum, or median
-centering it becomes zero on training data, but new values still subtract the
-training center. Reusing range normalization does not clip new observations to
-`[0, 1]`. Calling `LazyMatrix` or `standardize` again fits new statistics instead
-of reusing training parameters. No method updates fitted statistics online.
-
-The portable representation is an integer `ncols` and optional one-dimensional
-float64 `centers` and `scales` arrays in feature order. Missing arrays mean the
-component is inactive. The same fields reconstruct Rust's
-`ColumnNormalizationParams::from_parts(ncols, centers, scales)` and supply PyTorch
-buffers. Keep application-specific scale exponents in consumer code and pass the
-resulting explicit scales to `NormalizationParams`.
-
-Use a NumPy checkpoint to retain IEEE values without pickling or nonstandard
-JSON numbers:
-
-```python
 checkpoint = {"ncols": params.ncols}
 for name in ("centers", "scales"):
     values = getattr(params, name)
@@ -176,35 +170,35 @@ with np.load("normalization.npz", allow_pickle=False) as saved:
     )
 ```
 
-Preserve inactive components as missing arrays, including when moving parameters
-between languages. Replacing `None` with a zero center or unit scale can change
-IEEE arithmetic with nonfinite values. Keep feature names or other application
-metadata alongside the checkpoint if needed to verify feature order.
+Use `restored.transform` with new raw data. Keep feature names or other metadata
+alongside the archive so you can check feature order when loading it.
+`NormalizationParams` also accepts explicit centers and scales, with one entry
+per feature. An omitted vector disables that component; explicit zero scales
+raise `ValueError`.
 
 ## Use a PyTorch first layer
 
-Install the optional adapter with:
+Install the optional adapter:
 
 ```sh
 pip install "lazymatrix[torch]"
 ```
 
-PyTorch 2.9 or newer is required. Install a compatible PyTorch build using
-[PyTorch's installation instructions](https://pytorch.org/get-started/locally/)
-when you need a particular CUDA version. The ordinary LazyMatrix installation
-does not require or import PyTorch. The extra is available on platforms
-supported by PyTorch.
+PyTorch 2.9 or newer is required. Use [PyTorch's installation
+instructions](https://pytorch.org/get-started/locally/) when you need a particular
+CUDA build. The base LazyMatrix package does not require or import PyTorch.
 
-`NormalizedLinear` applies fixed column normalization as part of a trainable
-first layer. Fit statistics on training data once, then pass raw training,
-validation, and prediction tensors through the same layer:
+`NormalizedLinear` applies saved normalization as part of a trainable linear
+layer. Pass raw feature tensors to the layer, using the centers and scales
+fitted on training data. For the sparse matrix above:
 
 ```python
 import torch
 from lazymatrix.torch import NormalizedLinear
 
-# X and Z are the raw training matrix and its fitted normalization from above.
-raw = X.tocsr()
+raw = X.tocsr(copy=True)
+raw.sum_duplicates()
+raw.sort_indices()
 training = torch.sparse_csr_tensor(
     torch.tensor(raw.indptr, dtype=torch.int64),
     torch.tensor(raw.indices, dtype=torch.int64),
@@ -212,90 +206,60 @@ training = torch.sparse_csr_tensor(
     size=raw.shape,
 )
 layer = NormalizedLinear(
-    X.shape[1], 8, centers=Z.centers, scales=Z.scales, dtype=torch.float32
+    X.shape[1], 8, centers=params.centers, scales=params.scales, dtype=torch.float32
 )
 model = torch.nn.Sequential(layer, torch.nn.ReLU(), torch.nn.Linear(8, 1))
-prediction = model(training)
-prediction.square().mean().backward()
+target = torch.tensor(y, dtype=torch.float32).unsqueeze(1)
+loss = torch.nn.functional.mse_loss(model(training), target)
+loss.backward()
 ```
 
-The layer accepts dense tensors with shape `(*, in_features)` and
-two-dimensional sparse COO or CSR tensors. Convert other sparse layouts
-explicitly before calling it. COO duplicates are summed; CSR tensors must
-satisfy PyTorch's storage invariants, including sorted, distinct column indices
-within each row. When constructing tensors from SciPy, call `sum_duplicates()`
-and `sort_indices()` first if the input is not canonical.
+The layer also accepts dense tensors and sparse COO tensors. CSR input must
+have sorted, distinct column indices within each row, as prepared above.
+Sparse inputs must not require gradients; weights and biases remain trainable
+in normalized coordinates. Centers and scales are fixed buffers and do not
+change in training mode.
 
-Inputs and the layer must share their dtype and device. Float32 and float64
-are supported on CPU and CUDA. For example, move both `model` and `training`
-with `.to("cuda")` before training on a GPU. Sparse features are fixed data:
-sparse tensors with `requires_grad=True` are rejected. Dense-input, weight,
-and bias gradients are supported. Mixed precision, autocast, and other devices
-are outside the supported contract.
+Float32 and float64 are supported on CPU and CUDA. Inputs and the model must
+share their dtype and device. Move both with `.to("cuda")` for GPU training.
+Mixed precision and autocast are unsupported.
 
-Weights use the same shape and initialization as `torch.nn.Linear` and remain
-in normalized coordinates during optimization. Every forward pass derives
-`A = weight / scales` and computes `X @ A.T - A @ centers + bias`. This avoids
-constructing a normalized design matrix and keeps all training operations in
-PyTorch. Pass `centers=None` or `scales=None` to disable either component.
-`bias=False` disables the learned intercept while retaining the centering
-correction.
+### Save a layer
 
-Centers and scales are copied and detached into persistent buffers using the
-layer's dtype and device. The default dtype follows PyTorch rather than the
-supplied statistics. Explicit zero scales, including values that round to zero
-in the selected dtype, raise `ValueError`. Negative scales and nonfinite
-parameters are preserved. The layer never fits statistics or updates them in
-training mode.
-
-Save and restore the normalization together with the trained parameters:
+The layer's `state_dict` includes its normalization. Supply the saved buffers
+when reconstructing the layer, then load its weights and bias:
 
 ```python
 torch.save(layer.state_dict(), "first-layer.pt")
 state = torch.load("first-layer.pt", weights_only=True, map_location="cpu")
-restored = NormalizedLinear(
+restored_layer = NormalizedLinear(
     X.shape[1],
     8,
     centers=state.get("centers"),
     scales=state.get("scales"),
     dtype=state["weight"].dtype,
 )
-restored.load_state_dict(state)
+restored_layer.load_state_dict(state)
 ```
 
-Reconstruct the same feature counts and bias setting. Supplying the saved
-buffers enables the same normalization components without refitting or retaining
-the original training matrix. Calling `reset_parameters()` resets weights and
-bias while preserving the fitted normalization.
+Reconstruct the same feature counts and bias setting. Normalization moves with
+the layer and is restored without refitting or retaining the training matrix.
 
-Factoring normalization changes floating-point evaluation order. Large offsets
-can lose centered variation, and nonfinite values and sparse implicit zeros can
-produce different IEEE results from explicit dense normalization. Sparse storage
-does not guarantee faster training; the
-[PyTorch benchmark](https://github.com/jolars/lazymatrix/tree/main/benches/torch_adapter)
-measures forward/backward throughput and peak memory against a dense first layer.
+## Numerical conventions
 
-See the [Python API reference](/reference/python/) for public classes and methods.
+Computed scales become one only when they are exactly zero. With centering,
+a constant training feature therefore becomes zero. New observations still
+subtract the saved training center.
 
-## Development and releases
+Standard deviations use `nrows - df` as the variance divisor. Scales are `NaN`
+when `nrows <= df`. Missing values are not ignored or imputed, and nonfinite
+values follow IEEE arithmetic.
 
-From the repository root:
+The PyTorch layer factors normalization into the linear operation. This changes
+floating-point evaluation order, so large offsets, nonfinite values, and sparse
+implicit zeros can produce different results from explicit dense normalization.
+The [PyTorch benchmark](https://github.com/jolars/lazymatrix/tree/main/benches/torch_adapter)
+compares training throughput and memory with a dense first layer.
 
-```sh
-task python:check
-task python:torch:check
-task python:package
-```
-
-The first command builds an editable extension and runs formatting, linting, and
-correctness checks, including the optional PyTorch adapter. The second runs just
-the adapter checks. CUDA tests run when hardware is available and report skips
-otherwise. The third builds a wheel and source distribution, installs the wheel
-in an isolated environment, rebuilds from the source distribution, and tests both
-installations with and without the PyTorch extra. Distribution checks use CPU
-PyTorch wheels. The development environment lives in `.devenv/python`.
-
-Python and Rust use independent versions and share one Versionary release PR.
-Rust releases also release Python bindings. Python-only releases leave the Rust
-version unchanged. Python tags use `python-v<version>` and Rust tags use
-`v<version>`.
+See [how it works](/guide/how-it-works) for the normalization algebra and
+[the Python API reference](/reference/python/) for the complete interface.
