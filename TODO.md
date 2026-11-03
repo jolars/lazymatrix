@@ -252,6 +252,35 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     versus column semantics are ambiguous, and the general case needs a low-rank
     expression rather than altered normalization metadata.
 
+## Column kernel performance
+
+- [ ] Investigate the dense column-reduction gap measured in Shrinkage.
+  - On November 3, 2026, a matched-input probe measured one pass of 1,000
+    length-5,000 `LazyColumn::dot_with_sum` products at 3.706 ms versus 1.667 ms
+    for ndarray's direct `dot`. Both used the same Fortran-contiguous `f64`
+    matrix and vector, with no normalization or BLAS feature. These are kernel
+    timings, not solver speedups: medians of nine alternating measurements of 30
+    passes, with inputs prepared outside timing. The build used published
+    LazyMatrix 0.9.0, `ndarray_v0_17` with ndarray 0.17.2, and Rust 1.89.0
+    release mode on an AMD Ryzen 9 7900. Reproduce against the current checkout
+    before changing kernels.
+  - Evaluate backend dot/reduction hooks or contiguous-column fast paths in [the
+    column operations](src/column.rs) and [the ndarray
+    adapter](src/backends/ndarray/vector.rs). Inspect
+    `RawColumn::for_each_stored` inlining, iterator branches, and accumulator
+    loads and stores under ordinary release settings. Shrinkage needed one
+    code-generation unit to avoid an outlined reduction regression; that
+    compiler workaround did not close the measured kernel gap. Also measure
+    column sums and squared norms before adding fused summaries.
+  - Preserve lazy normalization, allocation-free borrowing, strided views,
+    sparse duplicate handling, implicit zeros, and O(nnz) sparse products. Check
+    numerical error when changing reduction order. Verify downstream primal
+    objectives, KKT violations, and dual-certificate feasibility, then remeasure
+    complete Shrinkage fits separately from the kernel comparison.
+  - Local evidence in the sibling Shrinkage checkout lives under
+    `../shrinkage/.build/sklearn-gap-20261103/`: `report.txt`, `kernels.jsonl`,
+    and the matched-input probe in `rust-probe/`.
+
 ## Lazy design matrices
 
 - [ ] Prototype a programmatic API for numeric column selection and
