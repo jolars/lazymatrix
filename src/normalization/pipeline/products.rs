@@ -2,7 +2,7 @@
 
 use super::{Columns, Execute, Source, Stage};
 use crate::{VectorView, VectorViewMut};
-use num_traits::Zero;
+use num_traits::{One, Zero};
 
 impl<M, P> Execute<M, P> for Columns
 where
@@ -23,27 +23,88 @@ where
         };
         assert_eq!(x.len(), input, "pipeline input dimension mismatch");
         assert_eq!(out.len(), output, "pipeline output dimension mismatch");
-        for i in 0..output {
-            out.set(i, P::Scalar::zero());
-        }
         if input == 0 || output == 0 {
+            crate::traits::scale_output(P::Scalar::zero(), out);
             return Ok(());
         }
-        match data.layout() {
-            super::source::Layout::Full => data.visit(|i, j, value| {
-                let (to, from) = if transpose { (j, i) } else { (i, j) };
-                out.set(to, out.get(to) + params.entry(value, i, j) * x.get(from));
-            }),
-            #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
-            _ => sparse_product(data, params, transpose, x, out),
-        }
+        // Keep the full operator's constant coordinates visible without
+        // introducing runtime fused dispatch or its temporary-output path.
+        rectangle_into(
+            data,
+            params,
+            0..data.nrows(),
+            0..data.ncols(),
+            transpose,
+            x,
+            out,
+        )
     }
 }
 
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
-fn sparse_product<M, P, X, Y>(
+/// Restrict native traversal while retaining the parent's fitted coordinates.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn product_rectangle<M, P, X, Y>(
     data: &M,
     params: &P,
+    rows: std::ops::Range<usize>,
+    columns: std::ops::Range<usize>,
+    transpose: bool,
+    alpha: P::Scalar,
+    x: &X,
+    beta: P::Scalar,
+    out: &mut Y,
+) -> Result<(), M::Error>
+where
+    P: Stage<Kind = Columns>,
+    M: Source<P::Scalar>,
+    X: VectorView<P::Scalar> + ?Sized,
+    Y: VectorViewMut<P::Scalar> + ?Sized,
+{
+    crate::traits::validate_traversal(data, &rows, &columns);
+    let (input, output) = if transpose {
+        (rows.len(), columns.len())
+    } else {
+        (columns.len(), rows.len())
+    };
+    assert_eq!(x.len(), input, "pipeline input dimension mismatch");
+    assert_eq!(out.len(), output, "pipeline output dimension mismatch");
+    if alpha == P::Scalar::zero() || output == 0 {
+        crate::traits::scale_output(beta, out);
+        return Ok(());
+    }
+    if input == 0 {
+        let product = alpha * P::Scalar::zero();
+        for i in 0..out.len() {
+            let previous = if beta == P::Scalar::zero() {
+                P::Scalar::zero()
+            } else {
+                beta * out.get(i)
+            };
+            out.set(i, product + previous);
+        }
+        return Ok(());
+    }
+    if alpha == P::Scalar::one() && beta == P::Scalar::zero() {
+        return rectangle_into(data, params, rows, columns, transpose, x, out);
+    }
+    // Keep beta's output separate from the product so alpha scales the final
+    // sum, and no normalization correction follows a failed backend read.
+    let mut product = vec![P::Scalar::zero(); output];
+    rectangle_into(data, params, rows, columns, transpose, x, &mut product)?;
+    crate::traits::scale_output(beta, out);
+    for (i, value) in product.into_iter().enumerate() {
+        out.set(i, out.get(i) + alpha * value);
+    }
+    Ok(())
+}
+
+// Full products need constant origins to eliminate per-entry coordinate offsets.
+#[inline(always)]
+fn rectangle_into<M, P, X, Y>(
+    data: &M,
+    params: &P,
+    rows: std::ops::Range<usize>,
+    columns: std::ops::Range<usize>,
     transpose: bool,
     x: &X,
     out: &mut Y,
@@ -54,9 +115,43 @@ where
     X: VectorView<P::Scalar> + ?Sized,
     Y: VectorViewMut<P::Scalar> + ?Sized,
 {
-    use num_traits::One;
-    let background: Vec<_> = (0..data.ncols())
-        .map(|j| params.entry(P::Scalar::zero(), 0, j))
+    for i in 0..out.len() {
+        out.set(i, P::Scalar::zero());
+    }
+    match data.traversal_layout() {
+        super::source::Layout::Full => {
+            let (row_start, column_start) = (rows.start, columns.start);
+            data.for_each_entry(rows, columns, |i, j, value| {
+                let (to, from) = if transpose {
+                    (j - column_start, i - row_start)
+                } else {
+                    (i - row_start, j - column_start)
+                };
+                out.set(to, out.get(to) + params.entry(value, i, j) * x.get(from));
+            })
+        }
+        _ => sparse_product(data, params, rows, columns, transpose, x, out),
+    }
+}
+
+fn sparse_product<M, P, X, Y>(
+    data: &M,
+    params: &P,
+    rows: std::ops::Range<usize>,
+    columns: std::ops::Range<usize>,
+    transpose: bool,
+    x: &X,
+    out: &mut Y,
+) -> Result<(), M::Error>
+where
+    P: Stage<Kind = Columns>,
+    M: Source<P::Scalar>,
+    X: VectorView<P::Scalar> + ?Sized,
+    Y: VectorViewMut<P::Scalar> + ?Sized,
+{
+    let background: Vec<_> = columns
+        .clone()
+        .map(|j| params.entry(P::Scalar::zero(), rows.start, j))
         .collect();
     let sums = RangeSums::new(
         (0..x.len())
@@ -80,16 +175,23 @@ where
             },
         )
     };
-    let outer_is_output = match data.layout() {
+    let outer_is_output = match data.traversal_layout() {
         super::source::Layout::SparseRows => !transpose,
         super::source::Layout::SparseColumns => transpose,
         super::source::Layout::Full => unreachable!(),
     };
+    let local = |i, j| {
+        if transpose {
+            (j - columns.start, i - rows.start)
+        } else {
+            (i - rows.start, j - columns.start)
+        }
+    };
     if outer_is_output {
         let mut current = 0;
         let mut last = 0;
-        data.visit(|i, j, value| {
-            let (to, from) = if transpose { (j, i) } else { (i, j) };
+        data.for_each_entry(rows.clone(), columns.clone(), |i, j, value| {
+            let (to, from) = local(i, j);
             while current < to {
                 out.set(current, out.get(current) + gap(current, last, x.len()));
                 current += 1;
@@ -109,8 +211,8 @@ where
         return Ok(());
     }
     let mut last = vec![0; out.len()];
-    data.visit(|i, j, value| {
-        let (to, from) = if transpose { (j, i) } else { (i, j) };
+    data.for_each_entry(rows.clone(), columns.clone(), |i, j, value| {
+        let (to, from) = local(i, j);
         let implicit = gap(to, last[to], from);
         out.set(
             to,
@@ -126,12 +228,10 @@ where
 
 // Summing missing ranges directly avoids subtracting almost equal background
 // totals when most entries of a row or column are stored.
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 struct RangeSums<F> {
     values: Vec<F>,
     size: usize,
 }
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 impl<F: crate::Scalar> RangeSums<F> {
     fn new(values: Vec<F>) -> Self {
         let size = values.len().next_power_of_two();

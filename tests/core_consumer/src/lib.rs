@@ -23,6 +23,14 @@ mod normalization_fitting;
 mod normalization_pipeline;
 
 #[cfg(test)]
+#[path = "../../matrix_traversal.rs"]
+mod matrix_traversal;
+
+#[cfg(test)]
+#[path = "../../rectangular.rs"]
+mod rectangular;
+
+#[cfg(test)]
 mod tests {
     use std::{cell::Cell, convert::Infallible};
 

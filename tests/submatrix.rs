@@ -9,9 +9,11 @@ fn selection_inherits_fitted_parameters_and_nests_locally() {
     let data = array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
     let lazy = LazyMatrix::from_column_parts(data, Some(vec![1.0, 2.0, 3.0]), Some(vec![2.0; 3]));
     let view = lazy.submatrix(1..3, 1..3);
-    assert_eq!(view.centers(), Some([2.0, 3.0].as_slice()));
+    assert!(std::ptr::eq(view.as_inner(), &lazy));
+    let selected_centers = &view.as_inner().normalization().centers().unwrap()[view.column_range()];
+    assert_eq!(selected_centers, [2.0, 3.0].as_slice());
     assert_eq!(
-        view.centers().unwrap().as_ptr(),
+        selected_centers.as_ptr(),
         lazy.normalization().centers().unwrap()[1..].as_ptr()
     );
     assert_eq!(view.matvec(&vec![1.0, 2.0]).unwrap(), vec![4.5, 9.0]);

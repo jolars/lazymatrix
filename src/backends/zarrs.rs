@@ -123,8 +123,21 @@ pub struct ZarrMatrix<A, F = f64> {
 }
 
 impl<A: ZarrArray<F>, F: Scalar> crate::normalization::pipeline::Source<F> for ZarrMatrix<A, F> {
-    fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
-        self.for_each_value(visit)
+    fn traversal_layout(&self) -> crate::TraversalLayout {
+        crate::TraversalLayout::Full
+    }
+    fn for_each_entry(
+        &self,
+        rows: Range<usize>,
+        columns: Range<usize>,
+        mut visit: impl FnMut(usize, usize, F),
+    ) -> Result<(), Self::Error> {
+        crate::traits::validate_traversal(self, &rows, &columns);
+        self.for_each_row_in(rows, columns, |i, first, values| {
+            for (offset, &value) in values.iter().enumerate() {
+                visit(i, first + offset, value);
+            }
+        })
     }
 }
 

@@ -1,10 +1,12 @@
 //! Reuse column kernels through a transposed traversal, without changing storage.
 
-use crate::normalization::pipeline::{self, Columns, Execute, Source, source::Layout};
-use crate::{
-    Centering, ColumnNormalization, MatrixErrorType, MatrixShape, RowNormalization,
-    RowNormalizationStats, Scalar, Scaling, VectorView, VectorViewMut,
-};
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+use crate::normalization::pipeline::{self, Columns, Execute};
+use crate::normalization::pipeline::{Source, source::Layout};
+use crate::{MatrixErrorType, MatrixShape, Scalar, VectorView, VectorViewMut};
+
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+use crate::{Centering, ColumnNormalization, RowNormalization, RowNormalizationStats, Scaling};
 
 struct Transposed<'a, M>(&'a M);
 
@@ -20,23 +22,30 @@ impl<M: MatrixErrorType> MatrixErrorType for Transposed<'_, M> {
     type Error = M::Error;
 }
 impl<M: Source<F>, F: Scalar> Source<F> for Transposed<'_, M> {
-    fn layout(&self) -> Layout {
-        match self.0.layout() {
+    fn traversal_layout(&self) -> Layout {
+        match self.0.traversal_layout() {
             Layout::SparseColumns => Layout::SparseRows,
             Layout::SparseRows => Layout::SparseColumns,
             Layout::Full => Layout::Full,
         }
     }
-    fn visit(&self, mut visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
-        self.0.visit(|i, j, value| visit(j, i, value))
+    fn for_each_entry(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        mut visit: impl FnMut(usize, usize, F),
+    ) -> Result<(), Self::Error> {
+        self.0
+            .for_each_entry(columns, rows, |i, j, value| visit(j, i, value))
     }
 }
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) fn stats<M: Source<F>, F: Scalar>(
     matrix: &M,
     spec: RowNormalization,
 ) -> Result<RowNormalizationStats<F>, M::Error> {
-    if matches!(matrix.layout(), Layout::SparseRows) {
+    if matches!(matrix.traversal_layout(), Layout::SparseRows) {
         return buffered_stats(matrix, spec);
     }
     pipeline::raw_stats(
@@ -45,6 +54,7 @@ pub(crate) fn stats<M: Source<F>, F: Scalar>(
     )
 }
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 fn buffered_stats<M: Source<F>, F: Scalar>(
     matrix: &M,
     spec: RowNormalization,
@@ -67,7 +77,7 @@ fn buffered_stats<M: Source<F>, F: Scalar>(
         values.clear();
     };
     if matrix.nrows() != 0 && matrix.ncols() != 0 {
-        matrix.visit(|i, _, value| {
+        matrix.for_each_entry(0..matrix.nrows(), 0..matrix.ncols(), |i, _, value| {
             while current < i {
                 finish(&mut values);
                 current += 1;
@@ -82,6 +92,7 @@ fn buffered_stats<M: Source<F>, F: Scalar>(
     Ok((centers, scales))
 }
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 fn fit_row<F: Scalar>(
     values: &mut [F],
     ncols: usize,
@@ -134,6 +145,7 @@ fn fit_row<F: Scalar>(
     (center, scale)
 }
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 fn sum_with_zeros<F: Scalar>(values: &[F], missing: usize, transform: impl Fn(F) -> F) -> F {
     let sum = values.iter().copied().map(&transform).sum::<F>();
     if missing == 0 {
@@ -143,6 +155,7 @@ fn sum_with_zeros<F: Scalar>(values: &[F], missing: usize, transform: impl Fn(F)
     }
 }
 
+#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) fn product<M, F, X, Y>(
     matrix: &M,
     transpose: bool,
@@ -165,4 +178,43 @@ where
         scalar: std::marker::PhantomData,
     };
     Columns::product(&Transposed(matrix), &params, !transpose, x, out)
+}
+
+/// Restrict row-normalized sparse traversal without changing fitted row indices.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rectangle_product<M, F, X, Y>(
+    matrix: &M,
+    rows: std::ops::Range<usize>,
+    columns: std::ops::Range<usize>,
+    transpose: bool,
+    alpha: F,
+    x: &X,
+    beta: F,
+    centers: Option<&[F]>,
+    scales: Option<&[F]>,
+    out: &mut Y,
+) -> Result<(), M::Error>
+where
+    M: Source<F>,
+    F: Scalar,
+    X: VectorView<F> + ?Sized,
+    Y: VectorViewMut<F> + ?Sized,
+{
+    let params = super::super::ColumnNormalizationParams {
+        ncols: matrix.nrows(),
+        centers,
+        scales,
+        scalar: std::marker::PhantomData,
+    };
+    crate::normalization::pipeline::product_rectangle(
+        &Transposed(matrix),
+        &params,
+        columns,
+        rows,
+        !transpose,
+        alpha,
+        x,
+        beta,
+        out,
+    )
 }

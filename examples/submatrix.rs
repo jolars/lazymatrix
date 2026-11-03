@@ -15,10 +15,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     )?;
     let selected = lazy.submatrix(1..3, 1..3);
-    assert_eq!(
-        selected.centers(),
-        Some(&lazy.normalization().centers().unwrap()[1..3])
-    );
+    assert_eq!(selected.row_range(), 1..3);
+    assert_eq!(selected.column_range(), 1..3);
+    assert!(std::ptr::eq(selected.as_inner(), &lazy));
     let coefficients = array![1.0, -1.0];
     let forward = selected.matvec(&coefficients)?;
     let transpose = selected.mat_transpose_vec(&array![0.5, 1.0])?;

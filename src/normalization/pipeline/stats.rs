@@ -92,9 +92,10 @@ where
         let mut states = vec![Summary::new(); self.ncols()];
         let centered = |value, j| centers.map_or(value, |c| value - c[j]);
         if self.nrows() != 0 && self.ncols() != 0 {
-            self.data.visit(|i, j, value| {
-                states[j].add(centered(self.prefix.entry(value, i, j), j), 1);
-            })?;
+            self.data
+                .for_each_entry(0..self.nrows(), 0..self.ncols(), |i, j, value| {
+                    states[j].add(centered(self.prefix.entry(value, i, j), j), 1);
+                })?;
         }
         for (j, state) in states.iter_mut().enumerate() {
             let missing = self.nrows() - state.count;
@@ -116,10 +117,11 @@ where
         crate::quantiles::stream(self.nrows(), self.ncols(), request, |visit| {
             counts.fill(0);
             if self.nrows() != 0 && self.ncols() != 0 {
-                self.data.visit(|i, j, value| {
-                    counts[j] += 1;
-                    visit(j, self.prefix.entry(value, i, j), 1);
-                })?;
+                self.data
+                    .for_each_entry(0..self.nrows(), 0..self.ncols(), |i, j, value| {
+                        counts[j] += 1;
+                        visit(j, self.prefix.entry(value, i, j), 1);
+                    })?;
             }
             for (j, &count) in counts.iter().enumerate() {
                 let missing = self.nrows() - count;

@@ -1,5 +1,9 @@
 use std::convert::Infallible;
 
+#[cfg(feature = "ndarray_all")]
+#[path = "common/backend_aliases.rs"]
+mod backend_aliases;
+
 use lazymatrix::{
     ColumnNormalizationParams, DenseNormalize, EagerMatrix, LazyMatrix, MatVec, MaterializeDense,
     MatrixErrorType, MatrixOwned, MatrixShape, MatrixWrite,
@@ -124,6 +128,51 @@ fn materialization_retains_parameters_without_applying_them_twice() {
     assert_eq!(prediction.matvec(&vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
 }
 
+#[cfg(feature = "ndarray_all")]
+macro_rules! eager_submatrix_test {
+    ($feature:literal, $name:ident, $backend:ident) => {
+        #[cfg(feature = $feature)]
+        #[test]
+        fn $name() {
+            use backend_aliases::$backend::{Array2, array};
+            use lazymatrix::{MatTransposeVec, Submatrix};
+
+            let raw = array![[1., 2., 3.], [3., 6., 5.], [5., 10., 7.]];
+            let lazy = LazyMatrix::from_column_parts(
+                raw,
+                Some(vec![1., 2., 3.]),
+                Some(vec![2., -2., 0.5]),
+            );
+            let eager = lazy.to_eager::<Array2<f64>>().unwrap();
+            let selected = Submatrix::new(&eager, 1..3, 1..3);
+            assert!(std::ptr::eq(selected.as_inner(), &eager));
+            assert_eq!(
+                selected.matvec(&array![2., -1.]).unwrap(),
+                array![-8., -16.]
+            );
+            assert_eq!(
+                selected.mat_transpose_vec(&array![0.5, 1.]).unwrap(),
+                array![-5., 10.],
+            );
+            assert_eq!(
+                eager.normalization().centers(),
+                lazy.normalization().centers(),
+            );
+            assert_eq!(
+                eager.normalization().scales(),
+                lazy.normalization().scales()
+            );
+        }
+    };
+}
+
+#[cfg(feature = "ndarray_all")]
+eager_submatrix_test!("ndarray_v0_15", eager_submatrix_v0_15, ndarray_0_15);
+#[cfg(feature = "ndarray_all")]
+eager_submatrix_test!("ndarray_v0_16", eager_submatrix_v0_16, ndarray_0_16);
+#[cfg(feature = "ndarray_all")]
+eager_submatrix_test!("ndarray_v0_17", eager_submatrix_v0_17, ndarray_0_17);
+
 #[test]
 fn consuming_conversion_reuses_dense_storage() {
     let source = source();
@@ -154,7 +203,10 @@ fn consuming_conversion_retains_borrowed_parameter_storage() {
     );
     assert_eq!(eager.matvec(&vec![1.0, 2.0]).unwrap(), [0.0, -2.0]);
     let (_, view) = eager.into_parts();
-    assert_eq!(view.into_parts().0.unwrap().as_ptr(), center_ptr);
+    let (ncols, centers, scales) = view.into_parts();
+    assert_eq!(ncols, 2);
+    assert_eq!(centers.unwrap().as_ptr(), center_ptr);
+    assert_eq!(scales.unwrap().as_ptr(), params.scales().unwrap().as_ptr());
 }
 
 #[test]

@@ -564,6 +564,7 @@ fn sprs_sliced_and_transposed_views_use_local_dimensions() {
             .collect();
         let v = common::random_vec(58, matrix.cols());
         common::check_row_normalization(&matrix, &dense, |v| v.to_vec());
+        common::check_row_submatrices(&matrix, &dense, |v| v.to_vec());
         let u = common::random_vec(59, matrix.rows());
         for center in [Centering::None, Centering::Mean, Centering::Min] {
             for scale in [

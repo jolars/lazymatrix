@@ -269,6 +269,48 @@ and excluding edge padding; chunk and outer-shard storage adds to the fitted
 vectors and column-statistics workspace. No path materializes an intermediate
 design matrix.
 
+## Select a normalized submatrix
+
+Select a contiguous rectangle from the logical operator after fitting:
+
+```rust
+use lazymatrix::{LazyMatrix, MatVec, RowNormalization};
+use ndarray::array;
+
+let x = array![[1., 2., 3.], [4., 5., 6.], [7., 8., 9.]];
+let normalized = LazyMatrix::new(x.view(), RowNormalization::standardize()).unwrap();
+let selected = normalized.submatrix(0..2, 1..3);
+let y = selected.matvec(&array![1.0, -1.0]).unwrap();
+assert_eq!(selected.row_range(), 0..2);
+assert_eq!(selected.column_range(), 1..3);
+```
+
+Selection preserves every fitted stage. Row normalization uses the saved
+parameters fitted with all of the original columns, even when the selection
+excludes some columns. To fit using only selected raw rows, use `IndexedRows`
+before fitting instead.
+
+`Submatrix<'a, O>` borrows the logical parent `O`. Access that parent through
+`as_inner()`, including its fitted parameters through
+`selected.as_inner().normalization()`. The parent metadata still describes the
+full matrix; use the selection ranges when inspecting a particular row or
+column. Construction allocates nothing and reads no data. Nested selections
+take local coordinates, combine their offsets, and retain the original parent
+and lifetime.
+
+Column and row normalization and supported chains supply allocating, reusable,
+and fused forward and transpose vector products for their submatrices. Column
+normalization also supplies weighted operations, eager conversion, and borrowed
+logical views. Eager conversion copies the selected column parameters. Zarr
+column selections read only intersecting chunks. Empty selections and
+zero-alpha products skip storage reads.
+
+Custom operators can implement `RectangularProducts` to support these vector
+products. The rectangular methods receive source row and column ranges and
+local input and output vectors. They must evaluate only the selected rectangle;
+padding a vector and invoking a full product can read unselected data and
+change IEEE nonfinite results.
+
 ## Materialize explicitly
 
 Choose an eager representation when dense storage and repeated operations suit
@@ -319,6 +361,11 @@ The data handle can still borrow an input matrix.
 The parameter types default to `Vec<F>` storage. Their view aliases are
 `ColumnNormalizationParamsView<'a, F>` and `RowNormalizationParamsView<'a, F>`,
 with `&'a [F]` storage. Both representations share each axis's capabilities.
+Parameter `into_parts()` returns `(dimension, centers, scales)` so that the
+parameters retain their row or column count even when both vectors are absent.
+Pass owned parts back to the corresponding parameter type's
+`from_parts()` constructor.
+
 Row parameters use `.apply_frozen(data)` on owned values or views to emphasize
 that they describe particular rows. Fit new samples independently, even when
 their row count matches the training data:
@@ -338,6 +385,22 @@ let x_new = array![[2.0, 1.0], [0.0, 3.0]];
 let prediction = eager.normalization().view().apply(&x_new);
 let y_new = prediction.matvec(&array![1.0, -1.0]).unwrap();
 ```
+
+Generic code can fit through `NormalizationRecipe<M, P>::fit`, borrow parameters
+through `NormalizationParams::View` and `view()`, and prepare new observations
+through `PrepareNewSamples<M>`. Chain `first()`, `next()`, and `into_parts()`
+expose the saved stages without private trait bounds. Explicit chain fitting
+uses `fit::<M, P>()`, where `P` is the fitted parameter type, and inference
+usually supplies both types.
+
+Custom backends can fit column-only chains by implementing
+`MatrixTraversal<F>` and `ColumnStats<F>`. Traversal takes a source rectangle
+and reports source coordinates. `TraversalLayout::Full` visits every selected
+cell, including zeros and fill values. `SparseRows` and `SparseColumns` visit
+unique cells in sorted native order, combine duplicate entries, preserve
+explicit stored zeros, and treat omitted cells as zero. Empty rectangles
+perform no reads. Dense indexed backends can use the provided dense traversal
+helper. Mixed chains continue to use dense indexed access.
 
 Read [how it works](/guide/how-it-works) for the algebra and
 [benchmarks](/benchmarks) for measured tradeoffs between representations.

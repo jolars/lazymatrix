@@ -48,7 +48,9 @@ dense storage; column-only chains also support sparse and chunked storage.
 Select the axis through `ColumnNormalizationParams`
 or `RowNormalizationParams`, and inspect centers and scales through
 `normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`
-from `into_parts()`.
+from `into_parts()`. The parameter types return
+`(dimension, centers, scales)` from their own `into_parts()`, preserving
+inactive identity dimensions.
 `LazyMatrix::from_parts(data, params)` rebuilds the lazy operator. Supply
 explicit vectors with `from_column_parts` or `from_row_parts`; infer the
 dimension from the matrix.
@@ -90,6 +92,14 @@ borrowing through capabilities:
   contiguous CSR slices. Their indices are `usize`.
 - Borrowing must not hide gathering, allocation, decoding, or I/O. Unsupported
   borrowing should fail at compile time.
+
+`MatrixTraversal` supplies operational rectangle scans in source coordinates.
+Coalesce sparse cells before visiting them in the declared native order, retain
+explicit zeros, and restrict storage reads to selected outer ranges or chunks.
+`Submatrix<'a, O>` borrows a logical parent and ranges; nested selections flatten
+without refitting. `RectangularProducts` applies the parent's saved
+transformation, including row parameters fitted outside the selection. Keep
+column-only advanced capabilities separate from general vector products.
 
 Keep logical column operations on borrowed views and document their complexity.
 Sparse row views must preserve storage order and duplicates, have logical length

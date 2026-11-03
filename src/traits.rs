@@ -34,6 +34,10 @@
 //!   row-normalized vector products over dense or sparse raw storage.
 //! * [`IndexedRowSource`] — native raw traversal for [`crate::IndexedRows`],
 //!   which fits normalization on selected rows without copying the design.
+//! * [`MatrixTraversal`] — bounded raw rectangle traversal for fitting and
+//!   applying normalization chains on downstream dense and sparse backends.
+//! * [`RectangularProducts`] — products on logical operator rectangles, used by
+//!   [`crate::Submatrix`] without copying normalization metadata.
 //! * [`VectorView`] / [`VectorViewMut`] — storage-independent borrowed vector
 //!   access, including strided backend views.
 //! * [`RawColumn`] / [`RawColumns`] and [`LogicalColumn`] / [`Columns`] — the
@@ -66,10 +70,12 @@ mod indexed_rows;
 mod materialize;
 mod matmat;
 mod operator;
+mod rectangular;
 mod row_normalization;
 mod rows;
 mod stats;
 mod submatrix;
+mod traversal;
 mod vectors;
 mod weighted_sums;
 
@@ -81,7 +87,7 @@ pub(crate) use operator::{mat_transpose_vec_normalized_into, matvec_normalized_i
 pub use crate::normalization::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
     ColumnNormalizationStats, FittedRowNormalization, NormalizationChain, NormalizationChainParams,
-    NormalizationParams, NormalizationRecipe, QuantileRange, RowNormalization,
+    NormalizationParams, NormalizationRecipe, PrepareNewSamples, QuantileRange, RowNormalization,
     RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats, Scaling,
 };
 pub use blocks::{DenseBlock, ReadBlock};
@@ -94,11 +100,14 @@ pub use operator::{
     MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto,
     MatVecScaledInto, MatrixErrorType, MatrixShape,
 };
+pub use rectangular::RectangularProducts;
 pub use row_normalization::{RowNormalizationKernel, RowStats};
 pub use rows::SparseRows;
 pub use stats::ColumnStats;
 pub(crate) use stats::normalization_stats_with_quantiles;
 pub use submatrix::SubmatrixKernel;
+pub(crate) use traversal::validate_traversal;
+pub use traversal::{MatrixTraversal, TraversalLayout, dense_for_each_entry};
 pub use vectors::{
     DotProduct, DotSlice, ElemDivAssign, L2Norm, ScaleAssign, ScaledAddAssign, ScaledSubSlice,
     SubScalarAssign, SumEntries, VectorOwned, VectorView, VectorViewMut,

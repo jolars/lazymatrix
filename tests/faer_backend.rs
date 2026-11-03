@@ -52,12 +52,14 @@ macro_rules! backend_suite {
                     + lazymatrix::MaterializeDense<f64>
                     + lazymatrix::RowStats<f64>
                     + lazymatrix::RowNormalizationKernel<f64>
+                    + lazymatrix::MatrixTraversal<f64>
                     + lazymatrix::SubmatrixKernel<f64>,
             {
                 use lazymatrix::{RawColumn, WeightedColumnSumsInto, WeightedGramInto};
                 let reference = Mat::from_fn(matrix.nrows(), matrix.ncols(), |i, j| dense[i][j]);
                 common::check_column_stats_against(matrix, &reference);
                 common::check_row_normalization(matrix, dense, to_col);
+                common::check_row_submatrices(matrix, dense, to_col);
                 common::check_transpose_products(matrix, dense, &to_col, &from_col);
                 common::check_fused_operator(matrix, dense, matrix.ncols(), &to_col);
                 common::batched::check_batched(matrix, dense);
@@ -409,9 +411,20 @@ macro_rules! backend_suite {
                 common::check_row_normalization(&matrix, &raw, to_col);
                 common::check_row_normalization(&matrix.as_ref(), &raw, to_col);
                 common::check_row_normalization(&matrix.rb_mut(), &raw, to_col);
+                common::check_row_submatrices(&matrix, &raw, to_col);
+                common::check_row_submatrices(&matrix.as_ref(), &raw, to_col);
+                common::check_row_submatrices(&matrix.rb_mut(), &raw, to_col);
                 let recipe = lazymatrix::ColumnNormalization::robust()
                     .then(lazymatrix::ColumnNormalization::standardize());
                 let pipeline = lazymatrix::LazyMatrix::new(&matrix, recipe).unwrap();
+                let first = pipeline.normalization().first();
+                let next = pipeline.normalization().next();
+                let normalized = common::materialize(
+                    &common::materialize(&raw, first.centers(), first.scales()),
+                    next.centers(),
+                    next.scales(),
+                );
+                common::check_frozen_submatrices(&pipeline, &normalized, to_col);
                 let oracle = lazymatrix::LazyMatrix::new(
                     Mat::from_fn(3, 2, |i, j| [[0., -1.], [0., 0.], [4., 0.]][i][j]),
                     recipe,

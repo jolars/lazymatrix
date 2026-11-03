@@ -25,6 +25,18 @@ expose fitted parameters. This brings several breaking changes to the Rust API:
   matrix-level accessors.
 - Both wrappers now return `(data, params)` from `into_parts()` instead of
   `(data, centers, scales)`.
+- Column and row parameter `into_parts()` methods now return
+  `(dimension, centers, scales)`, preserving the dimension even when both
+  vectors are absent.
+- `Submatrix<'a, O>` now borrows a logical parent operator instead of storing
+  column normalization separately. Read the parent through `as_inner()` and
+  selection bounds through `row_range()` and `column_range()`. The submatrix's
+  `centers()` and `scales()` accessors are removed; inspect the parent's
+  `normalization()` instead.
+- `ColumnNormalization` and `RowNormalization` are non-exhaustive. Construct
+  custom recipes with `new(center, scale)` instead of struct literals.
+- Chain fitting now uses public recipe and fitted-parameter bounds, with
+  `fit::<M, P>()` and `fit_apply::<M, P>()` replacing scalar generic arguments.
 
 Normalization recipes can now fit parameters separately with `.fit()` or fit and
 wrap data with `.fit_apply()`. Fitted parameters can own their vectors or share
@@ -35,6 +47,19 @@ Recipes also compose with `.then()`, with each stage fitting the output of its
 predecessors. For new samples, `.for_new_samples()` reuses training column
 parameters and refits row stages, while `.apply_frozen()` reapplies all fitted
 stages unchanged. Chains containing row stages currently require dense storage.
+
+Generic consumers can fit recipes through `NormalizationRecipe`, borrow fitted
+parameters through `NormalizationParams::View` and `view()`, and prepare new
+samples through `PrepareNewSamples`. Custom backends can implement
+`MatrixTraversal` for column-only chains and `RectangularProducts` for borrowed
+submatrix vector products.
+
+Submatrix vector products now also support row normalization and supported
+normalization chains. Selections preserve the parent's fitted transformation,
+including row parameters fitted using columns outside the selection. Nested
+selections use local coordinates and retain the original parent. Weighted
+operations, eager conversion, and borrowed logical views remain available for
+column-normalized submatrices.
 
 ## [0.9.0](https://github.com/jolars/lazymatrix/compare/v0.8.1...v0.9.0) (2026-10-29)
 

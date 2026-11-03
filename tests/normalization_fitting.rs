@@ -135,6 +135,10 @@ where
     recipe.fit(data)
 }
 
+fn parameter_view<P: NormalizationParams>(parameters: &P) -> P::View<'_> {
+    parameters.view()
+}
+
 trait StatisticsSource<F: Scalar>: ColumnStats<F> + MatrixShape {}
 impl<F: Scalar> StatisticsSource<F> for Statistics<F> {}
 
@@ -251,7 +255,8 @@ fn check_application<F: Scalar>() {
         assert_eq!(view.scales().unwrap().as_ptr(), scales);
         assert_eq!(view.ncols(), 2);
     }
-    let (c, s) = view.into_parts();
+    let (ncols, c, s) = view.into_parts();
+    assert_eq!(ncols, 2);
     assert_eq!(c.unwrap().as_ptr(), centers);
     assert_eq!(s.unwrap().as_ptr(), scales);
     assert_eq!(source.calls.get(), 1);
@@ -286,7 +291,8 @@ fn check_application<F: Scalar>() {
     assert_eq!(transpose, vec![value(-3.0), value(3.0)]);
     let after_products = source.reads.get();
     let (_, view) = first.into_parts();
-    let (c, s) = view.into_parts();
+    let (nrows, c, s) = view.into_parts();
+    assert_eq!(nrows, 2);
     assert_eq!(c.unwrap().as_ptr(), centers);
     assert_eq!(s.unwrap().as_ptr(), scales);
     assert_eq!(source.reads.get(), after_products);
@@ -308,6 +314,51 @@ fn application_infers_f32_and_shares_or_moves_vectors() {
 #[test]
 fn application_infers_f64_and_shares_or_moves_vectors() {
     check_application::<f64>();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn parameter_parts_preserve_identity_dimensions_and_owned_vectors() {
+    for dimension in [0, 7] {
+        let columns = ColumnNormalizationParams::<f64>::from_parts(dimension, None, None);
+        assert_eq!(
+            parameter_view(&columns).into_parts(),
+            (dimension, None, None)
+        );
+        let (ncols, centers, scales) = columns.into_parts();
+        let rebuilt = ColumnNormalizationParams::from_parts(ncols, centers, scales);
+        assert_eq!(rebuilt.ncols(), dimension);
+        assert_eq!(rebuilt.view().apply(Shape(3, dimension)).ncols(), dimension);
+
+        let rows = RowNormalizationParams::<f32>::from_parts(dimension, None, None);
+        assert_eq!(parameter_view(&rows).into_parts(), (dimension, None, None));
+        let (nrows, centers, scales) = rows.into_parts();
+        let rebuilt = RowNormalizationParams::from_parts(nrows, centers, scales);
+        assert_eq!(rebuilt.nrows(), dimension);
+        assert_eq!(
+            rebuilt.view().apply_frozen(Shape(dimension, 3)).nrows(),
+            dimension
+        );
+    }
+
+    let centers = vec![1., 2.];
+    let scales = vec![-2., 3.];
+    let centers_pointer = centers.as_ptr();
+    let scales_pointer = scales.as_ptr();
+    let columns = ColumnNormalizationParams::from_parts(2, Some(centers), Some(scales));
+    let (ncols, centers, scales) = columns.into_parts();
+    assert_eq!(ncols, 2);
+    assert_eq!(centers.as_ref().unwrap().as_ptr(), centers_pointer);
+    assert_eq!(scales.as_ref().unwrap().as_ptr(), scales_pointer);
+    let columns = ColumnNormalizationParams::from_parts(ncols, centers, scales);
+    assert_eq!(
+        parameter_view(&columns).centers().unwrap().as_ptr(),
+        centers_pointer
+    );
+    assert_eq!(
+        parameter_view(&columns).scales().unwrap().as_ptr(),
+        scales_pointer
+    );
 }
 
 struct Shape(usize, usize);

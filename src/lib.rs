@@ -135,10 +135,12 @@
 //! # Submatrices
 //!
 //! [`LazyMatrix::submatrix`] borrows contiguous row and column ranges of the
-//! already normalized matrix. It inherits the selected fitted parameters rather
-//! than recomputing them. [`Submatrix`] supports products, filtered column and
+//! logical parent without refitting. [`Submatrix`] supports vector products for
+//! column and row normalization and supported chains. Row parameters retain the
+//! values fitted across the original columns, and nested selections flatten to
+//! the original parent. Column normalization also supports filtered column and
 //! sparse-row access, weighted column sums and Gram products, and explicit eager
-//! conversion. Zarr products and conversion read only intersecting chunks,
+//! conversion. Zarr column products and conversion read only intersecting chunks,
 //! serially. Chunk and codec workspace includes outer shards. Weighted Gram
 //! products use bounded normalized panels and may decode chunks repeatedly.
 //! Construction allocates nothing; sparse products use working vectors and
@@ -596,6 +598,7 @@ mod matmat;
 mod matrix;
 mod normalization;
 mod quantiles;
+mod rectangular;
 mod row;
 mod row_normalization;
 mod submatrix;
@@ -623,7 +626,7 @@ pub use matrix::LazyMatrix;
 pub use normalization::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
     ColumnNormalizationStats, FittedRowNormalization, NormalizationChain, NormalizationChainParams,
-    NormalizationParams, NormalizationRecipe, QuantileRange, RowNormalization,
+    NormalizationParams, NormalizationRecipe, PrepareNewSamples, QuantileRange, RowNormalization,
     RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats, Scaling,
 };
 pub use row::LazyRow;
@@ -633,9 +636,10 @@ pub use traits::{
     IndexedRowSource, L2Norm, LogicalColumn, MatMat, MatMatInto, MatTransposeMat,
     MatTransposeMatInto, MatTransposeVec, MatTransposeVecInto, MatTransposeVecScaledInto, MatVec,
     MatVecInto, MatVecScaledInto, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixRead,
-    MatrixShape, MatrixWrite, RawColumn, RawColumns, ReadBlock, RowNormalizationKernel, RowStats,
-    Scalar, ScaleAssign, ScaledAddAssign, ScaledSubSlice, SparseColumns, SparseRows,
-    SubScalarAssign, SubmatrixKernel, SumEntries, VectorOwned, VectorView, VectorViewMut,
-    WeightedColumnSumsInto, WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel,
+    MatrixShape, MatrixTraversal, MatrixWrite, RawColumn, RawColumns, ReadBlock,
+    RectangularProducts, RowNormalizationKernel, RowStats, Scalar, ScaleAssign, ScaledAddAssign,
+    ScaledSubSlice, SparseColumns, SparseRows, SubScalarAssign, SubmatrixKernel, SumEntries,
+    TraversalLayout, VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto,
+    WeightedColumnSumsKernel, WeightedGramInto, WeightedGramKernel, dense_for_each_entry,
 };
 pub use transpose::Transpose;

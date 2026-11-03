@@ -1,0 +1,429 @@
+{
+  "started_at_utc": "2026-11-02T21:51:20.579546+00:00",
+  "completed_at_utc": "2026-11-02T21:54:02.290550+00:00",
+  "baseline_revision": "dc8a0b3b820666b7e9f27d8aa99b75816769cf2e",
+  "candidate_base_revision": "dc8a0b3b820666b7e9f27d8aa99b75816769cf2e",
+  "candidate_worktree_patch_sha256": "5b57e27532483df81bb9ccb3184c21a8a044a05a0c3d5ffb5f90218ae7aa8500",
+  "source_fingerprints_sha256": {
+    "baseline": "328eb6514a642ed496c867eeb69d59234003843d6915c17070a479ada57b57bf",
+    "candidate": "536535eb49cc227e2cb5e6dd492170765455852a0b2a734b2c3b5794830480d8"
+  },
+  "source_fingerprint_scope": "Rust sources under src, benches, and tests/common, Cargo.toml, Cargo.lock, and rust-toolchain.toml",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "cpu_topology": {
+    "lscpu": [
+      {
+        "field": "Architecture:",
+        "data": "x86_64"
+      },
+      {
+        "field": "CPU op-mode(s):",
+        "data": "32-bit, 64-bit"
+      },
+      {
+        "field": "Address sizes:",
+        "data": "48 bits physical, 48 bits virtual"
+      },
+      {
+        "field": "Byte Order:",
+        "data": "Little Endian"
+      },
+      {
+        "field": "CPU(s):",
+        "data": "24"
+      },
+      {
+        "field": "On-line CPU(s) list:",
+        "data": "0-23"
+      },
+      {
+        "field": "Vendor ID:",
+        "data": "AuthenticAMD"
+      },
+      {
+        "field": "Model name:",
+        "data": "AMD Ryzen 9 7900 12-Core Processor"
+      },
+      {
+        "field": "CPU family:",
+        "data": "25"
+      },
+      {
+        "field": "Model:",
+        "data": "97"
+      },
+      {
+        "field": "Thread(s) per core:",
+        "data": "2"
+      },
+      {
+        "field": "Core(s) per socket:",
+        "data": "12"
+      },
+      {
+        "field": "Socket(s):",
+        "data": "1"
+      },
+      {
+        "field": "Stepping:",
+        "data": "2"
+      },
+      {
+        "field": "Microcode version:",
+        "data": "0xa60120c"
+      },
+      {
+        "field": "Frequency boost:",
+        "data": "enabled"
+      },
+      {
+        "field": "CPU(s) scaling MHz:",
+        "data": "59%"
+      },
+      {
+        "field": "CPU max MHz:",
+        "data": "5485.4111"
+      },
+      {
+        "field": "CPU min MHz:",
+        "data": "429.5810"
+      },
+      {
+        "field": "BogoMIPS:",
+        "data": "7385.63"
+      },
+      {
+        "field": "Flags:",
+        "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpuid_fault cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d amd_lbr_pmc_freeze"
+      },
+      {
+        "field": "Virtualization:",
+        "data": "AMD-V"
+      },
+      {
+        "field": "L1d cache:",
+        "data": "384 KiB (12 instances)"
+      },
+      {
+        "field": "L1i cache:",
+        "data": "384 KiB (12 instances)"
+      },
+      {
+        "field": "L2 cache:",
+        "data": "12 MiB (12 instances)"
+      },
+      {
+        "field": "L3 cache:",
+        "data": "64 MiB (2 instances)"
+      },
+      {
+        "field": "NUMA node(s):",
+        "data": "1"
+      },
+      {
+        "field": "NUMA node0 CPU(s):",
+        "data": "0-23"
+      },
+      {
+        "field": "Vulnerability Gather data sampling:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Ghostwrite:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Indirect target selection:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Itlb multihit:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability L1tf:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Mds:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Meltdown:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Mmio stale data:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Old microcode:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Reg file data sampling:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Retbleed:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Spec rstack overflow:",
+        "data": "Mitigation; Safe RET"
+      },
+      {
+        "field": "Vulnerability Spec store bypass:",
+        "data": "Mitigation; Speculative Store Bypass disabled via prctl"
+      },
+      {
+        "field": "Vulnerability Spectre v1:",
+        "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+      },
+      {
+        "field": "Vulnerability Spectre v2:",
+        "data": "Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected"
+      },
+      {
+        "field": "Vulnerability Srbds:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Tsa:",
+        "data": "Mitigation; Clear CPU buffers"
+      },
+      {
+        "field": "Vulnerability Tsx async abort:",
+        "data": "Not affected"
+      },
+      {
+        "field": "Vulnerability Vmscape:",
+        "data": "Mitigation; IBPB before exit to userspace"
+      }
+    ]
+  },
+  "cpu_affinity": [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 23
+  ],
+  "cpu_governor": "powersave",
+  "cpu_energy_preference": "balance_performance",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "features": ["ndarray_v0_17", "sprs_v0_11", "zarrs_v0_23"],
+  "parallel_feature": false,
+  "thread_environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "RAYON_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "OMP_DYNAMIC": "FALSE"
+  },
+  "compiler_environment": {
+    "RUSTFLAGS": null,
+    "CARGO_ENCODED_RUSTFLAGS": null,
+    "CARGO_BUILD_JOBS": null,
+    "RUSTC_WRAPPER": null,
+    "RUSTC_WORKSPACE_WRAPPER": null
+  },
+  "profile": "bench (Cargo default)",
+  "warm_up_seconds": 0.2,
+  "measurement_seconds": 0.5,
+  "sample_size": 20,
+  "bootstrap_resamples": 10000,
+  "confidence_level": 0.95,
+  "timing_estimator": "Criterion median",
+  "smoke": false,
+  "seed": {
+    "pipeline": 205,
+    "submatrix": "deterministic index formula"
+  },
+  "order": [
+    "build baseline",
+    "build candidate",
+    "baseline memory",
+    "baseline submatrix",
+    "baseline pipeline",
+    "candidate memory",
+    "candidate submatrix",
+    "candidate pipeline"
+  ],
+  "compute_reservation": "One exclusive compute bench window contains both builds and all measurements.",
+  "criterion_history": "Separate fresh target directories; only new estimates included.",
+  "memory_measure": "Peak additional live requested Rust heap bytes. Source and caller-owned buffers excluded; pipeline lifecycle includes fitting and one allocating forward/transpose pair.",
+  "raw_artifacts": "target/api-stabilization-bench",
+  "confirmation": {
+    "started_at_utc": "2026-11-02T21:55:38.522053+00:00",
+    "completed_at_utc": "2026-11-02T21:55:59.163739+00:00",
+    "reason": "Initial Zarr Gram and sparse CSC product outliers, compared with unchanged native/eager controls.",
+    "compute_reservation": "One additional exclusive compute bench window for all four ABBA rounds.",
+    "order": [
+      {
+        "run": "confirmation-1",
+        "variant": "baseline",
+        "seconds": 5.320632696151733
+      },
+      {
+        "run": "confirmation-2",
+        "variant": "candidate",
+        "seconds": 5.091158390045166
+      },
+      {
+        "run": "confirmation-3",
+        "variant": "candidate",
+        "seconds": 5.05003547668457
+      },
+      {
+        "run": "confirmation-4",
+        "variant": "baseline",
+        "seconds": 5.150193691253662
+      }
+    ],
+    "filters": {
+      "submatrix": "submatrix/.*/(zarr|native_dense_view)_weighted_gram$",
+      "normalization_pipeline": "pipeline/8192x128/0[.]001/columns_pair_(lazy|eager)/csc$"
+    },
+    "sampling": "Same settings and thread controls as initial run.",
+    "criterion_history": "A fresh CRITERION_HOME for each round preserves the complete initial estimates.",
+    "source_edits": false
+  },
+  "tuning_confirmation": {
+    "source_fingerprints_sha256": {
+      "baseline": "328eb6514a642ed496c867eeb69d59234003843d6915c17070a479ada57b57bf",
+      "candidate": "c8d18e2d04030d123322101d824a6ab3551acd1113c082ae8a962edfe945cb11"
+    },
+    "candidate_worktree_patch_sha256": "71a4ac4e5af33a2a2a0935f845f5da0a56322617f944a65e69909b501df5e845",
+    "started_at_utc": "2026-11-02T22:00:42.887364+00:00",
+    "completed_at_utc": "2026-11-02T22:01:18.374148+00:00",
+    "reason": "Confirm direct unfused full-operator dispatch and inline hints on selected metadata/weighted forwarding helpers.",
+    "compute_reservation": "One additional exclusive compute bench window for all four ABBA rounds.",
+    "order": [
+      {
+        "run": "tuned-confirmation-1",
+        "variant": "baseline",
+        "seconds": 5.273063898086548
+      },
+      {
+        "run": "tuned-confirmation-2",
+        "variant": "candidate",
+        "seconds": 5.268718719482422
+      },
+      {
+        "run": "tuned-confirmation-3",
+        "variant": "candidate",
+        "seconds": 5.275173664093018
+      },
+      {
+        "run": "tuned-confirmation-4",
+        "variant": "baseline",
+        "seconds": 5.28629732131958
+      }
+    ],
+    "filters": {
+      "submatrix": "submatrix/.*/(zarr|native_dense_view)_weighted_gram$",
+      "normalization_pipeline": "pipeline/8192x128/0[.]001/columns_pair_(lazy|eager)/csc$"
+    },
+    "sampling": "Same settings and thread controls as initial run.",
+    "criterion_history": "A fresh CRITERION_HOME for each round preserves the complete initial estimates.",
+    "source_edits": [
+      "Direct full-operator dispatch in pipeline products",
+      "Inline hints on selected submatrix metadata and weighted forwarding"
+    ]
+  },
+  "specialization_confirmation": {
+    "source_fingerprints_sha256": {
+      "baseline": "328eb6514a642ed496c867eeb69d59234003843d6915c17070a479ada57b57bf",
+      "candidate": "d6714a083189e781c66b403eb49c17cbb22d12851eaef1d05ee67c3fa5a9a5d6"
+    },
+    "candidate_worktree_patch_sha256": "a59021533d587f1e800327eba7ba90ea5cc347d54d5515591afcf3314b9511fd",
+    "started_at_utc": "2026-11-02T22:04:34.136925+00:00",
+    "completed_at_utc": "2026-11-02T22:05:09.127338+00:00",
+    "reason": "Confirm private rectangle/coalescing specialization and direct triangular Gram loop ranges.",
+    "compute_reservation": "One additional exclusive compute bench window for all four ABBA rounds.",
+    "order": [
+      {
+        "run": "specialized-confirmation-1",
+        "variant": "baseline",
+        "seconds": 5.297658920288086
+      },
+      {
+        "run": "specialized-confirmation-2",
+        "variant": "candidate",
+        "seconds": 5.004801511764526
+      },
+      {
+        "run": "specialized-confirmation-3",
+        "variant": "candidate",
+        "seconds": 5.048849821090698
+      },
+      {
+        "run": "specialized-confirmation-4",
+        "variant": "baseline",
+        "seconds": 5.304835557937622
+      }
+    ],
+    "filters": {
+      "submatrix": "submatrix/.*/(zarr|native_dense_view)_weighted_gram$",
+      "normalization_pipeline": "pipeline/8192x128/0[.]001/columns_pair_(lazy|eager)/csc$"
+    },
+    "sampling": "Same settings and thread controls as initial run.",
+    "criterion_history": "A fresh CRITERION_HOME for each round preserves the complete initial estimates.",
+    "source_edits": [
+      "Direct full-operator dispatch in pipeline products",
+      "Private rectangle/coalescing helpers inline full-range constants",
+      "Gram panel ranges skip unused lower-triangle cells",
+      "Inline hints on selected submatrix metadata and weighted forwarding"
+    ]
+  },
+  "final": {
+    "started_at_utc": "2026-11-02T22:05:09.152806+00:00",
+    "completed_at_utc": "2026-11-02T22:07:21.822443+00:00",
+    "source_fingerprints_sha256": {
+      "baseline": "328eb6514a642ed496c867eeb69d59234003843d6915c17070a479ada57b57bf",
+      "candidate": "d6714a083189e781c66b403eb49c17cbb22d12851eaef1d05ee67c3fa5a9a5d6"
+    },
+    "candidate_worktree_patch_sha256": "a59021533d587f1e800327eba7ba90ea5cc347d54d5515591afcf3314b9511fd",
+    "compute_reservation": "Same exclusive window as the successful specialized ABBA confirmation; no source edits or builds between focused and complete measurements.",
+    "order": [
+      "baseline memory",
+      "baseline submatrix",
+      "baseline pipeline",
+      "candidate memory",
+      "candidate submatrix",
+      "candidate pipeline"
+    ],
+    "sampling": "Same compiler, features, thread controls, Criterion settings, and full fixture sizes as initial run.",
+    "criterion_history": "Fresh CRITERION_HOME for each final revision; initial and diagnostic estimates preserved.",
+    "primary_results_label": "final",
+    "timing_estimates": 152,
+    "allocation_rows": 112
+  },
+  "run_source_provenance": {
+    "initial": "source_fingerprints_sha256",
+    "confirmation-1 through confirmation-4": "source_fingerprints_sha256",
+    "tuned-confirmation-1 through tuned-confirmation-4": "tuning_confirmation.source_fingerprints_sha256",
+    "specialized-confirmation-1 through specialized-confirmation-4": "specialization_confirmation.source_fingerprints_sha256",
+    "final": "final.source_fingerprints_sha256"
+  },
+  "result_summary": {
+    "primary_run": "final",
+    "descriptive_geometric_mean_candidate_to_baseline": {
+      "submatrix": 0.8888540610191523,
+      "pipeline": 0.995243849147969
+    },
+    "final_allocation_case_differences": 0,
+    "flagged_csc_pair": {
+      "case": "pipeline/8192x128/0.001/columns_pair_lazy/csc",
+      "final_candidate_to_baseline": 0.985050099185267,
+      "specialized_abba_candidate_to_baseline": 1.045841852474329,
+      "interpretation": "The small residual change varies between focused and complete runs; a precise speedup or slowdown is unresolved."
+    },
+    "largest_final_candidate_to_baseline": {
+      "case": "pipeline/2048x128/0.01/columns_pair_eager/csc",
+      "ratio": 1.0628960853809832
+    },
+    "timing_limits": "Confidence intervals describe individual Criterion runs. Diagnostic rounds expose additional between-run variability; fixtures use memory-backed Zarr and ordinary finite arithmetic."
+  }
+}

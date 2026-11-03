@@ -85,8 +85,9 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - Generalize `ColumnNormalizationParams<F, S = Vec<F>>` and
     `RowNormalizationParams<F, S = Vec<F>>` over parameter storage. Owned forms
     keep vectors; `.view()` returns `ColumnNormalizationParamsView<'a, F>` or
-    `RowNormalizationParamsView<'a, F>` with borrowed slices. Keep fields private
-    and construction validated.
+    `RowNormalizationParamsView<'a, F>` with borrowed slices. Keep fields
+    private and construction validated.
+
   - Make column `.apply(data)` consume its receiver and retain its storage in
     the lazy operator. Borrow explicitly to share fitted values without copying:
 
@@ -96,13 +97,16 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     let valid = params.view().apply(&validation);
     ```
 
-  - Use `params.apply(data)` to move owned vectors. Add recipe `.fit_apply(data)`
-    to fit and return an operator owning its parameters. Each form stores the
-    supplied data handle, which can be an owned matrix, reference, or backend
-    view. Returning owned parameters must not borrow temporary fitted values.
+  - Use `params.apply(data)` to move owned vectors. Add recipe
+    `.fit_apply(data)` to fit and return an operator owning its parameters. Each
+    form stores the supplied data handle, which can be an owned matrix,
+    reference, or backend view. Returning owned parameters must not borrow
+    temporary fitted values.
+
   - Name consuming row application `.apply_frozen(data)` on both owned
     parameters and views. Row parameters describe particular rows; fit new
     samples independently, even when row counts match.
+
   - Preserve `from_parts`, `from_column_parts`, and `from_row_parts`.
     Application uses supplied values unchanged, checks dimensions, and performs
     no fitting or data reads. Share kernels and existing axis capabilities
@@ -187,9 +191,10 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     correct points while reusing fitted training column stages. Avoid an
     ambiguous plain `.apply()` on mixed pipelines.
   - Follow single-axis ownership: consume owned fitted stages or explicit
-    `.view()` values. Define lifetimes for both operations, including newly fitted
-    row values and borrowed training column parameters. Keep all refitting in
-    explicit preparation calls; ordinary products only execute fitted stages.
+    `.view()` values. Define lifetimes for both operations, including newly
+    fitted row values and borrowed training column parameters. Keep all
+    refitting in explicit preparation calls; ordinary products only execute
+    fitted stages.
   - Implement only sequences whose intermediate statistics and products have
     supported bounded-workspace paths. Unsupported capabilities should fail at
     compile time; composable recipe syntax alone does not imply backend support.
@@ -297,7 +302,9 @@ with single-axis fitting and reuse before introducing fitted pipelines.
 
 - [x] Add borrowed contiguous submatrices after row and column views.
   - `lazy.submatrix(rows, cols)` restricts the already normalized matrix and
-    borrows the selected columns' fitted centers and scales without refitting.
+    borrows the logical parent operator without refitting. `Submatrix<'a, O>`
+    exposes its parent with `as_inner()` and its source ranges with
+    `row_range()` and `column_range()`.
   - Nested selections use local coordinates and flatten to the original parent.
     A block is a rectangular submatrix, not a separate logical abstraction.
   - Support allocating, reusable, and fused forward and transpose products,
@@ -308,6 +315,11 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     remain contiguous borrowed slices.
   - Raw selection followed by normalization remains a distinct operation with
     different statistical semantics.
+- [x] Generalize submatrix vector products to row normalization and supported
+  chains through `RectangularProducts`.
+  - Preserve the parent's fitted transformation and original coordinates,
+    including row stages fitted using columns outside the selection. Retain
+    column-only weighted operations, eager conversion, and borrowing.
 - [x] Extend submatrices to bounded Zarr reads and weighted operations.
   - Zarr selections stream forward and transpose products, eager conversion, and
     weighted column sums through intersecting chunks without refitting. Empty

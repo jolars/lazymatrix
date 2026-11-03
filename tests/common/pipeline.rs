@@ -38,7 +38,11 @@ fn equal(actual: f64, expected: f64) {
 
 fn check<O, V>(op: &O, raw: &[Vec<f64>], ncols: usize, to_v: &impl Fn(&[f64]) -> V)
 where
-    O: MatVec<V> + MatVecInto<V> + MatTransposeVec<V> + MatTransposeVecInto<V>,
+    O: MatVec<V>
+        + MatVecInto<V>
+        + MatTransposeVec<V>
+        + MatTransposeVecInto<V>
+        + lazymatrix::RectangularProducts<Scalar = f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     let x: Vec<_> = (0..ncols).map(|j| 0.5 - j as f64 / 3.).collect();
@@ -71,6 +75,7 @@ where
         let right: f64 = (0..x.len()).map(|j| x.get(j) * transpose.get(j)).sum();
         equal(left, right);
     }
+    super::check_frozen_submatrices(op, raw, to_v);
 }
 
 fn cases() -> Vec<TestMatrix> {
@@ -151,6 +156,33 @@ where
         );
         check(&op, &expected, tm.ncols, &to_v);
     }
+    let tm = matrix_from_dense(vec![
+        vec![f64::NAN, 1., 2., f64::INFINITY],
+        vec![f64::INFINITY, 3., 5., f64::NAN],
+        vec![f64::NAN; 4],
+    ]);
+    let params = NormalizationChainParams::from_parts(
+        lazymatrix::FittedRowNormalization::from_parts(
+            RowNormalization::standardize(),
+            lazymatrix::RowNormalizationParams::from_parts(
+                3,
+                Some(vec![0.5; 3]),
+                Some(vec![-2.; 3]),
+            ),
+        ),
+        ColumnNormalizationParams::from_parts(4, Some(vec![0.25; 4]), Some(vec![1.5; 4])),
+    );
+    let expected: Vec<Vec<_>> = tm
+        .dense
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&v| ((v - 0.5) / -2. - 0.25) / 1.5)
+                .collect()
+        })
+        .collect();
+    let op = params.apply_frozen(build(&tm));
+    super::check_frozen_submatrices(&op, &expected, &to_v);
 }
 
 type ColumnChain = NormalizationChainParams<ColumnNormalizationParams, ColumnNormalizationParams>;
@@ -199,8 +231,11 @@ where
     M: lazymatrix::MatrixShape + MatrixErrorType,
     NormalizationChain<ColumnNormalization, ColumnNormalization>:
         NormalizationRecipe<M, ColumnChain>,
-    LazyMatrix<M, ColumnChain>:
-        MatVec<V> + MatVecInto<V> + MatTransposeVec<V> + MatTransposeVecInto<V>,
+    LazyMatrix<M, ColumnChain>: MatVec<V>
+        + MatVecInto<V>
+        + MatTransposeVec<V>
+        + MatTransposeVecInto<V>
+        + lazymatrix::RectangularProducts<Scalar = f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     let specs = [
@@ -234,4 +269,24 @@ where
             }
         }
     }
+    let tm = matrix_from_dense(vec![
+        vec![f64::NAN, 1., 2., f64::INFINITY],
+        vec![f64::INFINITY, 3., 5., f64::NAN],
+        vec![f64::NAN; 4],
+    ]);
+    let params = NormalizationChainParams::from_parts(
+        ColumnNormalizationParams::from_parts(4, Some(vec![0.5; 4]), Some(vec![-2.; 4])),
+        ColumnNormalizationParams::from_parts(4, Some(vec![0.25; 4]), Some(vec![1.5; 4])),
+    );
+    let expected: Vec<Vec<_>> = tm
+        .dense
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|&v| ((v - 0.5) / -2. - 0.25) / 1.5)
+                .collect()
+        })
+        .collect();
+    let op = params.apply_frozen(build(&tm));
+    super::check_frozen_submatrices(&op, &expected, &to_v);
 }

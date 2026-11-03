@@ -1,20 +1,28 @@
-//! Borrowed rectangular restrictions of fitted normalized matrices.
+//! Borrowed rectangular restrictions of logical operators.
 
+use num_traits::{One, Zero};
 use std::ops::Range;
 
 use crate::{
     ColumnNormalizationParams, Columns, EagerMatrix, LazyColumn, LazyMatrix, MatTransposeVec,
     MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
-    MatrixErrorType, MatrixOwned, MatrixShape, MatrixWrite, RawColumn, RawColumns, Scalar,
-    SparseColumnRef, SparseColumns, SparseRows, SubmatrixKernel, VectorOwned, VectorView,
-    VectorViewMut, WeightedColumnSumsInto, WeightedGramInto,
+    MatrixErrorType, MatrixOwned, MatrixShape, MatrixWrite, RawColumn, RawColumns,
+    RectangularProducts, Scalar, SparseColumnRef, SparseColumns, SparseRows, SubmatrixKernel,
+    VectorOwned, VectorView, VectorViewMut, WeightedColumnSumsInto, WeightedGramInto,
 };
 
 /// A borrowed restriction of an already normalized matrix to contiguous ranges.
 ///
 /// Construction and nested selection take O(1) time, allocate nothing, and
-/// borrow the original data and fitted parameters. Selecting rows never refits
+/// borrow the original logical operator. Selecting rows never refits
 /// normalization. All entry indices exposed by this view are local.
+/// Row normalization retains the parameters fitted across the original columns.
+/// Mixed chains preserve their saved stage order.
+///
+/// Vector products require [`RectangularProducts`] on the parent. Column
+/// normalization additionally retains borrowed logical views, weighted
+/// operations, and eager conversion. Parent fitted parameters remain available
+/// through [`Self::as_inner`].
 ///
 /// Dense products visit only selected entries. Sparse products scan stored
 /// entries in selected outer rows or columns, filtering the other axis. They
@@ -43,7 +51,7 @@ use crate::{
 /// use lazymatrix::{LazyMatrix, SparseColumns, Submatrix};
 /// fn needs_slices<M: SparseColumns<f64>>() {}
 /// fn restricted_columns<M: SparseColumns<f64>>(_: &LazyMatrix<M>) {
-///     needs_slices::<Submatrix<'_, M>>();
+///     needs_slices::<Submatrix<'_, LazyMatrix<M>>>();
 /// }
 /// ```
 ///
@@ -51,24 +59,38 @@ use crate::{
 /// use lazymatrix::{LazyMatrix, SparseRows, Submatrix};
 /// fn needs_slices<M: SparseRows<f64>>() {}
 /// fn restricted_rows<M: SparseRows<f64>>(_: &LazyMatrix<M>) {
-///     needs_slices::<Submatrix<'_, M>>();
+///     needs_slices::<Submatrix<'_, LazyMatrix<M>>>();
+/// }
+/// ```
+///
+/// Row-normalized rectangles do not acquire column borrowing or eager conversion:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatrixShape, RowNormalizationParams};
+/// fn columns<M: MatrixShape>(rows: &LazyMatrix<M, RowNormalizationParams>) {
+///     let _ = rows.submatrix(0..0, 0..0).column(0);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, MatrixOwned, MatrixShape, RowNormalizationParams};
+/// fn eager<M: MatrixShape, D: MatrixOwned<f64>>(
+///     rows: &LazyMatrix<M, RowNormalizationParams>,
+/// ) {
+///     let _ = rows.submatrix(0..0, 0..0).to_eager::<D>();
 /// }
 /// ```
 #[derive(Debug)]
-pub struct Submatrix<'a, M, F = f64> {
-    data: &'a M,
-    centers: Option<&'a [F]>,
-    scales: Option<&'a [F]>,
+pub struct Submatrix<'a, O: ?Sized> {
+    inner: &'a O,
     rows: Range<usize>,
     columns: Range<usize>,
 }
 
-impl<M, F> Clone for Submatrix<'_, M, F> {
+impl<O: ?Sized> Clone for Submatrix<'_, O> {
     fn clone(&self) -> Self {
         Self {
-            data: self.data,
-            centers: self.centers,
-            scales: self.scales,
+            inner: self.inner,
             rows: self.rows.clone(),
             columns: self.columns.clone(),
         }
@@ -90,28 +112,62 @@ pub(crate) fn validate_ranges(
     );
 }
 
-impl<M: MatrixShape, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalizationParams<F, S>> {
-    /// Borrow a rectangle of this normalized matrix without refitting parameters.
+impl<M: MatrixShape, P> LazyMatrix<M, P> {
+    /// Borrow a rectangle of this fitted operator without refitting parameters.
     ///
-    /// Empty ranges are allowed. Construction reads no entries and allocates
-    /// nothing. To fit normalization on a subset instead, select raw data first
-    /// and pass it to [`LazyMatrix::new`].
+    /// Row parameters retain the values fitted across the original columns.
+    /// Empty ranges are valid, and construction reads no entries.
     ///
     /// # Panics
     /// Panics on reversed or out-of-bounds ranges.
-    pub fn submatrix(&self, rows: Range<usize>, columns: Range<usize>) -> Submatrix<'_, M, F> {
-        validate_ranges(self, &rows, &columns);
-        Submatrix {
-            data: self.data(),
-            centers: self.normalization().centers(),
-            scales: self.normalization().scales(),
+    pub fn submatrix(&self, rows: Range<usize>, columns: Range<usize>) -> Submatrix<'_, Self> {
+        Submatrix::new(self, rows, columns)
+    }
+}
+
+impl<'a, O: MatrixShape + ?Sized> Submatrix<'a, O> {
+    /// Restrict a logical operator without reading it or fitting new parameters.
+    ///
+    /// Products require the parent's corresponding rectangular capability.
+    ///
+    /// # Panics
+    /// Panics on reversed or out-of-bounds ranges.
+    pub fn new(inner: &'a O, rows: Range<usize>, columns: Range<usize>) -> Self {
+        validate_ranges(inner, &rows, &columns);
+        Self {
+            inner,
             rows,
             columns,
         }
     }
+
+    /// Select a rectangle in local coordinates, retaining the original parent.
+    ///
+    /// # Panics
+    /// Panics on reversed or out-of-bounds ranges.
+    pub fn submatrix(&self, rows: Range<usize>, columns: Range<usize>) -> Self {
+        validate_ranges(self, &rows, &columns);
+        Self {
+            inner: self.inner,
+            rows: self.rows.start + rows.start..self.rows.start + rows.end,
+            columns: self.columns.start + columns.start..self.columns.start + columns.end,
+        }
+    }
 }
 
-impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
+impl<'a, O: ?Sized> Submatrix<'a, O> {
+    /// Borrow the original logical operator, including any fitted parameters.
+    pub fn as_inner(&self) -> &'a O {
+        self.inner
+    }
+    /// Selected rows in the original parent's coordinates.
+    pub fn row_range(&self) -> Range<usize> {
+        self.rows.clone()
+    }
+    /// Selected columns in the original parent's coordinates.
+    pub fn column_range(&self) -> Range<usize> {
+        self.columns.clone()
+    }
     /// Number of selected rows.
     pub fn nrows(&self) -> usize {
         self.rows.len()
@@ -120,27 +176,24 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
     pub fn ncols(&self) -> usize {
         self.columns.len()
     }
-    /// Borrow the selected columns' original centers.
-    pub fn centers(&self) -> Option<&'a [F]> {
-        self.centers.map(|v| &v[self.columns.clone()])
+}
+
+impl<'a, M: MatrixShape, F: Scalar, S: AsRef<[F]>>
+    Submatrix<'a, LazyMatrix<M, ColumnNormalizationParams<F, S>>>
+{
+    #[inline]
+    fn selected_centers(&self) -> Option<&'a [F]> {
+        self.inner
+            .normalization()
+            .centers()
+            .map(|v| &v[self.columns.clone()])
     }
-    /// Borrow the selected columns' original scales.
-    pub fn scales(&self) -> Option<&'a [F]> {
-        self.scales.map(|v| &v[self.columns.clone()])
-    }
-    /// Select a rectangle using coordinates relative to this view.
-    ///
-    /// # Panics
-    /// Panics on reversed or out-of-bounds ranges.
-    pub fn submatrix(&self, rows: Range<usize>, columns: Range<usize>) -> Self {
-        validate_ranges(self, &rows, &columns);
-        Self {
-            data: self.data,
-            centers: self.centers,
-            scales: self.scales,
-            rows: self.rows.start + rows.start..self.rows.start + rows.end,
-            columns: self.columns.start + columns.start..self.columns.start + columns.end,
-        }
+    #[inline]
+    fn selected_scales(&self) -> Option<&'a [F]> {
+        self.inner
+            .normalization()
+            .scales()
+            .map(|v| &v[self.columns.clone()])
     }
     /// Borrow a logical column, filtering and rebasing its stored row indices.
     ///
@@ -156,11 +209,11 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
         assert!(j < self.ncols(), "column index out of bounds");
         LazyColumn::new(
             FilteredRawColumn {
-                raw: self.data.raw_column(self.columns.start + j),
+                raw: self.inner.data().raw_column(self.columns.start + j),
                 rows: self.rows.clone(),
             },
-            self.centers().map_or_else(F::zero, |c| c[j]),
-            self.scales().map_or_else(F::one, |s| s[j]),
+            self.selected_centers().map_or_else(F::zero, |c| c[j]),
+            self.selected_scales().map_or_else(F::one, |s| s[j]),
         )
     }
     /// Borrow a filtered sparse column with locally indexed entry iterators.
@@ -172,14 +225,14 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
         M: SparseColumns<F>,
     {
         assert!(j < self.ncols(), "column index out of bounds");
-        let (indices, values) = self.data.sparse_column(self.columns.start + j);
+        let (indices, values) = self.inner.data().sparse_column(self.columns.start + j);
         LazyColumn::new(
             FilteredRawColumn {
-                raw: SparseColumnRef::new(indices, values, self.data.nrows()),
+                raw: SparseColumnRef::new(indices, values, self.inner.data().nrows()),
                 rows: self.rows.clone(),
             },
-            self.centers().map_or_else(F::zero, |c| c[j]),
-            self.scales().map_or_else(F::one, |s| s[j]),
+            self.selected_centers().map_or_else(F::zero, |c| c[j]),
+            self.selected_scales().map_or_else(F::one, |s| s[j]),
         )
     }
     /// Borrow a filtered normalized sparse row without copying its entries.
@@ -194,18 +247,18 @@ impl<'a, M: MatrixShape, F: Scalar> Submatrix<'a, M, F> {
         M: SparseRows<F>,
     {
         assert!(i < self.nrows(), "row index out of bounds");
-        let (indices, values) = self.data.sparse_row(self.rows.start + i);
+        let (indices, values) = self.inner.data().sparse_row(self.rows.start + i);
         SubmatrixRow {
             indices,
             values,
             columns: self.columns.clone(),
-            centers: self.centers(),
-            scales: self.scales(),
+            centers: self.selected_centers(),
+            scales: self.selected_scales(),
         }
     }
 }
 
-impl<M, F> MatrixShape for Submatrix<'_, M, F> {
+impl<O: ?Sized> MatrixShape for Submatrix<'_, O> {
     fn nrows(&self) -> usize {
         self.rows.len()
     }
@@ -213,10 +266,12 @@ impl<M, F> MatrixShape for Submatrix<'_, M, F> {
         self.columns.len()
     }
 }
-impl<M: MatrixErrorType, F> MatrixErrorType for Submatrix<'_, M, F> {
-    type Error = M::Error;
+impl<O: MatrixErrorType + ?Sized> MatrixErrorType for Submatrix<'_, O> {
+    type Error = O::Error;
 }
-impl<M: RawColumns<F>, F: Scalar> Columns<F> for Submatrix<'_, M, F> {
+impl<M: RawColumns<F>, F: Scalar, S: AsRef<[F]>> Columns<F>
+    for Submatrix<'_, LazyMatrix<M, ColumnNormalizationParams<F, S>>>
+{
     type Column<'b>
         = LazyColumn<FilteredRawColumn<M::Column<'b>>, F>
     where
@@ -226,46 +281,54 @@ impl<M: RawColumns<F>, F: Scalar> Columns<F> for Submatrix<'_, M, F> {
     }
 }
 
-impl<M: SubmatrixKernel<F>, F: Scalar> WeightedColumnSumsInto<F> for Submatrix<'_, M, F> {
+impl<M: SubmatrixKernel<F>, F: Scalar, S: AsRef<[F]>> WeightedColumnSumsInto<F>
+    for Submatrix<'_, LazyMatrix<M, ColumnNormalizationParams<F, S>>>
+{
+    #[inline]
     fn weighted_column_sums_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
     where
         W: VectorView<F> + ?Sized,
         O: VectorViewMut<F> + ?Sized,
     {
-        self.data.submatrix_weighted_column_sums_into(
+        self.inner.data().submatrix_weighted_column_sums_into(
             self.rows.clone(),
             self.columns.clone(),
-            self.centers(),
-            self.scales(),
+            self.selected_centers(),
+            self.selected_scales(),
             weights,
             out,
         )
     }
 }
 
-impl<M: SubmatrixKernel<F>, F: Scalar> WeightedGramInto<F> for Submatrix<'_, M, F> {
+impl<M: SubmatrixKernel<F>, F: Scalar, S: AsRef<[F]>> WeightedGramInto<F>
+    for Submatrix<'_, LazyMatrix<M, ColumnNormalizationParams<F, S>>>
+{
+    #[inline]
     fn weighted_gram_into<W, O>(&self, weights: &W, out: &mut O) -> Result<(), Self::Error>
     where
         W: VectorView<F> + ?Sized,
         O: MatrixWrite<F> + ?Sized,
     {
-        self.data.submatrix_weighted_gram_into(
+        self.inner.data().submatrix_weighted_gram_into(
             self.rows.clone(),
             self.columns.clone(),
-            self.centers(),
-            self.scales(),
+            self.selected_centers(),
+            self.selected_scales(),
             weights,
             out,
         )
     }
 }
 
-impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
+impl<M: SubmatrixKernel<F>, F: Scalar, S: AsRef<[F]>>
+    Submatrix<'_, LazyMatrix<M, ColumnNormalizationParams<F, S>>>
+{
     fn fitted_parameters(&self) -> ColumnNormalizationParams<F> {
         ColumnNormalizationParams::from_parts(
             self.ncols(),
-            self.centers().map(<[F]>::to_vec),
-            self.scales().map(<[F]>::to_vec),
+            self.selected_centers().map(<[F]>::to_vec),
+            self.selected_scales().map(<[F]>::to_vec),
         )
     }
     /// Explicitly allocate and materialize this rectangle in a dense backend.
@@ -278,11 +341,11 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
     ) -> Result<EagerMatrix<D, ColumnNormalizationParams<F>>, M::Error> {
         crate::materialize::validate_allocation::<F>(self.nrows(), self.ncols());
         let mut data = D::zeros(self.nrows(), self.ncols());
-        self.data.materialize_submatrix_into(
+        self.inner.data().materialize_submatrix_into(
             self.rows.clone(),
             self.columns.clone(),
-            self.centers(),
-            self.scales(),
+            self.selected_centers(),
+            self.selected_scales(),
             &mut data,
         )?;
         Ok(EagerMatrix::from_normalized(data, self.fitted_parameters()))
@@ -299,12 +362,17 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
         &self,
         out: &'b mut D,
     ) -> Result<EagerMatrix<&'b mut D, ColumnNormalizationParams<F>>, M::Error> {
-        crate::materialize::validate_output(self, out, self.centers(), self.scales());
-        self.data.materialize_submatrix_into(
+        crate::materialize::validate_output(
+            self,
+            out,
+            self.selected_centers(),
+            self.selected_scales(),
+        );
+        self.inner.data().materialize_submatrix_into(
             self.rows.clone(),
             self.columns.clone(),
-            self.centers(),
-            self.scales(),
+            self.selected_centers(),
+            self.selected_scales(),
             out,
         )?;
         Ok(EagerMatrix::from_normalized(out, self.fitted_parameters()))
@@ -313,42 +381,36 @@ impl<M: SubmatrixKernel<F>, F: Scalar> Submatrix<'_, M, F> {
 
 macro_rules! products {
     ($alloc:ident, $alloc_method:ident, $into:ident, $into_method:ident, $scaled:ident, $scaled_method:ident, $kernel:ident, $input:ident, $output:ident) => {
-        impl<M, V, F> $alloc<V> for Submatrix<'_, M, F>
+        impl<O: RectangularProducts + ?Sized, V> $alloc<V> for Submatrix<'_, O>
         where
-            M: SubmatrixKernel<F>,
-            F: Scalar,
-            V: VectorOwned<F, Owned = V> + VectorViewMut<F>,
+            V: VectorOwned<O::Scalar, Owned = V> + VectorViewMut<O::Scalar>,
         {
             fn $alloc_method(&self, x: &V) -> Result<V, Self::Error> {
                 assert_eq!(x.len(), self.$input(), "submatrix input dimension mismatch");
-                let mut out = V::owned_from_fn(self.$output(), |_| F::zero());
+                let mut out = V::owned_from_fn(self.$output(), |_| O::Scalar::zero());
                 self.$into_method(x, &mut out)?;
                 Ok(out)
             }
         }
-        impl<M, X, Y, F> $into<X, Y> for Submatrix<'_, M, F>
+        impl<O: RectangularProducts + ?Sized, X, Y> $into<X, Y> for Submatrix<'_, O>
         where
-            M: SubmatrixKernel<F>,
-            F: Scalar,
-            X: VectorView<F>,
-            Y: VectorViewMut<F>,
+            X: VectorView<O::Scalar>,
+            Y: VectorViewMut<O::Scalar>,
         {
             fn $into_method(&self, x: &X, out: &mut Y) -> Result<(), Self::Error> {
-                self.$scaled_method(F::one(), x, F::zero(), out)
+                self.$scaled_method(O::Scalar::one(), x, O::Scalar::zero(), out)
             }
         }
-        impl<M, X, Y, F> $scaled<X, Y, F> for Submatrix<'_, M, F>
+        impl<O: RectangularProducts + ?Sized, X, Y> $scaled<X, Y, O::Scalar> for Submatrix<'_, O>
         where
-            M: SubmatrixKernel<F>,
-            F: Scalar,
-            X: VectorView<F>,
-            Y: VectorViewMut<F>,
+            X: VectorView<O::Scalar>,
+            Y: VectorViewMut<O::Scalar>,
         {
             fn $scaled_method(
                 &self,
-                alpha: F,
+                alpha: O::Scalar,
                 x: &X,
-                beta: F,
+                beta: O::Scalar,
                 out: &mut Y,
             ) -> Result<(), Self::Error> {
                 assert_eq!(x.len(), self.$input(), "submatrix input dimension mismatch");
@@ -357,20 +419,12 @@ macro_rules! products {
                     self.$output(),
                     "submatrix output dimension mismatch"
                 );
-                if alpha == F::zero() {
+                if alpha == O::Scalar::zero() {
                     crate::traits::scale_output(beta, out);
                     return Ok(());
                 }
-                self.data.$kernel(
-                    self.rows.clone(),
-                    self.columns.clone(),
-                    self.centers(),
-                    self.scales(),
-                    alpha,
-                    x,
-                    beta,
-                    out,
-                )
+                self.inner
+                    .$kernel(self.rows.clone(), self.columns.clone(), alpha, x, beta, out)
             }
         }
     };
@@ -382,7 +436,7 @@ products!(
     matvec_into,
     MatVecScaledInto,
     matvec_scaled_into,
-    submatrix_matvec_into,
+    rectangle_matvec_into,
     ncols,
     nrows
 );
@@ -393,7 +447,7 @@ products!(
     mat_transpose_vec_into,
     MatTransposeVecScaledInto,
     mat_transpose_vec_scaled_into,
-    submatrix_transpose_into,
+    rectangle_transpose_into,
     nrows,
     ncols
 );

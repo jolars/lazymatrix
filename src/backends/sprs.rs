@@ -96,7 +96,7 @@ where
     IS: Deref<Target = [I]>,
     DS: Deref<Target = [F]>,
 {
-    fn layout(&self) -> crate::normalization::pipeline::source::Layout {
+    fn traversal_layout(&self) -> crate::normalization::pipeline::source::Layout {
         if self.is_csc() {
             crate::normalization::pipeline::source::Layout::SparseColumns
         } else {
@@ -104,10 +104,17 @@ where
         }
     }
 
-    fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
+    fn for_each_entry(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        visit: impl FnMut(usize, usize, F),
+    ) -> Result<(), Self::Error> {
         crate::normalization::pipeline::sparse(
             self.rows(),
             self.cols(),
+            rows,
+            columns,
             self.is_csc(),
             |outer, f| {
                 for (i, &value) in self.outer_view(outer).unwrap().iter() {
@@ -125,11 +132,16 @@ macro_rules! pipeline_source {
         impl<M: crate::normalization::pipeline::Source<F>, F: Scalar>
             crate::normalization::pipeline::Source<F> for $wrapper<M>
         {
-            fn layout(&self) -> crate::normalization::pipeline::source::Layout {
-                self.as_inner().layout()
+            fn traversal_layout(&self) -> crate::normalization::pipeline::source::Layout {
+                self.as_inner().traversal_layout()
             }
-            fn visit(&self, visit: impl FnMut(usize, usize, F)) -> Result<(), Self::Error> {
-                self.as_inner().visit(visit)
+            fn for_each_entry(
+                &self,
+                rows: std::ops::Range<usize>,
+                columns: std::ops::Range<usize>,
+                visit: impl FnMut(usize, usize, F),
+            ) -> Result<(), Self::Error> {
+                self.as_inner().for_each_entry(rows, columns, visit)
             }
         }
     };

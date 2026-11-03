@@ -3,7 +3,8 @@
 use lazymatrix::{
     Centering, ColumnNormalization, ColumnNormalizationParams, FittedRowNormalization, LazyMatrix,
     MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixRead,
-    MatrixShape, NormalizationChainParams, RowNormalization, RowNormalizationParams, Scaling,
+    MatrixShape, NormalizationChain, NormalizationChainParams, NormalizationParams,
+    NormalizationRecipe, PrepareNewSamples, RowNormalization, RowNormalizationParams, Scaling,
 };
 use std::{cell::Cell, convert::Infallible};
 
@@ -40,6 +41,120 @@ impl<F: lazymatrix::Scalar> MatrixRead<F> for Dense<F> {
         self.reads.set(self.reads.get() + 1);
         self.values[i * self.ncols + j]
     }
+}
+
+fn fit_chain<M, P, A, B>(recipe: NormalizationChain<A, B>, data: &M) -> Result<P, M::Error>
+where
+    M: MatrixShape + MatrixErrorType,
+    P: NormalizationParams,
+    NormalizationChain<A, B>: NormalizationRecipe<M, P>,
+{
+    recipe.fit(data)
+}
+
+fn fit_apply_chain<M, P, A, B>(
+    recipe: NormalizationChain<A, B>,
+    data: M,
+) -> Result<LazyMatrix<M, P>, M::Error>
+where
+    M: MatrixShape + MatrixErrorType,
+    P: NormalizationParams,
+    NormalizationChain<A, B>: NormalizationRecipe<M, P>,
+{
+    recipe.fit_apply(data)
+}
+
+fn first_stage<A, B>(params: &NormalizationChainParams<A, B>) -> &A {
+    params.first()
+}
+
+fn next_stage<A, B>(params: &NormalizationChainParams<A, B>) -> &B {
+    params.next()
+}
+
+fn rebuild_chain<A, B>(params: NormalizationChainParams<A, B>) -> NormalizationChainParams<A, B>
+where
+    NormalizationChainParams<A, B>: NormalizationParams,
+{
+    let (first, next) = params.into_parts();
+    NormalizationChainParams::from_parts(first, next)
+}
+
+fn borrow_chain<A, B>(
+    params: &NormalizationChainParams<A, B>,
+) -> <NormalizationChainParams<A, B> as NormalizationParams>::View<'_>
+where
+    NormalizationChainParams<A, B>: NormalizationParams,
+{
+    params.view()
+}
+
+fn apply_chain<M, A, B>(
+    params: NormalizationChainParams<A, B>,
+    data: M,
+) -> LazyMatrix<M, NormalizationChainParams<A, B>>
+where
+    M: MatrixShape,
+    NormalizationChainParams<A, B>: NormalizationParams,
+{
+    params.apply_frozen(data)
+}
+
+fn prepare_samples<M, P>(params: P, data: M) -> Result<LazyMatrix<M, P::Params>, M::Error>
+where
+    M: MatrixShape + MatrixErrorType,
+    P: PrepareNewSamples<M>,
+{
+    params.for_new_samples(data)
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn generic_consumers_fit_borrow_inspect_and_prepare_with_public_bounds() {
+    let training = Dense::new(2, 3, vec![1_f32, 3., 8., -2., 5., 3.]);
+    let validation = Dense::new(1, 3, vec![5_f32, 1., -1.]);
+    let recipe = RowNormalization::standardize().then(ColumnNormalization::standardize());
+    let params = rebuild_chain(fit_chain(recipe, &training).unwrap());
+    let columns_pointer = next_stage(&params).scales().unwrap().as_ptr();
+    let rows_pointer = first_stage(&params)
+        .parameters()
+        .centers()
+        .unwrap()
+        .as_ptr();
+    let reads = training.reads.get();
+    let borrowed = borrow_chain(&params);
+    let operator = apply_chain(borrowed, &training);
+    assert_eq!(training.reads.get(), reads);
+    assert_eq!(
+        operator
+            .normalization()
+            .first()
+            .parameters()
+            .centers()
+            .unwrap()
+            .as_ptr(),
+        rows_pointer
+    );
+    let prepared = prepare_samples(borrow_chain(&params), &validation).unwrap();
+    assert_eq!(prepared.normalization().first().parameters().nrows(), 1);
+    assert_eq!(
+        prepared.normalization().next().scales().unwrap().as_ptr(),
+        columns_pointer
+    );
+    let repeated = fit_apply_chain(recipe, &training).unwrap();
+    assert_eq!(
+        operator.matvec(&vec![1., -2., 3.]).unwrap(),
+        repeated.matvec(&vec![1., -2., 3.]).unwrap()
+    );
+
+    let columns = next_stage(&params);
+    let reads = validation.reads.get();
+    let prepared = prepare_samples(NormalizationParams::view(columns), &validation).unwrap();
+    assert_eq!(validation.reads.get(), reads);
+    assert_eq!(
+        prepared.normalization().scales().unwrap().as_ptr(),
+        columns_pointer
+    );
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]

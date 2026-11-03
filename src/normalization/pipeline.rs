@@ -1,8 +1,8 @@
 //! Ordered recipes, fitted metadata, and statically selected execution.
 
 use super::{
-    ColumnNormalization, ColumnNormalizationParams, NormalizationParams, RowNormalization,
-    RowNormalizationParams, private,
+    ColumnNormalization, ColumnNormalizationParams, NormalizationParams, NormalizationRecipe,
+    RowNormalization, RowNormalizationParams, private,
 };
 use crate::materialize::normalized;
 use crate::{LazyMatrix, MatrixErrorType, MatrixRead, MatrixShape, Scalar};
@@ -12,6 +12,7 @@ use std::marker::PhantomData;
 
 mod dense;
 mod products;
+pub(crate) use products::product_rectangle;
 pub(crate) mod source;
 mod stats;
 
@@ -44,7 +45,10 @@ pub(crate) use source::sparse_source;
 /// use lazymatrix::{ColumnNormalization, ColumnStats, MatrixShape, RowNormalization};
 /// fn unsupported<M: ColumnStats<f64> + MatrixShape>(data: &M) {
 ///     let _ = RowNormalization::standardize()
-///         .then(ColumnNormalization::standardize()).fit::<_, f64>(data);
+///         .then(ColumnNormalization::standardize()).fit::<_,
+///             lazymatrix::NormalizationChainParams<
+///                 lazymatrix::FittedRowNormalization<lazymatrix::RowNormalizationParams>,
+///                 lazymatrix::ColumnNormalizationParams>>(data);
 /// }
 /// ```
 ///
@@ -107,25 +111,24 @@ impl<A, B> NormalizationChain<A, B> {
     ///
     /// # Errors
     /// Returns the backend error from a statistics scan.
-    pub fn fit<M, F>(self, data: &M) -> Result<<Self as Fit<M, F>>::Params, M::Error>
+    pub fn fit<M, P>(self, data: &M) -> Result<P, M::Error>
     where
         M: MatrixShape + MatrixErrorType,
-        F: Scalar,
-        Self: Fit<M, F>,
+        P: NormalizationParams,
+        Self: NormalizationRecipe<M, P>,
     {
-        Fit::fit(self, data)
+        NormalizationRecipe::fit(self, data)
     }
 
     /// Fit the chain and move its fitted values into a lazy operator.
     ///
     /// # Errors
     /// Returns the backend error from fitting.
-    pub fn fit_apply<M, F, P>(self, data: M) -> Result<LazyMatrix<M, P>, M::Error>
+    pub fn fit_apply<M, P>(self, data: M) -> Result<LazyMatrix<M, P>, M::Error>
     where
         M: MatrixShape + MatrixErrorType,
-        F: Scalar,
-        P: Stage<Scalar = F>,
-        Self: Fit<M, F, Params = P>,
+        P: NormalizationParams,
+        Self: NormalizationRecipe<M, P>,
     {
         let params = self.fit(&data)?;
         Ok(LazyMatrix::from_parts(data, params))
@@ -232,16 +235,14 @@ pub struct NormalizationChainParams<A, B> {
     next: B,
 }
 
-impl<A, B> NormalizationChainParams<A, B>
-where
-    A: Stage,
-    B: Stage<Scalar = A::Scalar>,
-    A::Kind: Combine<B::Kind>,
-{
+impl<A, B> NormalizationChainParams<A, B> {
     /// Assemble explicit or previously fitted stages without fitting or copying.
     ///
     /// Matrix dimensions are validated when the chain is applied.
-    pub fn from_parts(first: A, next: B) -> Self {
+    pub fn from_parts(first: A, next: B) -> Self
+    where
+        Self: NormalizationParams,
+    {
         Self { first, next }
     }
 
@@ -261,11 +262,11 @@ where
     }
 
     /// Borrow all saved parameter vectors without allocation or copying.
-    pub fn view(&self) -> NormalizationChainParams<A::View<'_>, B::View<'_>> {
-        NormalizationChainParams {
-            first: self.first.stage_view(),
-            next: self.next.stage_view(),
-        }
+    pub fn view(&self) -> <Self as NormalizationParams>::View<'_>
+    where
+        Self: NormalizationParams,
+    {
+        NormalizationParams::view(self)
     }
 
     /// Apply every saved stage unchanged to matching rows and columns.
@@ -274,7 +275,10 @@ where
     ///
     /// # Panics
     /// Panics if any fitted axis has a different dimension from the data.
-    pub fn apply_frozen<M: MatrixShape>(self, data: M) -> LazyMatrix<M, Self> {
+    pub fn apply_frozen<M: MatrixShape>(self, data: M) -> LazyMatrix<M, Self>
+    where
+        Self: NormalizationParams,
+    {
         LazyMatrix::from_parts(data, self)
     }
 
@@ -292,27 +296,61 @@ where
     pub fn for_new_samples<M>(
         self,
         data: M,
-    ) -> Result<LazyMatrix<M, <Self as Stage>::NewRows>, M::Error>
+    ) -> Result<LazyMatrix<M, <Self as PrepareNewSamples<M>>::Params>, M::Error>
     where
         M: MatrixShape + MatrixErrorType,
-        <Self as Stage>::Kind: Prepare<M, Self>,
+        Self: PrepareNewSamples<M>,
     {
-        self.assert_columns(data.ncols());
-        let prepared = <Self as Stage>::Kind::prepare(self, &data)?;
-        Ok(LazyMatrix::from_parts(data, prepared))
+        PrepareNewSamples::for_new_samples(self, data)
     }
+}
+
+/// Fitted column parameters or chains that can prepare new samples.
+///
+/// Column parameters are reused unchanged. Chains reuse their column stages
+/// and refit each row stage after its prepared predecessors. This trait is
+/// sealed; downstream code can use it as a bound without depending on the
+/// execution dispatch of a particular chain.
+///
+/// Bare row parameters describe particular rows and do not retain a recipe:
+///
+/// ```compile_fail
+/// use lazymatrix::{MatrixErrorType, MatrixShape, PrepareNewSamples,
+///     RowNormalizationParams};
+/// fn prepare<M: MatrixShape + MatrixErrorType>(params: RowNormalizationParams, data: M) {
+///     let _ = PrepareNewSamples::for_new_samples(params, data);
+/// }
+/// ```
+pub trait PrepareNewSamples<M>: NormalizationParams + private::NewSamples<M> + Sized
+where
+    M: MatrixShape + MatrixErrorType,
+{
+    /// Parameters retained or fitted for the new samples.
+    type Params: NormalizationParams<Scalar = Self::Scalar>;
+
+    /// Prepare samples, preserving column parameters and refitting row stages.
+    ///
+    /// Owned columns move into the result; borrowed columns retain their
+    /// original lifetime. Newly fitted row vectors are owned.
+    ///
+    /// # Errors
+    /// Returns the backend error from fitting a row stage.
+    ///
+    /// # Panics
+    /// Panics before reading data if a saved column count differs.
+    fn for_new_samples(self, data: M) -> Result<LazyMatrix<M, Self::Params>, M::Error>;
 }
 
 // These traits seal the recursive representation while keeping method return
 // types inferable without exposing backend dispatch in fitted parameter types.
 pub trait Stage: NormalizationParams + Sized {
     type Kind;
-    type View<'a>: Stage<Scalar = Self::Scalar, Kind = Self::Kind>
+    type StageView<'a>: Stage<Scalar = Self::Scalar, Kind = Self::Kind>
     where
         Self: 'a;
     type NewRows: Stage<Scalar = Self::Scalar, Kind = Self::Kind>;
 
-    fn stage_view(&self) -> Self::View<'_>;
+    fn stage_view(&self) -> Self::StageView<'_>;
     fn entry(&self, value: Self::Scalar, row: usize, column: usize) -> Self::Scalar;
     fn assert_columns(&self, ncols: usize);
     fn is_identity(&self) -> bool {
@@ -345,13 +383,13 @@ impl Combine<Rows> for Rows {
 
 impl<F: Scalar, S: AsRef<[F]>> Stage for ColumnNormalizationParams<F, S> {
     type Kind = Columns;
-    type View<'a>
+    type StageView<'a>
         = super::ColumnNormalizationParamsView<'a, F>
     where
         Self: 'a;
     type NewRows = Self;
 
-    fn stage_view(&self) -> Self::View<'_> {
+    fn stage_view(&self) -> Self::StageView<'_> {
         self.view()
     }
     fn entry(&self, value: F, _row: usize, column: usize) -> F {
@@ -373,6 +411,14 @@ impl<F: Scalar, S: AsRef<[F]>> NormalizationParams
     for FittedRowNormalization<RowNormalizationParams<F, S>>
 {
     type Scalar = F;
+    type View<'a>
+        = FittedRowNormalization<super::RowNormalizationParamsView<'a, F>>
+    where
+        Self: 'a;
+
+    fn view(&self) -> Self::View<'_> {
+        FittedRowNormalization::view(self)
+    }
 }
 impl<F: Scalar, S: AsRef<[F]>> private::Params
     for FittedRowNormalization<RowNormalizationParams<F, S>>
@@ -383,13 +429,13 @@ impl<F: Scalar, S: AsRef<[F]>> private::Params
 }
 impl<F: Scalar, S: AsRef<[F]>> Stage for FittedRowNormalization<RowNormalizationParams<F, S>> {
     type Kind = Rows;
-    type View<'a>
+    type StageView<'a>
         = FittedRowNormalization<super::RowNormalizationParamsView<'a, F>>
     where
         Self: 'a;
     type NewRows = FittedRowNormalization<RowNormalizationParams<F>>;
 
-    fn stage_view(&self) -> Self::View<'_> {
+    fn stage_view(&self) -> Self::StageView<'_> {
         self.view()
     }
     fn entry(&self, value: F, row: usize, _column: usize) -> F {
@@ -421,6 +467,17 @@ where
     A::Kind: Combine<B::Kind>,
 {
     type Scalar = A::Scalar;
+    type View<'a>
+        = NormalizationChainParams<A::StageView<'a>, B::StageView<'a>>
+    where
+        Self: 'a;
+
+    fn view(&self) -> Self::View<'_> {
+        NormalizationChainParams {
+            first: self.first.stage_view(),
+            next: self.next.stage_view(),
+        }
+    }
 }
 impl<A, B> private::Params for NormalizationChainParams<A, B>
 where
@@ -440,13 +497,13 @@ where
     A::Kind: Combine<B::Kind>,
 {
     type Kind = <A::Kind as Combine<B::Kind>>::Output;
-    type View<'a>
-        = NormalizationChainParams<A::View<'a>, B::View<'a>>
+    type StageView<'a>
+        = NormalizationChainParams<A::StageView<'a>, B::StageView<'a>>
     where
         Self: 'a;
     type NewRows = NormalizationChainParams<A::NewRows, B::NewRows>;
 
-    fn stage_view(&self) -> Self::View<'_> {
+    fn stage_view(&self) -> Self::StageView<'_> {
         self.view()
     }
     fn entry(&self, value: Self::Scalar, row: usize, column: usize) -> Self::Scalar {
@@ -472,13 +529,21 @@ where
 struct Identity<F>(PhantomData<F>);
 impl<F: Scalar> NormalizationParams for Identity<F> {
     type Scalar = F;
+    type View<'a>
+        = Self
+    where
+        Self: 'a;
+
+    fn view(&self) -> Self {
+        Self(PhantomData)
+    }
 }
 impl<F: Scalar> private::Params for Identity<F> {
     fn assert_shape(&self, _nrows: usize, _ncols: usize) {}
 }
 impl<F: Scalar> Stage for Identity<F> {
     type Kind = Columns;
-    type View<'a>
+    type StageView<'a>
         = Self
     where
         Self: 'a;
@@ -512,15 +577,23 @@ impl<A: Stage, B: Stage<Scalar = A::Scalar>> private::Params for Prefix<'_, A, B
 }
 impl<A: Stage, B: Stage<Scalar = A::Scalar>> NormalizationParams for Prefix<'_, A, B> {
     type Scalar = A::Scalar;
-}
-impl<A: Stage, B: Stage<Scalar = A::Scalar>> Stage for Prefix<'_, A, B> {
-    type Kind = Rows;
     type View<'a>
         = Prefix<'a, A, B>
     where
         Self: 'a;
+
+    fn view(&self) -> Self::View<'_> {
+        Prefix(self.0, self.1)
+    }
+}
+impl<A: Stage, B: Stage<Scalar = A::Scalar>> Stage for Prefix<'_, A, B> {
+    type Kind = Rows;
+    type StageView<'a>
+        = Prefix<'a, A, B>
+    where
+        Self: 'a;
     type NewRows = Self;
-    fn stage_view(&self) -> Self::View<'_> {
+    fn stage_view(&self) -> Self::StageView<'_> {
         Prefix(self.0, self.1)
     }
     fn entry(&self, value: Self::Scalar, row: usize, column: usize) -> Self::Scalar {
@@ -607,7 +680,7 @@ where
     P::Kind: Combine<Q::Kind>,
     Self: Fit<M, P::Scalar, Params = NormalizationChainParams<P, Q>>,
 {
-    fn fit(self, data: &M) -> Result<NormalizationChainParams<P, Q>, M::Error> {
+    fn fit_recipe(self, data: &M) -> Result<NormalizationChainParams<P, Q>, M::Error> {
         Fit::fit(self, data)
     }
 }
@@ -651,6 +724,50 @@ where
 {
     fn prepare(params: P, _data: &M) -> Result<P::NewRows, M::Error> {
         Ok(params.reuse())
+    }
+}
+
+impl<M, F, S> private::NewSamples<M> for ColumnNormalizationParams<F, S>
+where
+    M: MatrixShape + MatrixErrorType,
+    F: Scalar,
+    S: AsRef<[F]>,
+{
+}
+
+impl<M, F, S> PrepareNewSamples<M> for ColumnNormalizationParams<F, S>
+where
+    M: MatrixShape + MatrixErrorType,
+    F: Scalar,
+    S: AsRef<[F]>,
+{
+    type Params = Self;
+
+    fn for_new_samples(self, data: M) -> Result<LazyMatrix<M, Self>, M::Error> {
+        Ok(LazyMatrix::from_parts(data, self))
+    }
+}
+
+impl<M, A, B> private::NewSamples<M> for NormalizationChainParams<A, B>
+where
+    M: MatrixShape + MatrixErrorType,
+    Self: Stage,
+    <Self as Stage>::Kind: Prepare<M, Self>,
+{
+}
+
+impl<M, A, B> PrepareNewSamples<M> for NormalizationChainParams<A, B>
+where
+    M: MatrixShape + MatrixErrorType,
+    Self: Stage,
+    <Self as Stage>::Kind: Prepare<M, Self>,
+{
+    type Params = <Self as Stage>::NewRows;
+
+    fn for_new_samples(self, data: M) -> Result<LazyMatrix<M, Self::Params>, M::Error> {
+        self.assert_columns(data.ncols());
+        let prepared = <Self as Stage>::Kind::prepare(self, &data)?;
+        Ok(LazyMatrix::from_parts(data, prepared))
     }
 }
 

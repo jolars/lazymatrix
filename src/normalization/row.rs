@@ -2,8 +2,8 @@
 
 use crate::{Centering, MatrixRead, RowNormalization, RowNormalizationStats, Scalar, Scaling};
 
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 mod sparse;
+pub(crate) use sparse::rectangle_product;
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
 pub(crate) use sparse::{product as sparse_product, stats as sparse_stats};
 

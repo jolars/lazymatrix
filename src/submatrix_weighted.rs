@@ -147,11 +147,10 @@ where
                     let weight = weights.get(i + r);
                     for a in 0..j_end - j {
                         let weighted = left.get(r, a) * weight;
-                        for b in 0..k_end - k {
-                            if j + a <= k + b {
-                                let sum = &mut block[a * TILE + b];
-                                *sum = *sum + weighted * rhs.get(r, b);
-                            }
+                        let first = if j == k { a } else { 0 };
+                        for b in first..k_end - k {
+                            let sum = &mut block[a * TILE + b];
+                            *sum = *sum + weighted * rhs.get(r, b);
                         }
                     }
                 }

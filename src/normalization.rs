@@ -1,7 +1,9 @@
 pub(crate) mod pipeline;
 pub(crate) mod row;
 
-pub use pipeline::{FittedRowNormalization, NormalizationChain, NormalizationChainParams};
+pub use pipeline::{
+    FittedRowNormalization, NormalizationChain, NormalizationChainParams, PrepareNewSamples,
+};
 
 use std::marker::PhantomData;
 
@@ -11,8 +13,10 @@ mod private {
     }
 
     pub trait Recipe<M: crate::MatrixErrorType, P> {
-        fn fit(self, data: &M) -> Result<P, M::Error>;
+        fn fit_recipe(self, data: &M) -> Result<P, M::Error>;
     }
+
+    pub trait NewSamples<M> {}
 }
 
 /// Fitted normalization metadata supported by [`crate::LazyMatrix`].
@@ -23,6 +27,14 @@ mod private {
 pub trait NormalizationParams: private::Params {
     /// Scalar used by the fitted centers and scales.
     type Scalar: crate::Scalar;
+
+    /// Borrowed metadata retaining the same scalar and fitted stage order.
+    type View<'a>: NormalizationParams<Scalar = Self::Scalar>
+    where
+        Self: 'a;
+
+    /// Borrow fitted values without allocating or copying their vectors.
+    fn view(&self) -> Self::View<'_>;
 }
 
 /// A normalization recipe supported by a backend and fitted parameter type.
@@ -36,6 +48,16 @@ pub trait NormalizationParams: private::Params {
 pub trait NormalizationRecipe<M: crate::MatrixErrorType, P: NormalizationParams>:
     private::Recipe<M, P>
 {
+    /// Fit parameters without retaining or modifying the training data.
+    ///
+    /// # Errors
+    /// Returns the backend error from fitting.
+    fn fit(self, data: &M) -> Result<P, M::Error>
+    where
+        Self: Sized,
+    {
+        private::Recipe::fit_recipe(self, data)
+    }
 }
 
 impl<M, P, R> NormalizationRecipe<M, P> for R
@@ -61,6 +83,9 @@ pub type ColumnNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 pub type RowNormalizationStats<F> = (Option<Vec<F>>, Option<Vec<F>>);
 
 /// How to center each column or row.
+///
+/// These variants form a closed set of primitive choices. Additional methods
+/// can use separate recipe types that fit the existing parameter types.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Centering {
     /// No centering.
@@ -119,6 +144,9 @@ impl Default for QuantileRange {
 }
 
 /// How to scale each column or row.
+///
+/// These variants form a closed set of primitive choices. Additional methods
+/// can use separate recipe types that fit the existing parameter types.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Scaling {
     /// No scaling.
@@ -160,6 +188,7 @@ pub enum Scaling {
 /// and
 /// [`ColumnStats::col_maxabs_centered`](crate::traits::ColumnStats::col_maxabs_centered).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ColumnNormalization {
     pub center: Centering,
     pub scale: Scaling,
@@ -383,6 +412,7 @@ impl ColumnNormalization {
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RowNormalization {
     /// How to center each row.
     pub center: Centering,
@@ -596,11 +626,11 @@ impl<F: crate::Scalar, S: AsRef<[F]>> ColumnNormalizationParams<F, S> {
         crate::LazyMatrix::from_parts(data, self)
     }
 
-    /// Recover the stored centers and scales without copying.
+    /// Recover the column count, stored centers, and stored scales without copying.
     ///
     /// Owned parameters return vectors; views return borrowed slices.
-    pub fn into_parts(self) -> (Option<S>, Option<S>) {
-        (self.centers, self.scales)
+    pub fn into_parts(self) -> (usize, Option<S>, Option<S>) {
+        (self.ncols, self.centers, self.scales)
     }
 
     pub(crate) fn copy_owned(&self) -> ColumnNormalizationParams<F> {
@@ -716,16 +746,24 @@ impl<F: crate::Scalar, S: AsRef<[F]>> RowNormalizationParams<F, S> {
         crate::LazyMatrix::from_parts(data, self)
     }
 
-    /// Recover the stored centers and scales without copying.
+    /// Recover the row count, stored centers, and stored scales without copying.
     ///
     /// Owned parameters return vectors; views return borrowed slices.
-    pub fn into_parts(self) -> (Option<S>, Option<S>) {
-        (self.centers, self.scales)
+    pub fn into_parts(self) -> (usize, Option<S>, Option<S>) {
+        (self.nrows, self.centers, self.scales)
     }
 }
 
 impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for ColumnNormalizationParams<F, S> {
     type Scalar = F;
+    type View<'a>
+        = ColumnNormalizationParamsView<'a, F>
+    where
+        Self: 'a;
+
+    fn view(&self) -> Self::View<'_> {
+        ColumnNormalizationParams::view(self)
+    }
 }
 
 impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for ColumnNormalizationParams<F, S> {
@@ -739,6 +777,14 @@ impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for ColumnNormalizationPar
 
 impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for RowNormalizationParams<F, S> {
     type Scalar = F;
+    type View<'a>
+        = RowNormalizationParamsView<'a, F>
+    where
+        Self: 'a;
+
+    fn view(&self) -> Self::View<'_> {
+        RowNormalizationParams::view(self)
+    }
 }
 
 impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for RowNormalizationParams<F, S> {
@@ -753,7 +799,7 @@ impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for RowNormalizationParams
 impl<M: crate::ColumnStats<F> + crate::MatrixShape, F: crate::Scalar>
     private::Recipe<M, ColumnNormalizationParams<F>> for ColumnNormalization
 {
-    fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, M::Error> {
+    fn fit_recipe(self, data: &M) -> Result<ColumnNormalizationParams<F>, M::Error> {
         ColumnNormalization::fit(self, data)
     }
 }
@@ -761,7 +807,7 @@ impl<M: crate::ColumnStats<F> + crate::MatrixShape, F: crate::Scalar>
 impl<M: crate::RowStats<F>, F: crate::Scalar> private::Recipe<M, RowNormalizationParams<F>>
     for RowNormalization
 {
-    fn fit(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error> {
+    fn fit_recipe(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error> {
         RowNormalization::fit(self, data)
     }
 }

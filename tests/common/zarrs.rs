@@ -828,6 +828,82 @@ fn column_pipelines_share_training_values_and_propagate_stage_failures() {
 }
 
 #[test]
+fn column_chain_rectangles_traverse_only_intersecting_chunks() {
+    use lazymatrix::{
+        ColumnNormalizationParams, MatVecScaledInto, MatrixTraversal, NormalizationChainParams,
+    };
+
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let columns = 2..3;
+        let rows = 3..5;
+        let expected_keys: Vec<_> = [1, 2]
+            .map(|i| matrix.as_inner().chunk_key(&[i, 1]).to_string())
+            .into();
+        let mut visited = Vec::new();
+        matrix
+            .for_each_entry(rows.clone(), columns.clone(), |i, j, value| {
+                visited.push((i, j, value));
+            })
+            .unwrap();
+        assert_eq!(visited, [(3, 2, 12.), (4, 2, 15.)]);
+        assert_eq!(*store.keys.lock().unwrap(), expected_keys);
+
+        let first = ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f64::NAN, f64::NAN, 3.]),
+            Some(vec![f64::NAN, f64::NAN, -2.]),
+        );
+        let next = ColumnNormalizationParams::from_parts(
+            3,
+            Some(vec![f64::NAN, f64::NAN, 1.]),
+            Some(vec![f64::NAN, f64::NAN, 2.]),
+        );
+        let lazy =
+            LazyMatrix::from_parts(&matrix, NormalizationChainParams::from_parts(first, next));
+        let selected = lazy.submatrix(rows, columns);
+        store.reset();
+        assert_eq!(selected.matvec(&vec![2.]).unwrap(), [-5.5, -7.]);
+        assert_eq!(*store.keys.lock().unwrap(), expected_keys);
+        store.reset();
+        assert_eq!(selected.mat_transpose_vec(&vec![-1., 2.]).unwrap(), [-4.25]);
+        assert_eq!(*store.keys.lock().unwrap(), expected_keys);
+
+        store.reset();
+        store.fail_after.store(1, Ordering::Relaxed);
+        let mut out = vec![99.; 2];
+        let error = selected
+            .matvec_scaled_into(2., &vec![2.], -1., &mut out)
+            .unwrap_err();
+        assert!(error.to_string().contains("injected read failure"));
+        assert_eq!(out, [99.; 2]);
+        assert_eq!(store.keys.lock().unwrap().len(), 2);
+
+        store.reset();
+        store.fail_after.store(0, Ordering::Relaxed);
+        selected
+            .matvec_scaled_into(0., &vec![f64::NAN], 0., &mut out)
+            .unwrap();
+        assert_eq!(out, [0.; 2]);
+        assert!(store.keys.lock().unwrap().is_empty());
+    }
+
+    let array = ArrayBuilder::new(vec![3, 3], vec![2, 2], float64(), 7_f64)
+        .build(Arc::new(MemoryStore::new()), "/chain-fill")
+        .unwrap();
+    let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
+    let stage = ColumnNormalizationParams::from_parts(3, Some(vec![1.; 3]), Some(vec![2.; 3]));
+    let lazy = LazyMatrix::from_parts(
+        matrix,
+        NormalizationChainParams::from_parts(stage.clone(), stage),
+    );
+    assert_eq!(
+        lazy.submatrix(1..3, 1..3).matvec(&vec![1., 2.]).unwrap(),
+        [3.; 2]
+    );
+}
+
+#[test]
 fn quantile_fitting_shares_scans_and_propagates_later_failures() {
     for compressed in [false, true] {
         let (matrix, store) = tracked(compressed);

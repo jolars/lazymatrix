@@ -52,9 +52,16 @@ where
     P: Stage,
     M: MatrixRead<P::Scalar> + MatrixErrorType,
 {
-    fn visit(&self, visit: impl FnMut(usize, usize, P::Scalar)) -> Result<(), Self::Error> {
-        source::dense(self, visit);
-        Ok(())
+    fn traversal_layout(&self) -> crate::TraversalLayout {
+        crate::TraversalLayout::Full
+    }
+    fn for_each_entry(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        visit: impl FnMut(usize, usize, P::Scalar),
+    ) -> Result<(), Self::Error> {
+        self.dense_for_each_entry(rows, columns, visit)
     }
 }
 

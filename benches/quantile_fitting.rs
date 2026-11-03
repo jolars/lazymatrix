@@ -79,7 +79,8 @@ fn parameters<M: ColumnStats<f64> + MatrixShape>(
     spec: ColumnNormalization,
 ) -> ColumnNormalizationStats<f64> {
     let (_, params) = LazyMatrix::new(matrix, spec).unwrap().into_parts();
-    params.into_parts()
+    let (_, centers, scales) = params.into_parts();
+    (centers, scales)
 }
 
 fn profile(

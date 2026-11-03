@@ -15,17 +15,11 @@ pub const PAIRS: usize = 10;
 pub const NORMALIZATIONS: [(&str, ColumnNormalization); 2] = [
     (
         "standardized",
-        ColumnNormalization {
-            center: Centering::Mean,
-            scale: Scaling::Sd { df: 0 },
-        },
+        ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }),
     ),
     (
         "scaled",
-        ColumnNormalization {
-            center: Centering::None,
-            scale: Scaling::Sd { df: 0 },
-        },
+        ColumnNormalization::new(Centering::None, Scaling::Sd { df: 0 }),
     ),
 ];
 

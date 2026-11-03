@@ -185,7 +185,8 @@ fn explicit_parameters_preserve_bits_and_round_trip_without_copying() {
         bits(restored.normalization().scales().unwrap()),
         bits(&scales)
     );
-    let (recovered_centers, recovered_scales) = parameters.into_parts();
+    let (nrows, recovered_centers, recovered_scales) = parameters.into_parts();
+    assert_eq!(nrows, 4);
     assert_eq!(bits(recovered_centers.as_ref().unwrap()), bits(&centers));
     assert_eq!(bits(recovered_scales.as_ref().unwrap()), bits(&scales));
     let centered = LazyMatrix::from_row_parts(&source, Some(centers.clone()), None);
@@ -207,6 +208,18 @@ fn explicit_parameters_preserve_bits_and_round_trip_without_copying() {
         bits(reused.normalization().scales().unwrap()),
         bits(&scales)
     );
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn parameter_parts_preserve_row_count_without_fitted_vectors() {
+    let fitted = RowNormalizationParams::<f64>::from_parts(7, None, None);
+    assert_eq!(fitted.view().into_parts(), (7, None, None));
+    let (nrows, centers, scales) = fitted.into_parts();
+    let restored = RowNormalizationParams::from_parts(nrows, centers, scales);
+    assert_eq!(restored.nrows(), 7);
+    assert!(restored.centers().is_none());
+    assert!(restored.scales().is_none());
 }
 
 #[test]
