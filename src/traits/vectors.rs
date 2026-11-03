@@ -8,6 +8,15 @@ pub trait VectorView<F: Scalar> {
     fn len(&self) -> usize;
     fn get(&self, index: usize) -> F;
 
+    /// Borrow contiguous entries in logical order, without copying or gathering.
+    ///
+    /// A returned slice has length [`Self::len`] and agrees with [`Self::get`]
+    /// at every index. This takes O(1) time. The default returns `None`, which
+    /// supports strided or otherwise noncontiguous implementations.
+    fn contiguous_values(&self) -> Option<&[F]> {
+        None
+    }
+
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -67,6 +76,10 @@ impl<F: Scalar> VectorView<F> for [F] {
     fn get(&self, index: usize) -> F {
         self[index]
     }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        Some(self)
+    }
 }
 
 impl<F: Scalar> VectorViewMut<F> for [F] {
@@ -83,6 +96,10 @@ impl<F: Scalar> VectorView<F> for Vec<F> {
     fn get(&self, index: usize) -> F {
         self[index]
     }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        Some(self.as_slice())
+    }
 }
 
 impl<F: Scalar> VectorViewMut<F> for Vec<F> {
@@ -98,6 +115,10 @@ impl<F: Scalar, const N: usize> VectorView<F> for [F; N] {
 
     fn get(&self, index: usize) -> F {
         self[index]
+    }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        Some(self)
     }
 }
 

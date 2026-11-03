@@ -607,6 +607,7 @@ mod matrix;
 mod normalization;
 mod quantiles;
 mod rectangular;
+mod reductions;
 mod row;
 mod row_normalization;
 mod submatrix;

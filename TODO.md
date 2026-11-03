@@ -254,32 +254,47 @@ with single-axis fitting and reuse before introducing fitted pipelines.
 
 ## Column kernel performance
 
-- [ ] Investigate the dense column-reduction gap measured in Shrinkage.
-  - On November 3, 2026, a matched-input probe measured one pass of 1,000
-    length-5,000 `LazyColumn::dot_with_sum` products at 3.706 ms versus 1.667 ms
-    for ndarray's direct `dot`. Both used the same Fortran-contiguous `f64`
-    matrix and vector, with no normalization or BLAS feature. These are kernel
-    timings, not solver speedups: medians of nine alternating measurements of 30
-    passes, with inputs prepared outside timing. The build used published
-    LazyMatrix 0.9.0, `ndarray_v0_17` with ndarray 0.17.2, and Rust 1.89.0
-    release mode on an AMD Ryzen 9 7900. Reproduce against the current checkout
-    before changing kernels.
-  - Evaluate backend dot/reduction hooks or contiguous-column fast paths in [the
-    column operations](src/column.rs) and [the ndarray
-    adapter](src/backends/ndarray/vector.rs). Inspect
-    `RawColumn::for_each_stored` inlining, iterator branches, and accumulator
-    loads and stores under ordinary release settings. Shrinkage needed one
-    code-generation unit to avoid an outlined reduction regression; that
-    compiler workaround did not close the measured kernel gap. Also measure
-    column sums and squared norms before adding fused summaries.
-  - Preserve lazy normalization, allocation-free borrowing, strided views,
-    sparse duplicate handling, implicit zeros, and O(nnz) sparse products. Check
-    numerical error when changing reduction order. Verify downstream primal
-    objectives, KKT violations, and dual-certificate feasibility, then remeasure
-    complete Shrinkage fits separately from the kernel comparison.
-  - Local evidence in the sibling Shrinkage checkout lives under
-    `../shrinkage/.build/sklearn-gap-20261103/`: `report.txt`, `kernels.jsonl`,
-    and the matched-input probe in `rust-probe/`.
+- [x] Investigate the dense column-reduction gap measured in Shrinkage.
+  - The [investigation](benches/column_reductions/README.md) reproduces the gap
+    on this checkout with Rust 1.89 and 1.98, at one and 16 codegen units.
+    Contiguous eight-accumulator prototypes close the dot gap and accelerate
+    sums and squared norms. Separate native Shrinkage fits improve by 39–56%,
+    with independently checked objectives, KKT violations, and certificates.
+  - Reproducible probes, raw timings, numerical counterexamples, and isolated
+    prototype patches accompany the report.
+
+- [x] Implement production dense column-reduction fast paths for ndarray.
+  - `RawColumn::dense_values` and `VectorView::contiguous_values` expose optional
+    borrowed slices. Contiguous ndarray columns use shared eight-accumulator
+    sums, dots, and directly centered squared norms. Default paths preserve
+    strided access, sparse duplicates, implicit zeros, and O(nnz) products.
+  - Reduction order follows the usual backend convention. Shared tests cover
+    `f32`, `f64`, empty inputs, short tails, nonfinite values, and large offsets.
+    All backend releases, feature combinations, parallelism, and BLAS checks pass.
+  - The [implementation measurements](benches/column_reductions/README.md)
+    include kernel assembly, fused-summary controls, and separate native and
+    Python Shrinkage fits with independently checked objectives, KKT violations,
+    and certificate feasibility. Python timings include owned input copies.
+
+- [ ] Extend dense column-reduction fast paths to faer and nalgebra.
+  - Implement `RawColumn::dense_values` and `VectorView::contiguous_values` in
+    LazyMatrix's [faer](src/backends/faer/dense.rs) and
+    [nalgebra](src/backends/nalgebra/dense.rs) adapters for every supported
+    release. They currently inherit `None`. Expose contiguous columns and
+    owned and borrowed vectors so sums, squared norms, and cached dots can use
+    the shared reductions. Fast dots require both hooks.
+  - Borrow slices in O(1) time without allocating or gathering. Preserve
+    logical order, view offsets, and slice lengths. Keep noncontiguous views
+    on the existing paths.
+  - Add adapter tests for contiguous and strided views, borrowed ranges, and
+    hook availability. Reuse the shared reduction suite for `f32`, `f64`,
+    empty inputs, short tails, normalization, and exceptional values. Verify
+    every supported release and the full backend and feature matrix.
+  - Benchmark each backend before and after the change in one exclusive
+    compute window, including contiguous and strided layouts. Record sums,
+    squared norms, and cached dots against native reductions where available,
+    and check numerical agreement. The existing speedup measurements cover
+    ndarray only.
 
 ## Lazy design matrices
 

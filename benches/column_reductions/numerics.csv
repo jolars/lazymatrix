@@ -1,0 +1,8 @@
+case,reference,serial,eight_accumulators,ndarray
+cancellation_loses_unit,1.0,1.0,0.0,0.0
+cancellation_recovers_units,6.0,3.0,6.0,6.0
+finite_intermediate_overflow,0.0,0.0,NaN,NaN
+positive_infinity,inf,inf,inf,inf
+opposite_infinities,NaN,NaN,NaN,NaN
+nan,NaN,NaN,NaN,NaN
+empty,0.0,-0.0,0.0,0.0

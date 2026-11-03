@@ -14,7 +14,24 @@ pub trait RawColumn<F: Scalar> {
         self.len() == 0
     }
 
+    /// Borrow the complete raw column when its logical rows form a dense slice.
+    ///
+    /// A returned slice has length [`Self::len`] and contains each row exactly
+    /// once, in logical row order. It must be borrowed in O(1) time without
+    /// allocating, gathering, or decoding. A slice of sparse stored entries
+    /// with missing rows or duplicate cells does not satisfy this contract.
+    /// The default returns `None`.
+    fn dense_values(&self) -> Option<&[F]> {
+        None
+    }
+
+    /// Sum raw entries in O(nnz) time, without materializing the column.
+    ///
+    /// Reduction order can depend on storage, as in native backend reductions.
     fn raw_sum(&self) -> F {
+        if let Some(values) = self.dense_values() {
+            return crate::reductions::sum(values);
+        }
         let mut sum = F::zero();
         self.for_each_stored(|_, value| sum = sum + value);
         sum
@@ -54,6 +71,9 @@ pub trait RawColumns<F: Scalar>: MatrixShape {
 }
 
 /// Operations on one logical, possibly normalized column.
+///
+/// Floating-point reduction order can depend on storage. Rounding and
+/// intermediate overflow can differ from sequential accumulation.
 pub trait LogicalColumn<F: Scalar> {
     fn len(&self) -> usize;
     fn center(&self) -> F;

@@ -1,0 +1,329 @@
+# Dense column reductions
+
+Contiguous ndarray columns now use allocation-free reductions with eight
+independent accumulators for raw sums, cached-sum dots, and directly centered
+squared norms. This covers ndarray 0.15, 0.16, and 0.17. The core shares the
+reduction implementation through optional `RawColumn::dense_values` and
+`VectorView::contiguous_values` hooks. Other storage and vector layouts retain
+their default implementations.
+
+Reduction order follows the usual backend convention: rounding, cancellation,
+and intermediate overflow may differ from sequential accumulation. The dense
+fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
+reductions. The regression suite covers both `f32` and `f64`, short tails,
+large-offset centered norms, nonfinite values, and strided inputs.
+
+## Production measurements
+
+The production comparison uses the same preserved inputs, CPU 2, release
+configuration, nine observations of 30 passes, and alternating method order as
+the initial investigation. The following Rust 1.98.1 measurements use 16 codegen
+units. Times are milliseconds for all 1,000 length-5,000 columns:
+
+| Operation      | Published 0.9.0 | Production | ndarray |
+| -------------- | --------------: | ---------: | ------: |
+| Cached-sum dot |           3.743 |      1.804 |   1.836 |
+| Sum            |           2.798 |      0.616 |   0.611 |
+| Squared norm   |           2.797 |      0.683 |   0.672 |
+
+[`implementation_timings.csv`](implementation_timings.csv) also includes one
+codegen unit and the layout controls. [`implementation_errors.csv`](implementation_errors.csv)
+records the numerical comparisons. Assembly confirms packed `mulpd` and `addpd`
+instructions with independent accumulators in the ordinary release dot kernel.
+[`implementation_metadata.json`](implementation_metadata.json) identifies the
+source, binaries, toolchains, settings, and local assembly listings.
+
+Both downstream comparisons use the baseline checkout and production source,
+the same Shrinkage compatibility patch, Rust 1.89.0, and one codegen unit. Five
+blocks alternate build order, with one warmup and five observations per case
+per process. The following values are medians of 25 observations in milliseconds:
+
+| Case       | Native baseline | Native production | Python baseline | Python production |
+| ---------- | --------------: | ----------------: | --------------: | ----------------: |
+| Original   |          18.872 |             8.356 |          24.835 |            12.312 |
+| Larger     |          70.389 |            31.002 |          94.044 |            46.768 |
+| Correlated |          74.494 |            34.324 |          84.004 |            35.338 |
+| Weak       |         166.750 |           104.987 |         178.314 |           100.409 |
+| Strong     |          17.542 |             8.044 |          24.122 |            12.038 |
+| Zero       |          11.966 |             5.438 |          18.294 |             9.696 |
+
+Native fits take 37–56% less time. Python fits take 44–58% less time, including
+Python model construction, validation, copies into private Rust-owned storage,
+preprocessing, solving, and destruction of the owned input storage before
+returning. Loading arrays, diagnostics, and independent verification remain
+outside timing. Native and Python inputs have different allocation paths, so
+compare each mode against its own baseline. Individual observations are in
+[`implementation_fits.csv`](implementation_fits.csv) and
+[`python_fits.csv`](python_fits.csv).
+
+All 600 measured fits pass the independent objective, KKT, dual-objective, gap,
+and returned-certificate checks. The maximum relative gap is 5.56e-9, maximum
+KKT violation is 1.24e-9, and maximum measured feasibility excess is zero. Both
+builds take the same number of sweeps in every case.
+
+The separate fused-summary experiment checks raw sums and centered squared
+norms individually before timing. On the Fortran fixture, the production pair
+takes 1.250 ms, separate slice reductions take 1.233 ms, and a simple fused
+sixteen-accumulator prototype takes 1.489 ms. The explicitly centered fixture
+shows the same ordering. [`summaries.csv`](summaries.csv) preserves the results.
+These measurements support keeping the individual operations in the public API.
+
+Production validation passed the full `task test` backend and feature matrix,
+`task test:blas`, formatting, Clippy, Rustdoc, Python checks and packaging,
+release checks, and website checks. The initial `task ci` invocation reached the
+website check before finding a missing Diplodocus executable on `PATH`. Setting
+the documented `DIPLODOCUS_BIN` override resolved it; that phase and the remaining
+test phases then passed.
+
+## Initial investigation
+
+The November 3, 2026 Shrinkage kernel gap reproduces on the baseline checkout,
+revision `b6fb52a`. On the
+preserved 5,000 × 1,000 Fortran-contiguous input, one pass of
+`LazyColumn::dot_with_sum` takes 3.769 ms versus 1.803 ms for ndarray's dot in the
+baseline default release configuration. Contiguous prototypes with eight
+independent accumulators take 1.799 ms for dots, 0.604 ms for sums, and 0.682 ms
+for squared norms. An isolated library prototype also reduces native Shrinkage
+fit times by 39–56% on six cases, with independently verified diagnostics.
+
+The following original measurements and experimental patches retain the
+evidence used to choose the production implementation.
+
+## Kernel comparison
+
+Times below are milliseconds per pass over all 1,000 columns, with 5,000 entries
+per column. Each entry is the median of nine observations of 30 passes. Methods
+alternate forward and reverse order between observations. Fixture construction,
+normalization parameters, vector copies, correctness checks, and serialization
+are outside timing. Each method receives one additional warmup pass.
+
+All builds use release optimization, generic x86-64 instructions, no BLAS, and
+no parallel feature. One exclusive `compute bench` window contains all four
+builds and their comparisons, pinned to logical CPU 2 of an AMD Ryzen 9 7900.
+The published crate and checkout share ndarray 0.17.2. The original input hashes,
+toolchain versions, source hashes, and settings are in
+[`metadata.json`](metadata.json).
+
+| Rust / codegen units | Published dot | Checkout dot | ndarray dot | Slice dot, 8 accumulators |
+| -------------------- | ------------: | -----------: | ----------: | ------------------------: |
+| 1.98.1 / 16          |         3.819 |        3.769 |       1.803 |                     1.799 |
+| 1.98.1 / 1           |         3.802 |        3.744 |       1.746 |                     1.732 |
+| 1.89.0 / 16          |         3.993 |        3.971 |       1.678 |                     1.676 |
+| 1.89.0 / 1           |         3.801 |        3.758 |       1.780 |                     1.833 |
+
+The historical published result was 3.706 ms versus 1.667 ms. The current runs
+confirm the gap with both the historical and current compiler. Using one codegen
+unit does not close it.
+
+The following controls use Rust 1.98.1 and 16 codegen units:
+
+| Operation    | Checkout | Serial slice | Slice, 8 accumulators | ndarray |
+| ------------ | -------: | -----------: | --------------------: | ------: |
+| Dot          |    3.769 |        3.622 |                 1.799 |   1.803 |
+| Sum          |    2.800 |        2.848 |                 0.604 |   0.614 |
+| Squared norm |    2.803 |        2.875 |                 0.682 |   0.671 |
+
+[`timings.csv`](timings.csv) retains all 1,728 observations, including a second
+Fortran comparison and the additional layouts. `CurrentDot` uses a `Vec` input;
+`CurrentDotView` uses the ndarray vector view. The `Vec` input is an untimed copy
+with identical logical values. View methods preserve vector strides.
+
+## Cause and implementation options
+
+[`LazyColumn::dot_with_sum`](../../src/column.rs) reduces through
+`RawColumn::for_each_stored`, with one accumulator and indexed vector access.
+ndarray's contiguous dot instead uses eight accumulators. The independent
+accumulations allow packed arithmetic without enabling fast-math. A serial
+slice control saves only about 4%, while the contiguous eight-accumulator
+prototype closes the dot gap. Reduction order accounts for most of the
+difference on this fixture.
+
+Assembly from the ordinary 16-unit builds also contains outlined ndarray
+visitors with iterator-mode branches and an accumulator store inside the loop.
+The generated listings are retained under the local evidence directory recorded
+in metadata. The benchmark's `Inline*` methods copy the adapter's visitor into a
+small backend wrapper with `#[inline]`; this control does not materially improve
+the result. Inlining remains relevant to consumer regressions, but it does not
+provide the missing independent accumulations.
+
+Contiguity also helps the compiler eliminate indexing checks. Eight accumulators
+with generic ndarray indexing take 2.420 ms for dots. Processing contiguous
+column chunks against a generic `Vec` input takes 2.226 ms. Borrowing both inputs
+as slices takes 1.799 ms. These controls support exposing contiguous vector
+access as well as a backend reduction hook or contiguous raw-column access.
+
+The isolated [`contiguous-prototype.patch`](contiguous-prototype.patch) adds
+optional borrowed dense slices to `RawColumn` and contiguous slices to
+`VectorView`. It uses them for raw sums, cached-sum dots, and directly centered
+squared norms. Both hooks default to `None`. Only ndarray's dense columns and
+the relevant vector implementations opt in. Sparse columns and strided columns
+retain their existing paths, including duplicate coalescing and implicit zeros.
+The fast paths use constant workspace and allocate nothing. The patch is an
+experiment against the recorded baseline; production shares these reductions
+through a separate private core module and documents both borrowing hooks.
+
+The sum and norm results justify improving the individual reductions first.
+Shrinking both scans makes a separate comparison of fused summaries useful;
+these measurements do not establish the benefit of a fused API.
+
+## Layout and numerical checks
+
+All methods are checked column by column against a materialized logical-column
+calculation accumulated with compensated summation. The full-size controls cover
+Fortran storage, explicit centering and scaling, row-major storage, every other
+row with a strided vector, and reversed rows with a reversed vector. Additional
+fixtures exercise lengths 0, 1, 7, 8, 9, 15, 16, 17, 31, 32, and 33 with seven
+columns on both compilers. [`errors.csv`](errors.csv) records maximum absolute
+errors for the full-size fixtures.
+
+For the raw Fortran fixture, maximum dot errors are 1.82e-11 for the checkout and
+2.73e-12 for the contiguous prototype. Sum errors are 6.91e-13 and 2.25e-13, and
+squared-norm errors are 3.55e-11 and 4.55e-12. The centered prototype subtracts the
+center before squaring and retains the existing scale correction.
+
+Layout changes affect the opportunity. The row-major dot takes 8.013 ms in the
+checkout and 7.595 ms in ndarray; the indexed eight-accumulator prototype takes
+7.235 ms. Reversed-row sums expose another opportunity: ndarray's sum can use
+memory order, taking 0.610 ms versus 3.329 ms for the logical visitor. A
+contiguous positive-stride fast path alone does not address these cases.
+
+Reordering is not uniformly more accurate. [`numerics.csv`](numerics.csv)
+contains two cancellation examples: one loses a unit that the serial reduction
+retains, and one recovers units that the serial reduction loses. Alternating
+`f64::MAX` and `-f64::MAX` eight times produces zero serially but NaN in both the
+prototype and ndarray because intermediate pair sums overflow. Explicit NaNs,
+infinities, and empty inputs are also exercised. Production accepts the usual
+backend variation in addition order, including these effects. Typical-data
+agreement does not establish bitwise or IEEE-class agreement for all finite
+inputs. These original performance experiments cover `f64`.
+
+Keep `VectorView` out of method-resolution scope when measuring ndarray's
+inherent sum: its trait `sum` can shadow ndarray 0.17's method through `Deref`.
+The probe uses the fully qualified trait name in generic bounds for this reason.
+
+## Native Shrinkage fits
+
+The isolated consumer uses Shrinkage revision
+`3dd3c095547f9893c429646a991323e870eb0d9a`. The same
+[`compatibility patch`](shrinkage-compat.patch) adapts both builds to the
+checkout's normalization API without changing solver rules. The baseline uses
+the checkout, and the candidate uses the contiguous prototype. Both use Rust
+1.89.0, one codegen unit, ndarray 0.17.2, and no BLAS or parallel Rust feature.
+
+Five blocks alternate build order. Each process warms each case once, then
+measures five fits, giving 25 observations per build and case. Both builds share
+one exclusive compute window and CPU 2. The timer covers the native `model.fit`
+call. Input loading, model construction, returned-fit destruction,
+serialization, and independent verification are outside timing. This measures
+complete native fits with borrowed inputs; Python input copying and extension
+overhead require a separate measurement.
+
+Times are milliseconds, with inclusive interquartile intervals in brackets:
+
+| Case       |                   Checkout |                  Prototype | Reduction | Sweeps, both builds |
+| ---------- | -------------------------: | -------------------------: | --------: | ------------------: |
+| Original   |    18.868 [18.754, 19.215] |       8.346 [8.267, 8.444] |       56% |                  10 |
+| Larger     |    70.511 [70.261, 70.935] |    31.752 [31.412, 32.095] |       55% |                  10 |
+| Correlated |    74.142 [73.771, 74.213] |    34.098 [33.822, 34.386] |       54% |                  90 |
+| Weak       | 167.539 [166.718, 167.789] | 102.827 [100.262, 103.974] |       39% |                  60 |
+| Strong     |    17.443 [17.356, 17.549] |       8.022 [7.937, 8.184] |       54% |                  10 |
+| Zero       |    11.978 [11.894, 12.033] |       5.232 [5.127, 5.272] |       56% |                   0 |
+
+The original matrix is 5,000 × 1,000, the larger matrix is 10,000 × 2,000, and
+the correlated matrix is 5,000 × 1,000. The weak, strong, and zero cases multiply
+the original penalty by 0.1, 5, and 20. All use centered input arrays, no fitted
+intercept or scaling, automatic working sets, and relative duality-gap target
+1e-8. Input identities are recorded in metadata.
+
+NumPy independently recomputes the primal objective, KKT violation, reported
+certificate feasibility, dual objective, and relative gap for every measured
+fit. All 300 fits pass. The maximum relative gap is 5.56e-9, the maximum KKT
+violation is 1.24e-9, and the maximum measured certificate-feasibility excess is
+zero. Objectives agree between builds within rounding error. Sweep counts,
+feature visits, and full-check counts agree. [`fits.csv`](fits.csv) preserves
+each timing and independent diagnostic. A shorter pilot had wider timing
+dispersion and remains in the local evidence directory; the table uses the
+extended run.
+
+## Reproduction and validation
+
+Run from the repository root. The kernel probe is a standalone workspace, so it
+does not add production dependencies or change the root lockfile:
+
+```sh
+compute bench --reason "Dense column reductions" -- env PROBE_LAYOUTS=1 \
+    bash benches/column_reductions/run.sh \
+    ../shrinkage/.build/sklearn-gap-20261103/data/original \
+    target/column-reductions/reproduce rust-current
+```
+
+Use `-` instead of the data directory for seeded uniform synthetic inputs.
+`PROBE_CPU`, `PROBE_SAMPLES`, and `PROBE_PASSES` override CPU 2, nine samples, and
+30 passes. To repeat the historical compiler comparison, set `RUSTC` and
+`PROBE_CARGO` to the desired compiler and Cargo executables and use a distinct
+label. `run.sh` builds and measures both codegen-unit configurations, saves
+assembly, checks short lengths, and writes the numerical counterexamples.
+Set `PROBE_SUMMARIES=1` to include the separate and fused summary controls.
+
+Prepare a fresh downstream directory with NumPy available in the interpreter:
+
+```sh
+compute run -- python scripts/python-tool.py python \
+    benches/column_reductions/downstream.py prepare \
+    target/column-reductions/reproduce-fits \
+    --data ../shrinkage/.build/sklearn-gap-20261103/data
+```
+
+The preparer copies production source into the output directory, exports the
+recorded baseline revision from Git, applies the Shrinkage compatibility patch,
+and exports the three preserved datasets. Override the baseline with
+`--baseline PATH`. It defaults to the sibling Shrinkage checkout; override that
+with `--shrinkage PATH`. Choose an
+interpreter and native library environment in which NumPy imports successfully.
+The workspaces retain separate lockfiles for reproducible consumer builds.
+
+```sh
+compute bench --reason "Native column reduction fits" -- bash -c '
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+    for variant in current candidate; do
+        CARGO_TARGET_DIR="$1/$variant-build" cargo build --release --locked \
+            --manifest-path "$1/$variant/Cargo.toml" || exit
+    done
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+        python scripts/python-tool.py python \
+        benches/column_reductions/downstream.py run "$1"
+' bash target/column-reductions/reproduce-fits
+```
+
+Select Rust 1.89.0 in the shell to reproduce the recorded native builds. Keep
+both builds inside the same reservation. The runner defaults to five blocks of
+five observations, with `--blocks`, `--repetitions`, and `--cpu` overrides.
+
+For the Python comparison, add `--python` when preparing a fresh downstream
+directory, then build the two isolated extension workspaces:
+
+```sh
+compute run -- bash -c '
+    export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+    export PYO3_PYTHON="$PWD/.devenv/python/bin/python"
+    for variant in current candidate; do
+        CARGO_TARGET_DIR="$1/$variant-python-build" cargo build --release --locked \
+            --manifest-path "$1/$variant-python/Cargo.toml" || exit
+    done
+' bash target/column-reductions/reproduce-fits
+compute bench --reason "Python column reduction fits" -- \
+    python scripts/python-tool.py python benches/column_reductions/python_fits.py \
+    target/column-reductions/reproduce-fits
+```
+
+The Python runner creates a fresh process per build and block, sets numerical
+libraries to one thread, pins each worker to the selected CPU, and independently
+checks every fit. It uses the public Python `Lasso.fit` with its default
+`copy=True`. The same block, observation-count, and CPU overrides are available.
+
+Validation passed for the standalone probe and consumer harness with Clippy,
+Rust formatting, Python lint and formatting, and shell syntax and formatting.
+The library prototype passed 37 ndarray tests across releases 0.15, 0.16, and
+0.17, 23 sprs tests, and the scalar-bounds test. Clippy and Rustdoc passed with
+warnings denied for that feature set. The core source hashes identify the
+prototype that was tested and timed.

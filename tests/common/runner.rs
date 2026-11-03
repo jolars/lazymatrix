@@ -2067,6 +2067,103 @@ where
     assert_eq!(weights.reads.get(), column.values().len());
 }
 
+/// Check reduction tails, normalization, indexed inputs, and floating-point types.
+pub fn run_column_reductions_suite<F, M>(build: impl Fn(&[F]) -> M)
+where
+    F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
+    M: RawColumns<F>,
+{
+    let epsilon = F::epsilon() * F::from_u32(128).unwrap();
+    let check = |actual: F, expected: F| {
+        if expected.is_nan() {
+            assert!(actual.is_nan());
+        } else if expected.is_infinite() {
+            assert_eq!(actual, expected);
+        } else {
+            approx::assert_relative_eq!(
+                actual,
+                expected,
+                epsilon = epsilon,
+                max_relative = epsilon
+            );
+        }
+    };
+    let mut rng = ChaCha8Rng::seed_from_u64(8421);
+    for len in (0..=33).chain([65, 129, 257]) {
+        let raw: Vec<F> = (0..len)
+            .map(|_| F::from_i32(rng.random_range(-16..=16)).unwrap() / F::from_u32(8).unwrap())
+            .collect();
+        let vector: Vec<F> = (0..len)
+            .map(|_| F::from_i32(rng.random_range(-16..=16)).unwrap() / F::from_u32(16).unwrap())
+            .collect();
+        for center in [F::zero(), F::from_f64(0.375).unwrap()] {
+            for scale in [F::one(), F::from_f64(-1.75).unwrap()] {
+                let matrix = LazyMatrix::from_column_parts(
+                    build(&raw),
+                    Some(vec![center]),
+                    Some(vec![scale]),
+                );
+                let column = matrix.column(0);
+                let logical: Vec<F> = raw.iter().map(|&x| (x - center) / scale).collect();
+                check(column.sum(), logical.iter().copied().sum());
+                check(column.norm_squared(), logical.iter().map(|&x| x * x).sum());
+                let expected = logical.iter().zip(&vector).map(|(&x, &y)| x * y).sum();
+                check(column.dot(&vector), expected);
+                check(
+                    column.dot_with_sum(&vector, vector.iter().copied().sum()),
+                    expected,
+                );
+                let fallback = IndexedColumnVector { values: &vector };
+                check(
+                    column.dot_with_sum(&fallback, vector.iter().copied().sum()),
+                    expected,
+                );
+            }
+        }
+    }
+
+    let center = if F::epsilon() < F::from_f64(1e-10).unwrap() {
+        F::from_f64(1e12).unwrap()
+    } else {
+        F::from_f64(1_048_576.0).unwrap()
+    };
+    let raw: Vec<F> = (0..33)
+        .map(|i| center + F::from_i32(i % 7 - 3).unwrap() / F::from_u32(8).unwrap())
+        .collect();
+    let matrix = LazyMatrix::from_column_parts(build(&raw), Some(vec![center]), None);
+    check(
+        matrix.column(0).norm_squared(),
+        raw.iter().map(|&x| (x - center) * (x - center)).sum(),
+    );
+
+    for exceptional in [F::infinity(), F::neg_infinity(), F::nan()] {
+        let mut raw = vec![F::one(); 17];
+        raw[8] = exceptional;
+        let matrix = LazyMatrix::<_, lazymatrix::ColumnNormalizationParams<F>>::from_column_parts(
+            build(&raw),
+            None,
+            None,
+        );
+        let column = matrix.column(0);
+        check(column.sum(), raw.iter().copied().sum());
+        check(column.dot(&[F::one(); 17]), raw.iter().copied().sum());
+        check(column.norm_squared(), raw.iter().map(|&x| x * x).sum());
+    }
+}
+
+struct IndexedColumnVector<'a, F> {
+    values: &'a [F],
+}
+
+impl<F: lazymatrix::Scalar> VectorView<F> for IndexedColumnVector<'_, F> {
+    fn len(&self) -> usize {
+        self.values.len()
+    }
+    fn get(&self, index: usize) -> F {
+        self.values[index]
+    }
+}
+
 /// Run logical-column checks shared by dense and sparse storage backends.
 pub fn run_logical_columns_suite<M>(build: impl Fn(&TestMatrix) -> M)
 where

@@ -339,6 +339,16 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn dense_column_reductions() {
+                common::run_column_reductions_suite::<f32, _>(|v| {
+                    DMatrix::from_column_slice(v.len(), 1, v)
+                });
+                common::run_column_reductions_suite::<f64, _>(|v| {
+                    DMatrix::from_column_slice(v.len(), 1, v)
+                });
+            }
+
+            #[test]
             fn nalgebra_gram_writes_owned_and_borrowed_f32_outputs() {
                 use lazymatrix::WeightedGramInto;
                 let matrix = CscMatrix::try_from_csc_data(

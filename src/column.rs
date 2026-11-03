@@ -56,6 +56,10 @@ impl<F: Scalar> RawColumn<F> for SparseColumnRef<'_, F> {
 }
 
 /// A borrowed lazily normalized column over an arbitrary raw backend view.
+///
+/// Floating-point reduction order can depend on storage. Rounding and
+/// intermediate overflow can differ from sequential accumulation, as in native
+/// backend reductions.
 #[derive(Clone, Copy, Debug)]
 pub struct LazyColumn<C, F> {
     raw: C,
@@ -146,6 +150,13 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
     /// duplicate indices use O(n + nnz) time and one O(n) working column to
     /// combine raw duplicates before squaring.
     pub fn norm_squared(&self) -> F {
+        if let Some(values) = self.raw.dense_values() {
+            let squared_deviations = crate::reductions::sum_map(values, |value| {
+                let deviation = value - self.center;
+                deviation * deviation
+            });
+            return squared_deviations / (self.scale * self.scale);
+        }
         let mut stored_squared_deviations = F::zero();
         let mut previous = None;
         let mut canonical = true;
@@ -200,6 +211,11 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
             self.len(),
             "vector length must equal column length"
         );
+        if let (Some(column), Some(vector)) = (self.raw.dense_values(), vector.contiguous_values())
+        {
+            return (crate::reductions::dot(column, vector) - self.center * vector_sum)
+                / self.scale;
+        }
         let mut raw_dot = F::zero();
         self.raw
             .for_each_stored(|row, value| raw_dot = raw_dot + value * vector.get(row));

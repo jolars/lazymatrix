@@ -732,6 +732,16 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn dense_column_reductions() {
+                common::run_column_reductions_suite::<f32, _>(|v| {
+                    Mat::from_fn(v.len(), 1, |i, _| v[i])
+                });
+                common::run_column_reductions_suite::<f64, _>(|v| {
+                    Mat::from_fn(v.len(), 1, |i, _| v[i])
+                });
+            }
+
+            #[test]
             fn dense_gram_views_preserve_strides_and_panel_edges() {
                 use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto, WithIntercept};
                 let mut storage = Mat::from_fn(39, 302, |i, j| 1e12 + ((i * 3 + j) % 13) as f64);

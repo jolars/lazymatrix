@@ -21,6 +21,10 @@ where
     fn get(&self, index: usize) -> F {
         self[index]
     }
+
+    fn contiguous_values(&self) -> Option<&[F]> {
+        self.as_slice()
+    }
 }
 
 impl<F, S> VectorViewMut<F> for ArrayBase<S, Ix1>
@@ -40,6 +44,10 @@ where
 {
     fn len(&self) -> usize {
         self.shape()[0]
+    }
+
+    fn dense_values(&self) -> Option<&[F]> {
+        self.as_slice()
     }
 
     fn stored_len(&self) -> usize {

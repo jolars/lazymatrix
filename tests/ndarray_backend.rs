@@ -238,6 +238,65 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn dense_column_reductions() {
+                common::run_column_reductions_suite::<f32, _>(|v| Array2::from_shape_vec((v.len(), 1), v.to_vec()).unwrap());
+                common::run_column_reductions_suite::<f64, _>(|v| Array2::from_shape_vec((v.len(), 1), v.to_vec()).unwrap());
+            }
+
+            #[test]
+            fn contiguous_column_and_vector_slices_preserve_view_offsets() {
+                use lazymatrix::{RawColumn, RawColumns};
+                let storage = Array2::from_shape_fn((40, 3).f(), |(i, j)| (i + j*40) as f64);
+                let matrix = storage.slice(s![3..36, 1..2]);
+                let column = matrix.raw_column(0);
+                let values = column.dense_values().unwrap();
+                assert_eq!(values.len(), 33);
+                assert_eq!(values.as_ptr(), &storage[(3, 1)] as *const f64);
+                let input = storage.column(2);
+                let input = input.slice(s![3..36]);
+                let values = input.contiguous_values().unwrap();
+                assert_eq!(values.len(), 33);
+                assert_eq!(values.as_ptr(), &storage[(3, 2)] as *const f64);
+                assert!(storage.slice(s![..;2, ..]).raw_column(0).dense_values().is_none());
+                assert!(storage.slice(s![..;-1, ..]).raw_column(0).dense_values().is_none());
+                for vector in [input.slice(s![..;2]), input.slice(s![..;-2])] {
+                    assert!(vector.contiguous_values().is_none());
+                    let len = vector.len();
+                    let matrix = LazyMatrix::from_column_parts(storage.slice(s![..len, ..]), Some(vec![0.375; 3]), Some(vec![-1.75; 3]));
+                    let column = matrix.column(1);
+                    let expected: f64 = (0..len).map(|i| (storage[(i, 1)] - 0.375)/-1.75 * vector[i]).sum();
+                    approx::assert_relative_eq!(column.dot(&vector), expected, epsilon=1e-10, max_relative=1e-12);
+                }
+            }
+
+            #[cfg(not(any(feature = "ndarray_v0_15-blas", feature = "ndarray_v0_16-blas", feature = "ndarray_v0_17-blas")))]
+            #[test]
+            fn dense_reductions_accept_native_reordering() {
+                fn check<F: lazymatrix::Scalar + ndarray::LinalgScalar>() {
+                    use lazymatrix::ColumnNormalizationParams;
+                    let mut cancellation = vec![F::zero(); 16];
+                    cancellation[0] = F::epsilon().recip() * F::from_u32(4).unwrap();
+                    cancellation[1] = -cancellation[0];
+                    cancellation[8] = F::one();
+                    let overflow: Vec<F> = (0..8).map(|i| if i%2==0 {F::max_value()} else {-F::max_value()}).collect();
+                    for values in [cancellation, overflow] {
+                        let raw = Array2::from_shape_vec((values.len(), 1), values).unwrap();
+                        let column = raw.column(0);
+                        let vector = Array1::from_elem(raw.nrows(), F::one());
+                        let expected_dot = ndarray::linalg::Dot::dot(&column, &vector.view());
+                        let expected_sum = column.into_dyn().sum();
+                        let matrix = LazyMatrix::<_, ColumnNormalizationParams<F>>::from_column_parts(&raw, None, None);
+                        let actual_dot = matrix.column(0).dot(&vector);
+                        let actual_sum = matrix.column(0).sum();
+                        if expected_dot.is_nan() { assert!(actual_dot.is_nan()); } else { assert_eq!(actual_dot, expected_dot); }
+                        if expected_sum.is_nan() { assert!(actual_sum.is_nan()); } else { assert_eq!(actual_sum, expected_sum); }
+                    }
+                }
+                check::<f32>();
+                check::<f64>();
+            }
+
+            #[test]
             fn ndarray_gram_strides_tiles_and_f32() {
                 use lazymatrix::WeightedGramInto;
                 let storage = Array2::from_shape_fn((600, 74), |(i, j)| ((i + j * 3) % 13) as f64 + 1e9);

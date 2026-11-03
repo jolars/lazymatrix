@@ -1,0 +1,164 @@
+--- a/src/backends/ndarray/vector.rs
++++ b/src/backends/ndarray/vector.rs
+@@ -21,6 +21,10 @@
+     fn get(&self, index: usize) -> F {
+         self[index]
+     }
++
++    fn contiguous_values(&self) -> Option<&[F]> {
++        self.as_slice()
++    }
+ }
+ 
+ impl<F, S> VectorViewMut<F> for ArrayBase<S, Ix1>
+@@ -40,6 +44,10 @@
+ {
+     fn len(&self) -> usize {
+         self.shape()[0]
++    }
++
++    fn dense_values(&self) -> Option<&[F]> {
++        self.as_slice()
+     }
+ 
+     fn stored_len(&self) -> usize {
+--- a/src/column.rs
++++ b/src/column.rs
+@@ -146,6 +146,13 @@
+     /// duplicate indices use O(n + nnz) time and one O(n) working column to
+     /// combine raw duplicates before squaring.
+     pub fn norm_squared(&self) -> F {
++        if let Some(values) = self.raw.dense_values() {
++            let value = dense_reduce8(values, |value| {
++                let deviation = value - self.center;
++                deviation * deviation
++            });
++            return value / (self.scale * self.scale);
++        }
+         let mut stored_squared_deviations = F::zero();
+         let mut previous = None;
+         let mut canonical = true;
+@@ -200,6 +207,10 @@
+             self.len(),
+             "vector length must equal column length"
+         );
++        if let (Some(column), Some(vector)) = (self.raw.dense_values(), vector.contiguous_values())
++        {
++            return (dense_dot8(column, vector) - self.center * vector_sum) / self.scale;
++        }
+         let mut raw_dot = F::zero();
+         self.raw
+             .for_each_stored(|row, value| raw_dot = raw_dot + value * vector.get(row));
+@@ -416,3 +427,47 @@
+         F::one()
+     }
+ }
++
++// This experimental reduction intentionally changes the addition order.
++#[inline]
++pub(crate) fn dense_sum8<F: Scalar>(values: &[F]) -> F {
++    dense_reduce8(values, |value| value)
++}
++
++#[inline]
++fn dense_reduce8<F: Scalar>(values: &[F], mut term: impl FnMut(F) -> F) -> F {
++    let mut sums = [F::zero(); 8];
++    let mut chunks = values.chunks_exact(8);
++    for chunk in chunks.by_ref() {
++        for lane in 0..8 {
++            sums[lane] = sums[lane] + term(chunk[lane]);
++        }
++    }
++    let mut sum = (sums[0] + sums[4]) + (sums[1] + sums[5]);
++    sum = sum + (sums[2] + sums[6]);
++    sum = sum + (sums[3] + sums[7]);
++    for &value in chunks.remainder() {
++        sum = sum + term(value);
++    }
++    sum
++}
++
++#[inline]
++fn dense_dot8<F: Scalar>(column: &[F], vector: &[F]) -> F {
++    assert_eq!(column.len(), vector.len());
++    let mut sums = [F::zero(); 8];
++    let mut left = column.chunks_exact(8);
++    let mut right = vector.chunks_exact(8);
++    for (x, y) in left.by_ref().zip(right.by_ref()) {
++        for lane in 0..8 {
++            sums[lane] = sums[lane] + x[lane] * y[lane];
++        }
++    }
++    let mut sum = (sums[0] + sums[4]) + (sums[1] + sums[5]);
++    sum = sum + (sums[2] + sums[6]);
++    sum = sum + (sums[3] + sums[7]);
++    for (&x, &y) in left.remainder().iter().zip(right.remainder()) {
++        sum = sum + x * y;
++    }
++    sum
++}
+--- a/src/traits/columns.rs
++++ b/src/traits/columns.rs
+@@ -14,7 +14,15 @@
+         self.len() == 0
+     }
+ 
++    /// Borrow every logical raw value when the column is contiguous and dense.
++    fn dense_values(&self) -> Option<&[F]> {
++        None
++    }
++
+     fn raw_sum(&self) -> F {
++        if let Some(values) = self.dense_values() {
++            return crate::column::dense_sum8(values);
++        }
+         let mut sum = F::zero();
+         self.for_each_stored(|_, value| sum = sum + value);
+         sum
+--- a/src/traits/vectors.rs
++++ b/src/traits/vectors.rs
+@@ -7,6 +7,11 @@
+ pub trait VectorView<F: Scalar> {
+     fn len(&self) -> usize;
+     fn get(&self, index: usize) -> F;
++
++    /// Borrow contiguous logical values without copying or gathering.
++    fn contiguous_values(&self) -> Option<&[F]> {
++        None
++    }
+ 
+     fn is_empty(&self) -> bool {
+         self.len() == 0
+@@ -67,6 +72,10 @@
+     fn get(&self, index: usize) -> F {
+         self[index]
+     }
++
++    fn contiguous_values(&self) -> Option<&[F]> {
++        Some(self)
++    }
+ }
+ 
+ impl<F: Scalar> VectorViewMut<F> for [F] {
+@@ -83,6 +92,10 @@
+     fn get(&self, index: usize) -> F {
+         self[index]
+     }
++
++    fn contiguous_values(&self) -> Option<&[F]> {
++        Some(self.as_slice())
++    }
+ }
+ 
+ impl<F: Scalar> VectorViewMut<F> for Vec<F> {
+@@ -98,6 +111,10 @@
+ 
+     fn get(&self, index: usize) -> F {
+         self[index]
++    }
++
++    fn contiguous_values(&self) -> Option<&[F]> {
++        Some(self)
+     }
+ }
+ 

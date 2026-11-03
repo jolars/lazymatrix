@@ -1,0 +1,87 @@
+--- a/src/experimental.rs
++++ b/src/experimental.rs
+@@ -179,7 +179,7 @@
+ impl<M: ColumnStats<f64> + ?Sized> ColumnStats<f64> for BufferedDesign<'_, M> {
+     fn normalization_stats(
+         &self,
+-        spec: lazymatrix::Normalization,
++        spec: lazymatrix::ColumnNormalization,
+     ) -> Result<NormalizationStats<f64>, Self::Error> {
+         self.matrix.normalization_stats(spec)
+     }
+--- a/src/fit.rs
++++ b/src/fit.rs
+@@ -21,7 +21,7 @@
+ /// Training normalization retained by a fitted model.
+ #[derive(Clone, Debug)]
+ pub struct Preprocessing {
+-    pub(crate) spec: lazymatrix::Normalization,
++    pub(crate) spec: lazymatrix::ColumnNormalization,
+     pub(crate) centers: Option<Vec<f64>>,
+     pub(crate) scales: Option<Vec<f64>>,
+     pub(crate) supplied_centers: bool,
+--- a/src/normalization.rs
++++ b/src/normalization.rs
+@@ -45,8 +45,8 @@
+ }
+ 
+ impl Normalization {
+-    pub(crate) fn specification(self, fit_intercept: bool) -> lazymatrix::Normalization {
+-        use lazymatrix::Normalization as Spec;
++    pub(crate) fn specification(self, fit_intercept: bool) -> lazymatrix::ColumnNormalization {
++        use lazymatrix::ColumnNormalization as Spec;
+ 
+         match self {
+             Self::Auto => Spec::new(
+--- a/src/problem.rs
++++ b/src/problem.rs
+@@ -313,7 +313,7 @@
+     };
+     let centered_scale = supplied_centers.is_some()
+         && matches!(scale_rule, Scaling::L1 | Scaling::L2 | Scaling::MaxAbs);
+-    let stats_spec = lazymatrix::Normalization::new(
++    let stats_spec = lazymatrix::ColumnNormalization::new(
+         center_rule,
+         if centered_scale {
+             Scaling::None
+@@ -373,7 +373,7 @@
+         }
+     }
+     Ok(Prepared {
+-        matrix: LazyMatrix::from_parts(x, centers, scales),
++        matrix: LazyMatrix::from_column_parts(x, centers, scales),
+         spec,
+         supplied_centers: supplied_centers.is_some(),
+         supplied_scales: supplied_scales.is_some(),
+@@ -382,7 +382,7 @@
+ 
+ pub(crate) struct Prepared<M> {
+     pub matrix: LazyMatrix<M>,
+-    spec: lazymatrix::Normalization,
++    spec: lazymatrix::ColumnNormalization,
+     supplied_centers: bool,
+     supplied_scales: bool,
+ }
+@@ -393,9 +393,10 @@
+         self,
+         transform: impl FnOnce(M) -> N,
+     ) -> Prepared<N> {
+-        let (matrix, centers, scales) = self.matrix.into_parts();
++        let (matrix, params) = self.matrix.into_parts();
++        let (_, centers, scales) = params.into_parts();
+         Prepared {
+-            matrix: LazyMatrix::from_parts(transform(matrix), centers, scales),
++            matrix: LazyMatrix::from_column_parts(transform(matrix), centers, scales),
+             spec: self.spec,
+             supplied_centers: self.supplied_centers,
+             supplied_scales: self.supplied_scales,
+@@ -403,7 +404,8 @@
+     }
+ 
+     pub fn into_preprocessing(self) -> Preprocessing {
+-        let (_, centers, scales) = self.matrix.into_parts();
++        let (_, params) = self.matrix.into_parts();
++        let (_, centers, scales) = params.into_parts();
+         Preprocessing {
+             spec: self.spec,
+             centers,
