@@ -79,7 +79,11 @@ additional to the selection state.
 The number of fitting passes depends on the values. Widely separated exponents
 can require many passes, so exact quantiles may be expensive on storage-backed
 inputs. Existing normalization choices without quantiles retain their fitting
-paths and, for Zarr, the bound of two scans. [Quantile fitting measurements](https://github.com/jolars/lazymatrix/tree/main/benches/quantile_fitting)
+paths and, for Zarr column fitting, the bound of two scans. Zarr row fitting uses
+the same selection algorithm with O(nrows) state and positions along the column
+axis. Row standardization takes two scans; other row recipes without quantiles
+need up to three scans. Row products normalize each entry before accumulation
+and read each storage chunk once. [Quantile fitting measurements](https://github.com/jolars/lazymatrix/tree/main/benches/quantile_fitting)
 record time, peak additional allocation, and storage scans.
 
 Ranges use weighted gaps between order statistics to preserve small variation

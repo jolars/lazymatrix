@@ -33,14 +33,15 @@
 //! recipe, and row normalization presents
 //! `D⁻¹(X − r1ᵀ)` with one center and scale per row. It supports allocating and
 //! reusable forward and transpose vector products over all dense backends,
-//! strided views, and sparse CSC/CSR storage. [`RowStats`] provides fitted row
-//! statistics, and [`RowNormalizationKernel`] provides the products. Dense
-//! products normalize entries before accumulation. Sparse kernels combine
-//! duplicate cells and include implicit zeros while preserving storage and using
+//! strided views, sparse CSC/CSR storage, and chunked Zarr arrays. [`RowStats`]
+//! provides fitted row statistics, and [`RowNormalizationKernel`] provides the
+//! products. Dense products normalize entries before accumulation. Sparse kernels
+//! combine duplicate cells and include implicit zeros while preserving storage and using
 //! O(nrows + ncols) workspace. CSR fitting buffers one coalesced row, and CSC
-//! fitting streams native column scans. New samples need independently fitted
-//! row parameters. Zarr row support and additional operator capabilities remain
-//! future work.
+//! fitting streams native column scans. Zarr fitting streams chunks with
+//! O(nrows) state plus chunk and codec buffers, including outer shards. Exact
+//! row quantiles use repeated scans. New samples need independently fitted
+//! row parameters. Additional operator capabilities remain future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -439,14 +440,19 @@
 //! zero scales with one while preserving nonfinite statistics.
 //!
 //! With `zarrs`, `ZarrMatrix` wraps an opened synchronous array without reading
-//! its chunks. Each product scans chunks serially, and normalization shares work
-//! through [`ColumnStats::normalization_stats`]. Normalization without quantiles
-//! needs at most two scans; exact quantile fitting may need many scans. Working
-//! vectors stay in RAM. Memory for data and codecs depends on chunk size, including
-//! the outer shard for sharded storage; no strict byte budget is imposed. The
-//! backing array must remain unchanged throughout normalization and use.
-//! Filesystem and gzip support are enabled; additional codecs can be selected
-//! through a direct zarrs dependency. No ndarray backend is selected by `zarrs`.
+//! its chunks. Each product scans chunks serially. Column fitting shares work
+//! through [`ColumnStats::normalization_stats`] and needs at most two scans
+//! without quantiles. Row fitting uses [`RowStats::row_normalization_stats`]
+//! with O(nrows) state. Row standardization takes two scans; other row recipes
+//! without quantiles need up to three scans. Exact quantile fitting along either
+//! axis may need many scans. Missing chunks retain fill values, and scans exclude
+//! edge padding. Working vectors stay in RAM. Memory for data and codecs depends
+//! on chunk size, including the outer shard for sharded storage; no strict byte
+//! budget is imposed. The backing array must remain unchanged throughout
+//! normalization and use.
+//! Filesystem, gzip, sharding, and CRC32C support are enabled; additional codecs
+//! can be selected through a direct zarrs dependency. No ndarray backend is
+//! selected by `zarrs`.
 //!
 //! ```
 //! # #[cfg(feature = "zarrs_all")]
@@ -464,6 +470,8 @@
 //! let array = ArrayBuilder::new(vec![3, 2], vec![2, 2], float64(), 1.0f64)
 //!     .build(Arc::new(MemoryStore::new()), "/matrix")?;
 //! let matrix = ZarrMatrix::<_, f64>::try_new(array)?;
+//! let rows = LazyMatrix::new(&matrix, lazymatrix::RowNormalization::standardize())?;
+//! assert_eq!(rows.matvec(&vec![1.0, 2.0])?, vec![0.0; 3]);
 //! let lazy = LazyMatrix::new(matrix, ColumnNormalization::new(Centering::Mean, Scaling::Sd { df: 0 }))?;
 //! assert_eq!(lazy.matvec(&vec![1.0, 2.0])?, vec![0.0; 3]);
 //! # }

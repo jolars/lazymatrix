@@ -1,12 +1,24 @@
-//! Reuse column kernels through a transposed traversal, without changing storage.
+//! Reuse column kernels through transposed sparse or chunked traversal.
 
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
 use crate::normalization::pipeline::{self, Columns, Execute};
 use crate::normalization::pipeline::{Source, source::Layout};
 use crate::{MatrixErrorType, MatrixShape, Scalar, VectorView, VectorViewMut};
 
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
-use crate::{Centering, ColumnNormalization, RowNormalization, RowNormalizationStats, Scaling};
+use crate::{Centering, Scaling};
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
+use crate::{ColumnNormalization, RowNormalization, RowNormalizationStats};
 
 struct Transposed<'a, M>(&'a M);
 
@@ -40,11 +52,17 @@ impl<M: Source<F>, F: Scalar> Source<F> for Transposed<'_, M> {
     }
 }
 
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
 pub(crate) fn stats<M: Source<F>, F: Scalar>(
     matrix: &M,
     spec: RowNormalization,
 ) -> Result<RowNormalizationStats<F>, M::Error> {
+    #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
     if matches!(matrix.traversal_layout(), Layout::SparseRows) {
         return buffered_stats(matrix, spec);
     }
@@ -155,7 +173,12 @@ fn sum_with_zeros<F: Scalar>(values: &[F], missing: usize, transform: impl Fn(F)
     }
 }
 
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
 pub(crate) fn product<M, F, X, Y>(
     matrix: &M,
     transpose: bool,

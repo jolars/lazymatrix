@@ -21,7 +21,7 @@ mod row;
 /// The fitted parameter type selects the axis and scalar. Column normalization
 /// retains the backend's existing operator capabilities. Row fitting uses
 /// [`crate::RowStats`], and vector products use [`crate::RowNormalizationKernel`]
-/// over dense and sparse storage. See [`crate::RowNormalization`] for the row
+/// over dense, sparse, and chunked Zarr storage. See [`crate::RowNormalization`] for the row
 /// capability limits. Ordered recipes use [`crate::NormalizationChainParams`].
 /// Mixed and row-only chains require dense storage; column-only chains also
 /// support sparse and chunked storage. Every stage remains visible through

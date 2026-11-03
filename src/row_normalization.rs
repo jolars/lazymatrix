@@ -149,7 +149,7 @@ macro_rules! sparse_stats {
             &self,
             spec: crate::RowNormalization,
         ) -> Result<crate::RowNormalizationStats<F>, Self::Error> {
-            crate::normalization::row::sparse_stats(self, spec)
+            crate::normalization::row::traversal_stats(self, spec)
         }
     };
 }
@@ -169,7 +169,7 @@ macro_rules! sparse_products {
             scales: Option<&[F]>,
             out: &mut Y,
         ) -> Result<(), Self::Error> {
-            crate::normalization::row::sparse_product(self, false, x, centers, scales, out)
+            crate::normalization::row::traversal_product(self, false, x, centers, scales, out)
         }
 
         fn row_normalized_transpose_into<
@@ -182,7 +182,7 @@ macro_rules! sparse_products {
             scales: Option<&[F]>,
             out: &mut Y,
         ) -> Result<(), Self::Error> {
-            crate::normalization::row::sparse_product(self, true, x, centers, scales, out)
+            crate::normalization::row::traversal_product(self, true, x, centers, scales, out)
         }
     };
 }

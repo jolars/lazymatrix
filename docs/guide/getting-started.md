@@ -159,10 +159,16 @@ let row_scales = rows.normalization().scales().unwrap();
 
 The fitted type is `RowNormalizationParams<f64>`, with one center and scale per
 row. Row normalization supports fitting and forward and transpose vector products
-on dense matrices, strided views, and sparse CSC/CSR storage. Sparse fitting sums
+on dense matrices, strided views, sparse CSC/CSR storage, and Zarr arrays. Sparse fitting sums
 duplicate cells and includes implicit zeros. It buffers one row for CSR or
 streams columns for CSC, with repeated scans for exact CSC quantiles. Fitting
 and products retain sparse storage and use O(nrows + ncols) workspace.
+Zarr arrays stream storage chunks serially with O(nrows) fitting state, preserving
+fill values and excluding edge padding. Standardization takes two scans, and
+exact row quantiles share repeated scans for a median and quantile range. Each
+vector product reads each storage chunk once. Chunk and codec buffers depend on
+the largest decoded chunk, including the outer shard, and add to the fitted
+vectors and output.
 Fit new samples' row parameters independently. Compose row and column recipes
 as described below.
 

@@ -320,19 +320,27 @@ impl ColumnNormalization {
 /// quantiles use repeated scans whose count depends on the values. Both retain
 /// their storage orientation and use O(nrows + ncols) total workspace, including
 /// the fitted vectors and duplicate-coalescing scratch.
+/// Zarr fitting streams storage chunks serially with O(nrows) state plus chunk
+/// and codec buffers, including outer shards. It preserves missing chunks' fill
+/// values and excludes edge padding. Standardization takes two scans, other
+/// recipes without quantiles take up to three, and exact row quantiles use
+/// repeated scans whose count depends on the values. A median and quantile
+/// range fitted together share their scans.
 /// Empty rows have undefined means, standard deviations, minima, and ranges
 /// (`NaN`), and zero norms, matching column fitting along the other axis.
 ///
 /// Row-normalized operators support allocating and reusable forward and
 /// transpose vector products through [`crate::RowNormalizationKernel`] on dense
-/// matrices, strided views, and sparse CSC/CSR storage. Dense products normalize
-/// entries before accumulating and use O(1) additional workspace. Sparse
-/// products combine duplicate cells before normalization and account for
-/// transformed implicit zeros with O(nrows + ncols) workspace. Storage-backed
-/// row fitting, fused and batched products, borrowed logical views, weighted
-/// operations, and eager conversion are not yet supported. New samples require independently fitted row
-/// parameters. [`crate::Transpose`] transposes the fitted operator without
-/// refitting.
+/// matrices, strided views, sparse CSC/CSR storage, and Zarr arrays. Dense
+/// products normalize entries before accumulating and use O(1) additional
+/// workspace. Sparse products combine duplicate cells before normalization and
+/// account for transformed implicit zeros with O(nrows + ncols) workspace. Zarr products
+/// normalize entries before accumulation and scan each storage chunk once,
+/// retaining only chunk and codec buffers beyond the output and fitted vectors.
+/// Fused and batched products, borrowed logical views, weighted operations, and
+/// eager conversion are not yet supported. New samples require independently
+/// fitted row parameters. [`crate::Transpose`] transposes the fitted operator
+/// without refitting.
 ///
 /// ```
 /// # #[cfg(feature = "ndarray_v0_17")]

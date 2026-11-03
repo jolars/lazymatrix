@@ -210,7 +210,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - Combine duplicate cells before nonlinear statistics, include implicit zeros,
     and preserve CSC and CSR storage with bounded workspace.
 
-- [ ] Stream row fitting and products over Zarr chunks without materializing the
+- [x] Stream row fitting and products over Zarr chunks without materializing the
   array. Preserve fill values, exclude padding, and account for outer
   shards.
 

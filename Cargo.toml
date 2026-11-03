@@ -50,9 +50,10 @@ faer_traits_0_23 = { package = "faer-traits", version = "0.23", optional = true,
 faer-traits = { version = "0.24", optional = true, default-features = false }
 rayon = { version = "1", optional = true }
 sprs = { version = "0.11.4", optional = true, default-features = false }
-zarrs_0_22 = { package = "zarrs", version = "0.22.10", optional = true, default-features = false, features = ["filesystem", "gzip"] }
+# Include CRC32C for shard indices and zarrs 0.23's sharding implementation.
+zarrs_0_22 = { package = "zarrs", version = "0.22.10", optional = true, default-features = false, features = ["filesystem", "gzip", "sharding", "crc32c"] }
 # zarrs 0.23 requires Rust 1.91; version 0.22 retains Rust 1.87 support.
-zarrs = { version = "0.23.14", optional = true, default-features = false, features = ["filesystem", "gzip"] }
+zarrs = { version = "0.23.14", optional = true, default-features = false, features = ["filesystem", "gzip", "sharding", "crc32c"] }
 
 [features]
 default = []

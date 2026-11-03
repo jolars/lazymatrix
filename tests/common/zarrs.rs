@@ -10,6 +10,9 @@ use std::sync::Arc;
 use zarrs::array::{Array, ArrayBuilder};
 use zarrs::storage::store::MemoryStore;
 
+#[path = "zarrs_rows.rs"]
+mod rows;
+
 fn build(tm: &common::TestMatrix, chunk: [u64; 2]) -> ZarrMatrix<Array<MemoryStore>> {
     let array = ArrayBuilder::new(
         vec![tm.nrows as u64, tm.ncols as u64],

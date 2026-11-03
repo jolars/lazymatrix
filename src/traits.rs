@@ -31,7 +31,7 @@
 //! * [`ColumnStats`] — column statistics computed directly over a (possibly
 //!   sparse) backend matrix, used by [`LazyMatrix::new`](crate::LazyMatrix::new).
 //! * [`RowStats`] and [`RowNormalizationKernel`] — fitted row statistics and
-//!   row-normalized vector products over dense or sparse raw storage.
+//!   row-normalized vector products over dense, sparse, or chunked Zarr storage.
 //! * [`IndexedRowSource`] — native raw traversal for [`crate::IndexedRows`],
 //!   which fits normalization on selected rows without copying the design.
 //! * [`MatrixTraversal`] — bounded raw rectangle traversal for fitting and

@@ -16,7 +16,12 @@ pub(crate) use products::product_rectangle;
 pub(crate) mod source;
 mod stats;
 
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
 pub(crate) fn raw_stats<M: Source<F>, F: Scalar>(
     data: &M,
     spec: ColumnNormalization,

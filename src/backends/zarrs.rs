@@ -96,14 +96,19 @@ pub trait ZarrArray<F: Scalar>: private::ArrayRead<F> {}
 /// for missing chunks. Allocating products use `Vec<F>`; reusable-output products
 /// accept [`VectorView`] and [`VectorViewMut`]. No ndarray feature is required.
 ///
-/// Working vectors and column statistics occupy O(nrows + ncols) memory. Chunk
-/// buffers and codec workspaces depend on the largest decoded storage chunk
-/// (the outer shard for a sharded array). Choose chunks that fit in RAM: this
-/// adapter does not impose a byte budget, cache chunks, or prefetch data.
+/// Supports column and row normalization. Row fitting uses O(nrows) state;
+/// row products normalize entries before accumulation and read each storage
+/// chunk once. Row standardization takes two scans, and other row recipes
+/// without quantiles take up to three. Working vectors and fitted statistics
+/// occupy O(nrows + ncols) memory. Chunk buffers and codec workspaces depend on the
+/// largest decoded storage chunk (the outer shard for a sharded array). Choose
+/// chunks that fit in RAM: this adapter does not impose a byte budget, cache
+/// chunks, or prefetch data.
 /// The `parallel` feature does not parallelize its scans.
 /// Median and quantile-range fitting use exact repeated scans with O(ncols)
-/// selection state. Their scan counts depend on the values; fitting a median
-/// and a quantile range together shares those scans.
+/// selection state for columns or O(nrows) state for rows. Their scan counts
+/// depend on the values; fitting a median and a quantile range together shares
+/// those scans.
 ///
 /// The backing array must remain unchanged between normalization and products,
 /// and throughout each operation. The adapter provides no snapshot isolation.
@@ -120,6 +125,37 @@ pub struct ZarrMatrix<A, F = f64> {
     array: A,
     shape: [usize; 2],
     scalar: PhantomData<F>,
+}
+
+impl<A: ZarrArray<F>, F: Scalar> crate::RowStats<F> for ZarrMatrix<A, F> {
+    fn row_normalization_stats(
+        &self,
+        spec: crate::RowNormalization,
+    ) -> Result<crate::RowNormalizationStats<F>, Self::Error> {
+        crate::normalization::row::traversal_stats(self, spec)
+    }
+}
+
+impl<A: ZarrArray<F>, F: Scalar> crate::RowNormalizationKernel<F> for ZarrMatrix<A, F> {
+    fn row_normalized_matvec_into<X: VectorView<F> + ?Sized, Y: VectorViewMut<F> + ?Sized>(
+        &self,
+        x: &X,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::normalization::row::traversal_product(self, false, x, centers, scales, out)
+    }
+
+    fn row_normalized_transpose_into<X: VectorView<F> + ?Sized, Y: VectorViewMut<F> + ?Sized>(
+        &self,
+        x: &X,
+        centers: Option<&[F]>,
+        scales: Option<&[F]>,
+        out: &mut Y,
+    ) -> Result<(), Self::Error> {
+        crate::normalization::row::traversal_product(self, true, x, centers, scales, out)
+    }
 }
 
 impl<A: ZarrArray<F>, F: Scalar> crate::normalization::pipeline::Source<F> for ZarrMatrix<A, F> {

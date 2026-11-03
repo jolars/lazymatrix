@@ -2,10 +2,15 @@
 
 use crate::{Centering, MatrixRead, RowNormalization, RowNormalizationStats, Scalar, Scaling};
 
-mod sparse;
-pub(crate) use sparse::rectangle_product;
-#[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
-pub(crate) use sparse::{product as sparse_product, stats as sparse_stats};
+mod traversal;
+pub(crate) use traversal::rectangle_product;
+#[cfg(any(
+    feature = "faer_all",
+    feature = "nalgebra_all",
+    feature = "sprs_all",
+    feature = "zarrs_all"
+))]
+pub(crate) use traversal::{product as traversal_product, stats as traversal_stats};
 
 fn row_values<M: MatrixRead<F> + ?Sized, F: Scalar>(
     matrix: &M,

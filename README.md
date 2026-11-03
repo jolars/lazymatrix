@@ -9,7 +9,8 @@ LazyMatrix is a Rust library for normalization of design matrices. It applies
 centering and scaling through matrix operations, preserving sparse storage
 without creating a normalized copy. Column normalization supports dense and
 sparse matrices, borrowed views, and chunked Zarr arrays. Row normalization
-supports dense and sparse CSC/CSR matrices, including borrowed views.
+supports dense and sparse CSC/CSR matrices, including borrowed views, and
+chunked Zarr arrays.
 
 See the [documentation](https://lazymatrix.org) for guides, benchmarks, and
 links to the API reference.
@@ -125,7 +126,7 @@ cargo run --locked --example coordinate_descent --features faer
 
 ## Row normalization
 
-Fit dense or sparse rows independently with `RowNormalization` and `LazyMatrix`:
+Fit rows independently with `RowNormalization` and `LazyMatrix`:
 
 ```rust
 use lazymatrix::{Centering, LazyMatrix, MatVec, RowNormalization, Scaling};
@@ -172,14 +173,20 @@ parameters through the `NormalizationParams` trait's `View` associated type and
 `view()` method, and fit recipes through `NormalizationRecipe<M, P>::fit`.
 
 The row operator supports allocating and reusable forward and transpose vector
-products across every dense and sparse backend release, including strided dense
-views and borrowed CSC/CSR storage. Sparse fitting combines duplicate cells and
-includes implicit zeros without converting storage or materializing the design.
+products across every dense, sparse, and Zarr backend release, including strided
+dense views and borrowed CSC/CSR storage. Sparse fitting combines duplicate cells
+and includes implicit zeros without converting storage or materializing the design.
 CSR fitting buffers one row; CSC fitting streams column scans, repeating scans
 for exact quantiles. Sparse fitting and products use O(nrows + ncols) workspace.
+Zarr fitting streams chunks with O(nrows) state, and each product reads every
+storage chunk once. Missing chunks retain their fill values, and scans exclude
+edge padding. Chunk buffers and codec workspace add to the fitted vectors and
+depend on the largest decoded storage chunk, including the outer shard.
+Standardization takes two scans; exact row quantiles use repeated scans whose
+count depends on the values, sharing scans for a median and quantile range.
 `RowStats` supplies the fitting hook, and `RowNormalizationKernel` supplies the
 products. Dense adapters can delegate to their provided dense helper methods.
-Zarr row support, additional operator capabilities, and Python bindings remain
+Additional operator capabilities and Python bindings remain
 in [the roadmap](TODO.md#row-normalization).
 
 ## Ordered normalization
