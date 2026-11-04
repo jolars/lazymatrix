@@ -291,6 +291,14 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     and all numerical comparisons pass. Raw data and reproduction commands are
     included in the report.
 
+- [x] Extend contiguous reductions to vector sums and weighted columns.
+  - Reuse the shared kernels for `VectorView::sum`, weighted column dots, and
+    weighted squared norms. Preserve indexed fallbacks and normalize entries
+    before squaring to support extreme scales and signed weights.
+  - The [measurements](benches/column_reductions/README.md#vector-sums-and-weighted-column-reductions)
+    include uncached dots, cached-dot controls, and strided layouts. Shared tests
+    cover both scalar types, borrowed ranges, short tails, and nonfinite values.
+
 ## Lazy design matrices
 
 - [ ] Prototype a programmatic API for numeric column selection and

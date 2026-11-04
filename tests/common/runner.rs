@@ -2100,6 +2100,17 @@ pub fn run_column_reductions_suite<F, M, V>(
             .map(|_| F::from_i32(rng.random_range(-16..=16)).unwrap() / F::from_u32(16).unwrap())
             .collect();
         let native = to_vector(&vector);
+        let weights: Vec<F> = (0..len)
+            .map(|i| F::from_i32(i % 7 - 3).unwrap() / F::from_u32(4).unwrap())
+            .collect();
+        let native_weights = to_vector(&weights);
+        let indexed_vector = IndexedColumnVector { values: &vector };
+        let indexed_weights = IndexedColumnVector { values: &weights };
+        let expected_sum = vector.iter().copied().sum();
+        check(VectorView::sum(&native), expected_sum);
+        check(VectorView::sum(&vector), expected_sum);
+        check(VectorView::sum(vector.as_slice()), expected_sum);
+        check(VectorView::sum(&indexed_vector), expected_sum);
         for center in [F::zero(), F::from_f64(0.375).unwrap()] {
             for scale in [F::one(), F::from_f64(-1.75).unwrap()] {
                 let matrix = LazyMatrix::from_column_parts(
@@ -2127,6 +2138,28 @@ pub fn run_column_reductions_suite<F, M, V>(
                     column.dot_with_sum(&fallback, vector.iter().copied().sum()),
                     expected,
                 );
+                let expected_dot = logical
+                    .iter()
+                    .zip(&weights)
+                    .zip(&vector)
+                    .map(|((&x, &w), &v)| x * w * v)
+                    .sum();
+                let expected_norm = logical.iter().zip(&weights).map(|(&x, &w)| w * x * x).sum();
+                let weighted_sum = vector.iter().zip(&weights).map(|(&v, &w)| v * w).sum();
+                for input in [&native as &dyn VectorView<F>, &indexed_vector] {
+                    for weights in [&native_weights as &dyn VectorView<F>, &indexed_weights] {
+                        check(column.weighted_dot(input, weights), expected_dot);
+                        check(
+                            column.weighted_dot_with_sum(input, weights, weighted_sum),
+                            expected_dot,
+                        );
+                        check(column.weighted_norm_squared(weights), expected_norm);
+                        check(
+                            column.weighted_norm_squared_with_sum(weights, F::nan()),
+                            expected_norm,
+                        );
+                    }
+                }
             }
         }
     }
@@ -2144,6 +2177,21 @@ pub fn run_column_reductions_suite<F, M, V>(
         matrix.column(0).norm_squared(),
         raw.iter().map(|&x| (x - center) * (x - center)).sum(),
     );
+    let weights = to_vector(&vec![F::one(); raw.len()]);
+    check(
+        matrix.column(0).weighted_norm_squared(&weights),
+        raw.iter().map(|&x| (x - center) * (x - center)).sum(),
+    );
+
+    // Normalizing first avoids both overflow and underflow of raw squares.
+    for scale in [F::max_value(), F::min_positive_value()] {
+        let raw = vec![scale; 33];
+        let matrix = LazyMatrix::from_column_parts(build(&raw), None, Some(vec![scale]));
+        check(
+            matrix.column(0).weighted_norm_squared(&weights),
+            F::from_u32(33).unwrap(),
+        );
+    }
 
     for exceptional in [F::infinity(), F::neg_infinity(), F::nan()] {
         let mut raw = vec![F::one(); 17];
@@ -2161,6 +2209,19 @@ pub fn run_column_reductions_suite<F, M, V>(
             raw.iter().copied().sum(),
         );
         check(column.norm_squared(), raw.iter().map(|&x| x * x).sum());
+        check(VectorView::sum(&to_vector(&raw)), raw.iter().copied().sum());
+        check(
+            column.weighted_dot_with_sum(
+                &to_vector(&[F::one(); 17]),
+                &to_vector(&[F::one(); 17]),
+                F::from_u32(17).unwrap(),
+            ),
+            raw.iter().copied().sum(),
+        );
+        check(
+            column.weighted_norm_squared(&to_vector(&[F::one(); 17])),
+            raw.iter().map(|&x| x * x).sum(),
+        );
     }
 }
 
@@ -2195,6 +2256,11 @@ pub fn check_column_reduction_view<M: RawColumns<f64>, V: VectorView<f64>>(
     let column = lazy.column(0);
     let logical: Vec<_> = raw.iter().map(|x| (x - 0.375) / -1.75).collect();
     let expected = dot(&logical, input);
+    approx::assert_relative_eq!(
+        VectorView::sum(vector),
+        input.iter().sum::<f64>(),
+        epsilon = EPS
+    );
     approx::assert_relative_eq!(column.sum(), logical.iter().sum::<f64>(), epsilon = EPS);
     approx::assert_relative_eq!(
         column.norm_squared(),
@@ -2205,6 +2271,23 @@ pub fn check_column_reduction_view<M: RawColumns<f64>, V: VectorView<f64>>(
     approx::assert_relative_eq!(
         column.dot_with_sum(vector, input.iter().sum()),
         expected,
+        epsilon = EPS
+    );
+    let expected_dot: f64 = logical.iter().zip(input).map(|(&x, &v)| x * v * v).sum();
+    approx::assert_relative_eq!(
+        column.weighted_dot(vector, vector),
+        expected_dot,
+        epsilon = EPS
+    );
+    approx::assert_relative_eq!(
+        column.weighted_dot_with_sum(vector, vector, dot(input, input)),
+        expected_dot,
+        epsilon = EPS
+    );
+    let expected_norm: f64 = logical.iter().zip(input).map(|(&x, &w)| w * x * x).sum();
+    approx::assert_relative_eq!(
+        column.weighted_norm_squared(vector),
+        expected_norm,
         epsilon = EPS
     );
 }

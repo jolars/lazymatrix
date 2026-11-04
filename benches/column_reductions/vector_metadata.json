@@ -1,0 +1,50 @@
+{
+  "measured_at": "2026-11-04T17:16:58.003707+00:00",
+  "baseline_revision": "52b1bacd71431f3d2070775f7461a410727810e4",
+  "candidate_base_revision": "52b1bacd71431f3d2070775f7461a410727810e4",
+  "candidate_has_uncommitted_changes": true,
+  "candidate_source_sha256": {
+    "Cargo.toml": "d0566e8e72d1f294497245b6fc7f75b3b9a387713bb4491763ea5d82c01521ff",
+    "Cargo.lock": "2e64892a6cd5ccbda1100ec7ac6b2d1d4fa3d52085c0bc80291563d662cd54c1",
+    "src/backends/faer/dense.rs": "5b824b482fab23b26f5c95dce4b043ec3b1572d117c2d8b7490a324333d2532b",
+    "src/backends/nalgebra/dense.rs": "2b1ccd75811da0cb442be36528c932c7d5b92b04a4449ab92fcdef8cc84eeb73",
+    "src/column.rs": "5824c49fcd8a9811414dfd8eac4ee66b78f27e6149213bad7cc330d125344fde",
+    "src/reductions.rs": "f050d23eadcce5e49fe05651476efd846cfdf65970361f5f11acd268ee37b0a2",
+    "src/traits/vectors.rs": "08fd62ea7ad43c8023b6c2cbf4a464be939cb66ac43197482184d86379d22300",
+    "src/backends/ndarray/vector.rs": "ae0e9650b4940b805c3500174759becc44fb553ad9ba08222af805b4582a6ff1",
+    "benches/column_vector_reductions.rs": "9f17afb94d343613bad90985d3af4660db8f10177b73f82261361faa874d6a38",
+    "benches/column_reductions/run-adapters.sh": "c3d4bddc9ac83e96c03f7ff88e24c578536253a8233d74e4a46819f5962e821e"
+  },
+  "binary_sha256": {
+    "baseline": "b2d54bc73823c2222259d1900485dac90163709b6ce8df0f8da68a46f835d8e3",
+    "candidate": "eab163aec0198890e16003e4809bcf6ea21ec9324095a197b87f72d4dc7f74a1"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  14\nOn-line CPU(s) list:                     0-13\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 155U\nCPU family:                              6\nModel:                                   170\nThread(s) per core:                      2\nCore(s) per socket:                      12\nSocket(s):                               1\nStepping:                                4\nMicrocode version:                       0x2b\nCPU(s) scaling MHz:                      46%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5376.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               352 KiB (10 instances)\nL1i cache:                               640 KiB (10 instances)\nL2 cache:                                10 MiB (5 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-13\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+  "pinned_cpu": 2,
+  "compute_window": "One exclusive compute bench window for both builds and all measurements.",
+  "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO, generic x86-64",
+  "rustflags": "",
+  "features": [
+    "faer",
+    "nalgebra",
+    "ndarray"
+  ],
+  "backend_versions": {
+    "faer": "0.24.4",
+    "nalgebra": "0.35.0",
+    "ndarray": "0.17.2"
+  },
+  "seed": 8421,
+  "scalar": "f64",
+  "rows": 5000,
+  "cols": 1000,
+  "blocks": 4,
+  "samples_per_process": 3,
+  "passes_per_sample": 5,
+  "warmup": "All column results checked before each process starts timing each layout.",
+  "order": "Baseline/candidate process order alternates by block; operation/method order alternates by sample.",
+  "comparison": "Each column checked against sequential indexed arithmetic, tolerance 1e-10 * (1 + abs(expected))."
+}

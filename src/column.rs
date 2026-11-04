@@ -247,9 +247,12 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
             self.len(),
             "weights length must equal column length"
         );
-        let weighted_vector_sum = (0..self.len())
-            .map(|i| vector.get(i) * weights.get(i))
-            .sum();
+        let weighted_vector_sum = match (vector.contiguous_values(), weights.contiguous_values()) {
+            (Some(vector), Some(weights)) => crate::reductions::dot(vector, weights),
+            _ => (0..self.len())
+                .map(|i| vector.get(i) * weights.get(i))
+                .sum(),
+        };
         self.weighted_dot_with_sum(vector, weights, weighted_vector_sum)
     }
 
@@ -278,6 +281,15 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
             self.len(),
             "weights length must equal column length"
         );
+        if let (Some(column), Some(weights), Some(vector)) = (
+            self.raw.dense_values(),
+            weights.contiguous_values(),
+            vector.contiguous_values(),
+        ) {
+            return (crate::reductions::weighted_dot(column, weights, vector)
+                - self.center * weighted_vector_sum)
+                / self.scale;
+        }
         let mut raw_weighted_dot = F::zero();
         self.raw.for_each_stored(|row, value| {
             raw_weighted_dot = raw_weighted_dot + value * weights.get(row) * vector.get(row);
@@ -290,7 +302,8 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
     ///
     /// Accumulates normalized entries directly, including implicit zeros,
     /// without subtracting stored weights from a rounded total. Signed weights
-    /// and IEEE nonfinite arithmetic are preserved.
+    /// and IEEE nonfinite arithmetic are preserved within each term. Reduction
+    /// order can depend on storage, as with unweighted column reductions.
     ///
     /// Takes O(n + nnz) time. Columns with sorted, unique row indices use
     /// constant scratch space. Unsorted or duplicate indices require one O(n)
@@ -305,6 +318,14 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
             self.len(),
             "weights length must equal column length"
         );
+        if let (Some(column), Some(weights)) =
+            (self.raw.dense_values(), weights.contiguous_values())
+        {
+            return crate::reductions::sum_map2(column, weights, |raw_value, weight| {
+                let value = (raw_value - self.center) / self.scale;
+                weight * value * value
+            });
+        }
         let background = (F::zero() - self.center) / self.scale;
         let weighted_square = |row, raw_value| {
             let value = (raw_value - self.center) / self.scale;

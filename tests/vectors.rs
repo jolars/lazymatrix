@@ -1,7 +1,9 @@
 #[path = "common/runner.rs"]
 mod common;
 
-use lazymatrix::{DotSlice, ElemDivAssign, ScaledSubSlice, SubScalarAssign, SumEntries};
+use lazymatrix::{
+    DotSlice, ElemDivAssign, ScaledSubSlice, SubScalarAssign, SumEntries, VectorView,
+};
 
 #[test]
 fn vec_algebra_and_normalization_work_without_a_backend() {
@@ -13,4 +15,19 @@ fn vec_algebra_and_normalization_work_without_a_backend() {
     values.scaled_sub_slice(0.5, &[2.0, -4.0, 6.0]);
     assert_eq!(values, vec![1.0, -1.0, -2.0]);
     assert_eq!(values.sum_entries(), -2.0);
+}
+
+#[test]
+fn vector_sums_respect_borrowed_ranges_without_a_backend() {
+    let mut storage = [f64::NAN; 35];
+    for (i, value) in storage[1..34].iter_mut().enumerate() {
+        *value = (i as f64 - 16.0) / 8.0;
+    }
+    for len in 0..=33 {
+        let values = &storage[1..len + 1];
+        let expected = values.iter().sum::<f64>();
+        approx::assert_relative_eq!(VectorView::sum(values), expected);
+        approx::assert_relative_eq!(VectorView::sum(&values.to_vec()), expected);
+    }
+    assert!(VectorView::sum(&storage).is_nan());
 }

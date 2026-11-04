@@ -21,7 +21,14 @@ pub trait VectorView<F: Scalar> {
         self.len() == 0
     }
 
+    /// Sum entries without allocating.
+    ///
+    /// Reduction order can depend on storage. Rounding and intermediate
+    /// overflow may differ between contiguous and indexed implementations.
     fn sum(&self) -> F {
+        if let Some(values) = self.contiguous_values() {
+            return crate::reductions::sum(values);
+        }
         (0..self.len()).map(|i| self.get(i)).sum()
     }
 }

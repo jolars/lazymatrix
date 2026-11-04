@@ -5,19 +5,21 @@ set -euo pipefail
 repository=$(git rev-parse --show-toplevel)
 output=${1:?Specify an output directory.}
 baseline_ref=${2:-ac5f2e4}
+benchmark=${PROBE_BENCH:-adapter_column_reductions}
+features=${PROBE_FEATURES:-faer,nalgebra}
+prefix=${PROBE_PREFIX:-adapter}
 mkdir -p "$output"
 output=$(realpath "$output")
 baseline="$output/baseline-source"
 mkdir -p "$baseline"
 git -C "$repository" archive "$baseline_ref" | tar -x -C "$baseline"
-cp "$repository/benches/adapter_column_reductions.rs" "$baseline/benches/"
-if ! rg -q '^name = "adapter_column_reductions"$' "$baseline/Cargo.toml"; then
-    cat >>"$baseline/Cargo.toml" <<'TOML'
+cp "$repository/benches/$benchmark.rs" "$baseline/benches/"
+if ! rg -q "^name = \"$benchmark\"$" "$baseline/Cargo.toml"; then
+    cat >>"$baseline/Cargo.toml" <<TOML
 
 [[bench]]
-name = "adapter_column_reductions"
+name = "$benchmark"
 harness = false
-required-features = ["faer_all", "nalgebra_all"]
 TOML
 fi
 
@@ -36,18 +38,19 @@ for label in baseline candidate; do
         source_dir=$baseline
     fi
     cargo build --manifest-path "$source_dir/Cargo.toml" --release --locked \
-        --no-default-features --features faer,nalgebra --bench adapter_column_reductions \
+        --no-default-features --features "$features" --bench "$benchmark" \
         --message-format=json >"$output/$label-build.json" 2>"$output/$label-build.log"
-    executable=$(python - "$output/$label-build.json" <<'PY'
+    executable=$(
+        python - "$output/$label-build.json" "$benchmark" <<'PY'
 import json
 import sys
 
 for line in open(sys.argv[1]):
     item = json.loads(line)
-    if item.get("executable") and item.get("target", {}).get("name") == "adapter_column_reductions":
+    if item.get("executable") and item.get("target", {}).get("name") == sys.argv[2]:
         print(item["executable"])
 PY
-)
+    )
     cp "$executable" "$output/$label"
 done
 
@@ -67,7 +70,7 @@ for ((block = 0; block < blocks; block++)); do
     done
 done
 
-python - "$repository" "$output" "$baseline_ref" "$cpu" "$blocks" <<'PY'
+python - "$repository" "$output" "$baseline_ref" "$cpu" "$blocks" "$benchmark" "$features" "$prefix" <<'PY'
 import csv
 import hashlib
 import json
@@ -78,9 +81,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-repository, output, baseline_ref, cpu, blocks = sys.argv[1:]
+repository, output, baseline_ref, cpu, blocks, benchmark, features, prefix = sys.argv[1:]
 repository, output = Path(repository), Path(output)
-for suffix, destination in [("", "adapter_timings.csv"), ("-errors", "adapter_errors.csv")]:
+for suffix, destination in [("", f"{prefix}_timings.csv"), ("-errors", f"{prefix}_errors.csv")]:
     with (output / destination).open("w") as handle:
         writer = csv.writer(handle, lineterminator="\n")
         paths = [output / f"{label}-b{block}{suffix}.csv"
@@ -101,7 +104,8 @@ def sha(path):
 
 sources = ["Cargo.toml", "Cargo.lock", "src/backends/faer/dense.rs",
            "src/backends/nalgebra/dense.rs", "src/column.rs", "src/reductions.rs",
-           "benches/adapter_column_reductions.rs", "benches/column_reductions/run-adapters.sh"]
+           "src/traits/vectors.rs", "src/backends/ndarray/vector.rs",
+           f"benches/{benchmark}.rs", "benches/column_reductions/run-adapters.sh"]
 metadata = {
     "measured_at": datetime.now(timezone.utc).isoformat(),
     "baseline_revision": command("git", "rev-parse", baseline_ref),
@@ -117,8 +121,8 @@ metadata = {
     "compute_window": "One exclusive compute bench window for both builds and all measurements.",
     "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO, generic x86-64",
     "rustflags": os.environ.get("RUSTFLAGS", ""),
-    "features": ["faer", "nalgebra"],
-    "backend_versions": {"faer": "0.24.4", "nalgebra": "0.35.0"},
+    "features": features.split(","),
+    "backend_versions": {"faer": "0.24.4", "nalgebra": "0.35.0", "ndarray": "0.17.2"},
     "seed": 8421,
     "scalar": "f64",
     "rows": int(os.environ["PROBE_ROWS"]),
@@ -130,5 +134,5 @@ metadata = {
     "order": "Baseline/candidate process order alternates by block; operation/method order alternates by sample.",
     "comparison": "Each column checked against sequential indexed arithmetic, tolerance 1e-10 * (1 + abs(expected)).",
 }
-(output / "adapter_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+(output / f"{prefix}_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 PY

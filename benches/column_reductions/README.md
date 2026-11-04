@@ -1,7 +1,8 @@
 # Dense column reductions
 
 Contiguous columns now use allocation-free reductions with eight independent
-accumulators for raw sums, cached-sum dots, and directly centered squared norms.
+accumulators for raw sums, dots, weighted dots, and squared norms. Contiguous
+vector sums use the same kernels, including the sums computed by uncached dots.
 This covers ndarray 0.15–0.17, faer 0.22–0.24, and nalgebra 0.32–0.35. The core
 shares the reduction implementation through optional `RawColumn::dense_values`
 and `VectorView::contiguous_values` hooks. Both owned and borrowed contiguous
@@ -13,6 +14,75 @@ and intermediate overflow may differ from sequential accumulation. The dense
 fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
+
+## Vector sums and weighted column reductions
+
+The follow-up comparison uses baseline revision `52b1bac` and the production
+source identified in [`vector_metadata.json`](vector_metadata.json). It extends
+the existing slice kernels to `VectorView::sum`, weighted column dots, and
+weighted squared norms. Weighted norms normalize each entry before multiplying
+and squaring, preserving the existing behavior at extreme scales. No fast path
+allocates, gathers strided inputs, or changes sparse duplicate handling.
+
+Both release builds and all measurements ran in one exclusive `compute bench`
+window on CPU 2, with Rust 1.98.1, 16 codegen units, and the
+`faer,nalgebra,ndarray` features. The backend releases match the adapter
+measurements below. Inputs have 5,000 rows and 1,000 columns. Matrix entries,
+vector entries, and signed weights are drawn uniformly from [-1, 1) with
+`ChaCha8Rng` and seed 8421. Every column has center 0.375 and scale -1.75.
+
+Four blocks alternate baseline and candidate process order. Each process checks
+every result before collecting three observations of five passes, reversing
+operation order on alternate observations. The table reports medians of 12
+observations in milliseconds per pass. Vector sums repeat the same length-5,000
+vector 1,000 times per pass, as ordinary dots do when visiting all columns.
+Cached dot variants receive independently computed sums outside timing.
+
+| Backend  | Operation               | Baseline | Candidate | Speedup |
+| -------- | ----------------------- | -------: | --------: | ------: |
+| ndarray  | Vector sum              |    2.271 |     0.475 |   4.78x |
+| ndarray  | Dot                     |    3.947 |     1.998 |   1.98x |
+| ndarray  | Weighted dot            |    7.842 |     2.763 |   2.84x |
+| ndarray  | Cached-sum weighted dot |   10.453 |     1.836 |   5.69x |
+| ndarray  | Weighted squared norm   |   12.428 |     2.686 |   4.63x |
+| faer     | Vector sum              |    2.260 |     0.484 |   4.67x |
+| faer     | Dot                     |    3.843 |     1.970 |   1.95x |
+| faer     | Weighted dot            |    5.889 |     2.655 |   2.22x |
+| faer     | Cached-sum weighted dot |    4.418 |     1.731 |   2.55x |
+| faer     | Weighted squared norm   |   11.669 |     2.646 |   4.41x |
+| nalgebra | Vector sum              |    2.225 |     0.481 |   4.62x |
+| nalgebra | Dot                     |    3.864 |     1.996 |   1.94x |
+| nalgebra | Weighted dot            |    7.200 |     2.714 |   2.65x |
+| nalgebra | Cached-sum weighted dot |    4.671 |     1.849 |   2.53x |
+| nalgebra | Weighted squared norm   |   12.383 |     2.710 |   4.57x |
+
+Cached unweighted dots remain within 2% of baseline on contiguous inputs.
+[`vector_timings.csv`](vector_timings.csv) retains all 864 observations,
+including separate ndarray controls for strided vectors, strided weights, and
+reversed rows. These layouts retain the indexed fallbacks where necessary.
+Uncached operations can still benefit from faster vector sums when their columns
+are noncontiguous. These are kernel measurements, without downstream solver
+timings.
+
+[`vector_errors.csv`](vector_errors.csv) records all 288 groups of 1,000
+comparisons against independent, sequential arithmetic, with columns normalized
+explicitly. Every comparison passes. The maximum absolute error is 4.48e-13, and
+the maximum error divided by `1 + abs(expected)` is 1.24e-13. Input construction,
+oracle materialization, and verification are outside timed passes.
+
+Reproduce the comparison from the repository root:
+
+```sh
+compute bench --reason "Vector sums and weighted column reductions" -- \
+    env PROBE_BENCH=column_vector_reductions \
+    PROBE_FEATURES=faer,nalgebra,ndarray PROBE_PREFIX=vector \
+    bash benches/column_reductions/run-adapters.sh \
+    target/vector-reductions 52b1bac
+```
+
+The runner retains its adapter benchmark defaults. `PROBE_BENCH`,
+`PROBE_FEATURES`, and `PROBE_PREFIX` select the follow-up harness, build
+features, and output filenames. Sampling overrides are the same as below.
 
 ## Faer and nalgebra adapter measurements
 
