@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.10.0](https://github.com/jolars/lazymatrix/compare/v0.9.0...v0.10.0) (2026-11-04)
 
 This version introduces row normalization for dense and sparse matrices, along
 with ordered normalization recipes. To support both axes consistently, I have
@@ -47,6 +47,33 @@ Recipes also compose with `.then()`, with each stage fitting the output of its
 predecessors. For new samples, `.for_new_samples()` reuses training column
 parameters and refits row stages, while `.apply_frozen()` reapplies all fitted
 stages unchanged. Chains containing row stages currently require dense storage.
+
+### Breaking changes
+
+- stabilize normalization and submatrix APIs ([`d4a63cd`](https://github.com/jolars/lazymatrix/commit/d4a63cd2fdcdef4dcd28fde80d7e7232b037a990))
+- support sparse row normalization ([`8965030`](https://github.com/jolars/lazymatrix/commit/896503051fcc33abbcc036adbbba03375c77c252))
+- simplify normalization constructors ([`6e72816`](https://github.com/jolars/lazymatrix/commit/6e728168531acc3aa7f7e1758a98020343d78615))
+- unify normalization operators ([`5d12a79`](https://github.com/jolars/lazymatrix/commit/5d12a79d24a6e1e99c44b8c6d0453187ffc46b78))
+- name column normalization types explicitly ([`0fc8486`](https://github.com/jolars/lazymatrix/commit/0fc8486fc3a9de1fb03f0755dbd62f432fe69efc))
+
+### Features
+
+- stream row normalization over Zarr chunks ([`18b8ba4`](https://github.com/jolars/lazymatrix/commit/18b8ba4ece7eb88e100c9863dbeb2bd9ba2edc11))
+- stabilize normalization and submatrix APIs ([`d4a63cd`](https://github.com/jolars/lazymatrix/commit/d4a63cd2fdcdef4dcd28fde80d7e7232b037a990))
+- add optional BLAS support for `ndarray` ([`64133ec`](https://github.com/jolars/lazymatrix/commit/64133ece7ba3185b9dbc84ed4e9be53b429f39e5))
+- support sparse row normalization ([`8965030`](https://github.com/jolars/lazymatrix/commit/896503051fcc33abbcc036adbbba03375c77c252))
+- compose ordered normalization recipes ([`ac6d718`](https://github.com/jolars/lazymatrix/commit/ac6d7181546a23cba7ff292c0171bd236a7aa334))
+- add owned and borrowed parameter application ([`c58d6c1`](https://github.com/jolars/lazymatrix/commit/c58d6c19efef3b895ad17ded787e63a4fecd9fa0))
+- expose normalization recipe fitting ([`e8c71f8`](https://github.com/jolars/lazymatrix/commit/e8c71f85d309fc937ab304401e82198b1f9db6df))
+- add dense row normalization ([`6bd0e0d`](https://github.com/jolars/lazymatrix/commit/6bd0e0db48adb1ea0af8ef7f0050f412f861d342))
+- **python:** expose normalization methods and parameters ([`c416f6d`](https://github.com/jolars/lazymatrix/commit/c416f6d8b50cd1c5d50ebc556037707239b883f4))
+- add raw indexed row selections ([`7d406a2`](https://github.com/jolars/lazymatrix/commit/7d406a25ec1fcb81da85316e42dcf54e7982a6b5))
+- support borrowed faer CSC views ([`ae3a867`](https://github.com/jolars/lazymatrix/commit/ae3a867dd62c86a1b6b9eccbebd4c87f55aa4061))
+
+### Performance Improvements
+
+- accelerate faer and nalgebra column reductions ([`3d784e0`](https://github.com/jolars/lazymatrix/commit/3d784e0bc8c9ba841ddf0fd9efc9449ff2270fc6))
+- accelerate contiguous ndarray column reductions ([`e66623a`](https://github.com/jolars/lazymatrix/commit/e66623ae02de1af04827d5816774221706955095))
 
 ## [0.9.0](https://github.com/jolars/lazymatrix/compare/v0.8.1...v0.9.0) (2026-10-29)
 
