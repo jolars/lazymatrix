@@ -132,6 +132,8 @@ check_msrv() (
     # uuid 1.29 requires Rust 1.89, but zarrs 0.22 retains Rust 1.87 support.
     cargo update --package uuid --precise 1.26.1
     cargo update --manifest-path "$fixture_manifest" --package uuid --precise 1.26.1
+    # Newer psm releases pull in ar_archive_writer, which requires Rust 1.88.
+    cargo update --package psm --precise 0.1.25
     cargo check --all-targets --locked --no-default-features
     cargo check --all-targets --locked --no-default-features --features parallel
     for feature in "${versions[@]}"; do
