@@ -135,7 +135,8 @@ with the dense normalization oracle and the adjoint identity. Seed random
 generators with `ChaCha8Rng` and compare floats with `approx`. Import shared
 modules with `#[path = "common/runner.rs"] mod common;`; do not add `mod.rs` files.
 
-Use focused checks while iterating and select final validation by the change:
+Select validation by the behavior affected. Run the smallest set of checks that
+covers the change, and expand only when failures or unresolved risks justify it:
 
 - Instruction and prose changes: verify referenced paths, commands, links, and
   applicable formatting. Rust tests are unnecessary for these changes.
@@ -146,8 +147,12 @@ Use focused checks while iterating and select final validation by the change:
   that affect distributions or installation.
 - Website changes: run `task website:check`. For isolated scripts, focused Node
   tests and formatting checks suffice.
-- Behavior changes spanning components or changes affecting dependencies,
-  packaging, releases, or CI: run `task ci` before submitting.
+- CI workflows and validation scripts: run the affected commands or jobs. Use the
+  matching toolchain for MSRV changes. Changes confined to CI orchestration or
+  dependency overrides do not require unrelated Rust, Python, or website suites.
+- Broad changes spanning components or affecting dependencies, packaging, or
+  releases: run `task ci` before submitting. For narrowly scoped changes, run the
+  affected checks instead.
 
 Use `task --list` and [Taskfile.yml](Taskfile.yml) for available checks. Read the
 active toolchains and compiler requirements from `rust-toolchain.toml`, Cargo
