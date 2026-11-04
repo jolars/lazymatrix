@@ -48,19 +48,6 @@ predecessors. For new samples, `.for_new_samples()` reuses training column
 parameters and refits row stages, while `.apply_frozen()` reapplies all fitted
 stages unchanged. Chains containing row stages currently require dense storage.
 
-Generic consumers can fit recipes through `NormalizationRecipe`, borrow fitted
-parameters through `NormalizationParams::View` and `view()`, and prepare new
-samples through `PrepareNewSamples`. Custom backends can implement
-`MatrixTraversal` for column-only chains and `RectangularProducts` for borrowed
-submatrix vector products.
-
-Submatrix vector products now also support row normalization and supported
-normalization chains. Selections preserve the parent's fitted transformation,
-including row parameters fitted using columns outside the selection. Nested
-selections use local coordinates and retain the original parent. Weighted
-operations, eager conversion, and borrowed logical views remain available for
-column-normalized submatrices.
-
 ## [0.9.0](https://github.com/jolars/lazymatrix/compare/v0.8.1...v0.9.0) (2026-10-29)
 
 ### Breaking changes
