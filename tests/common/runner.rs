@@ -2134,6 +2134,48 @@ where
     assert_eq!(weights.reads.get(), column.values().len());
 }
 
+/// Check the dense update's arithmetic order, signed zeros, and nonfinite values.
+pub fn run_dense_column_updates_suite<F, M>(build: impl Fn(&[F]) -> M)
+where
+    F: lazymatrix::Scalar,
+    M: RawColumns<F>,
+{
+    let one = F::one();
+    let zero = F::zero();
+    let large = F::epsilon().recip() * F::from_u32(2).unwrap();
+    for (raw, center, scale, alpha, initial, expected) in [
+        (
+            F::max_value(),
+            F::max_value(),
+            one,
+            one,
+            F::max_value(),
+            F::infinity(),
+        ),
+        // Centering first would skip the rounding in the destination addition.
+        (one, one, one, one, large, large - one),
+        (-zero, zero, one, one, -zero, -zero),
+        (F::infinity(), zero, one, zero, one, F::nan()),
+        (one, F::infinity(), one, one, one, F::neg_infinity()),
+        (one, zero, F::infinity(), one, one, one),
+        (one, zero, F::nan(), one, one, F::nan()),
+    ] {
+        let matrix =
+            LazyMatrix::from_column_parts(build(&[raw; 33]), Some(vec![center]), Some(vec![scale]));
+        let mut destination = Vec::with_capacity(40);
+        destination.resize(33, initial);
+        matrix.column(0).scaled_add_to(alpha, &mut destination);
+        for actual in destination {
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                assert_eq!(actual, expected);
+                assert_eq!(actual.is_sign_negative(), expected.is_sign_negative());
+            }
+        }
+    }
+}
+
 /// Check reduction tails, normalization, indexed inputs, and floating-point types.
 pub fn run_column_reductions_suite<F, M, V>(
     build: impl Fn(&[F]) -> M,

@@ -17,6 +17,178 @@ fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
 
+## Contiguous logical column update investigation
+
+Ndarray 0.15–0.17 now uses the source-slice branch measured below for logical
+column updates. It preserves indexed destination access, strided fallbacks, and
+the arithmetic order of each update. The vector API stays unchanged.
+
+The evidence favors borrowing ndarray's existing contiguous source slice while
+keeping the vector API unchanged. Faer and nalgebra already vectorize their
+indexed destination reads and writes. Ndarray's source iterator prevents that
+optimization in the measured baseline build. A source-slice branch removes that
+bottleneck without a mutable borrowing capability.
+
+The investigation compares baseline revision `d551db8` with two isolated
+prototypes:
+
+- [`updates-prototype.patch`](updates-prototype.patch) adds an optional
+  `VectorViewMut::contiguous_values_mut` hook, implements it for core and dense
+  backend vectors, and uses a shared slice kernel when both arguments expose
+  logical-order slices. The default hook returns `None`.
+- [`updates-source-slice.patch`](updates-source-slice.patch) changes only
+  ndarray's dense column update. It borrows the existing source slice,
+  enumerates it, and keeps indexed destination access. Unsupported source
+  layouts use the existing fallback.
+
+Both prototypes preserve `y[i] = (y[i] + multiplier * raw[i]) + offset`, with
+`multiplier = alpha / scale` and `offset = -alpha * center / scale`. They keep
+strided destinations, dimension assertions, and the sparse default update. They
+add no dependencies. The source-slice patch preserves the measured algorithm now
+used in production. The mutable-slice capability remains experimental.
+
+The [probe](../column_updates.rs) measures borrowed, padded column ranges in
+column-major, reversed, stride-three, and row-major layouts. Destinations
+include `Vec`, slices, backend views, stride-three and reversed views, and a
+downstream vector that implements only indexed access. The direct slice control
+borrows both arguments explicitly. Kernel parameters are center 0.375, scale
+-1.75, and alpha -0.125. The tables below use milliseconds per pass over all
+columns and medians of 12 observations, with `Vec<f64>` destinations:
+
+| Backend  | Shape          | Baseline | Mutable slices | Source only | Slice control |
+| -------- | -------------- | -------: | -------------: | ----------: | ------------: |
+| ndarray  | 5,000 by 64    |   0.2111 |         0.0890 |      0.0906 |        0.0795 |
+| ndarray  | 5,000 by 1,000 |   4.7638 |         1.6148 |      1.6364 |        1.6235 |
+| ndarray  | 262,144 by 16  |   3.9402 |         2.6574 |      2.6056 |        2.6115 |
+| faer     | 5,000 by 64    |   0.0801 |         0.0866 |      0.0878 |        0.0808 |
+| faer     | 5,000 by 1,000 |   1.5941 |         1.6109 |      1.6091 |        1.6035 |
+| nalgebra | 5,000 by 64    |   0.0793 |         0.0860 |      0.0896 |        0.0792 |
+| nalgebra | 5,000 by 1,000 |   1.6177 |         1.6417 |      1.5972 |        1.5929 |
+
+For ndarray, source-only slices improve the two length-5,000 `f64` cases by
+2.33–2.91 times. The corresponding `f32` improvements are 3.00–5.92 times, and
+the length-262,144 improvements are 1.51 and 2.78 times for `f64` and `f32`,
+respectively. The complete [`updates_summary.csv`](updates_summary.csv) includes
+all scalar types, layouts, destinations, short lengths, and inclusive
+interquartile intervals.
+
+The 5,000 by 1,000 `f32` controls have substantial variation: identical direct
+slice controls differ by up to 52% between variants. Those controls limit claims
+about differences between the two prototypes on that fixture. The large ndarray
+improvement over its scalar production loop remains clear. Faer and nalgebra
+show no consistent benefit from adding mutable slices.
+
+[`updates_assembly.txt`](updates_assembly.txt) preserves the actual `Vec` update
+monomorphizations for all three variants, backends, and scalar types.
+[`updates_assembly.json`](updates_assembly.json) records their symbols, hashes,
+and instruction counts. Baseline ndarray uses a scalar iterator loop. Both
+ndarray prototypes emit the same packed multiplication and two ordered additions
+in their contiguous loops: two `f64` or four `f32` lanes per instruction. Faer
+and nalgebra production loops already contain these vector instructions. No
+inspected update uses fused multiply-add instructions. Branching on the source
+slice also lets the compiler simplify some strided fallback loops; performance
+changes are not confined to the branch that borrows a slice.
+
+The consumer runs the existing Shrinkage hybrid solver at revision
+`87a735cdac7880cfe43a1219b19465587c1e9754`, with its algorithm unchanged.
+[`updates_consumer.rs`](updates_consumer.rs) uses `ClusteredLasso(penalty, 0)`:
+this is an L1 objective solved through the hybrid's aggregate rebuilds, which
+call `scaled_add_to`. Default screening and working sets remain enabled. Inputs
+have 5,000 rows and 64 or 1,000 columns. Fits center columns, fit an intercept,
+and target an absolute proximal-gradient mapping of 1e-8. Active fixtures have
+eight or 64 generating coefficients; penalty 2 supplies zero-solution controls.
+Reversed ndarray inputs have aligned responses. Faer and nalgebra use their
+native product vectors with the same input values.
+
+Complete ndarray fit times in milliseconds, with inclusive interquartile
+intervals:
+
+| Shape          | Active coefficients |                   Baseline |             Mutable slices |                Source only |
+| -------------- | ------------------: | -------------------------: | -------------------------: | -------------------------: |
+| 5,000 by 64    |                  64 |    31.799 [31.239, 31.986] |    29.197 [28.482, 30.152] |    28.597 [28.454, 29.616] |
+| 5,000 by 64    |                   8 |    17.560 [17.463, 17.731] |    17.505 [17.290, 17.857] |    17.562 [17.396, 17.826] |
+| 5,000 by 64    |                   0 |    12.138 [12.045, 12.218] |    12.169 [12.037, 12.440] |    11.961 [11.942, 12.412] |
+| 5,000 by 1,000 |                  64 | 317.579 [314.367, 319.592] | 312.555 [311.879, 314.836] | 313.516 [311.082, 322.098] |
+| 5,000 by 1,000 |                   8 | 226.850 [225.409, 231.707] | 229.665 [227.017, 234.501] | 228.730 [225.499, 234.766] |
+| 5,000 by 1,000 |                   0 | 191.437 [189.752, 198.204] | 192.031 [190.059, 193.305] | 191.035 [190.137, 193.241] |
+
+The source-only prototype reduces the smaller fit with 64 active coefficients by
+10.1%, compared with 8.2% for mutable slices. The larger active fit uses 1.3%
+less time, within control variation. Changes on fits with eight active
+coefficients and zero-solution fits are also close to control variation. Faer
+and nalgebra fit medians change by at most 3.8% across prototypes and fixtures.
+Reversed fits also show some improvement on the smaller design even though they
+cannot borrow a forward source slice. These results favor a focused ndarray
+optimization; they do not establish a need for a new mutable vector capability.
+[`updates_fit_summary.csv`](updates_fit_summary.csv) preserves all consumer
+cases.
+
+Every warmup and measured fit is checked outside timing with independently
+computed raw-input residuals, primal objectives, L1 KKT violations, and feasible
+Gaussian dual objectives. All 864 measured fits pass. The largest KKT violation
+is 1.40e-13, and the largest independently computed dual gap is 5.05e-13. Fits
+return the same active counts and total iteration counts across variants. The
+larger fixture with 64 active coefficients takes 20 iterations; its PG-step and
+sweep split can differ even when the total stays fixed.
+[`updates_fits.csv`](updates_fits.csv) retains these diagnostics. Input
+construction, backend conversion, verification, serialization, and returned-fit
+destruction stay outside the complete-fit timer.
+
+The probe preserves 46,656 kernel observations and 25,632 aggregate checks in
+[`updates_timings.csv`](updates_timings.csv) and
+[`updates_errors.csv`](updates_errors.csv). Every check passes, including
+bitwise arithmetic agreement (NaNs compare by classification), untouched
+destination padding, and zero allocations around each complete update pass.
+Separate cases cover lengths 0, 1, 7, 8, 9, and 33, spare vector capacity,
+signed zeros, overflow order, nonfinite entries and parameters, and core array
+destinations. Sparse checks preserve the saved visit sequence for unsorted
+duplicate rows, explicit zeros, and implicit rows, with finite, zero, and
+nonfinite multipliers.
+
+All builds and measurements share one exclusive `compute bench` window on CPU 2
+of an Intel Core Ultra 7 155U, using Rust 1.98.1, release optimization, 16
+codegen units, default LTO, and generic x86-64 code generation. Six blocks use
+all six permutations of variant order. Each process records two observations per
+case; kernel method order and consumer backend order alternate. Kernel
+observations repeat a full pass
+`clamp(2_000_000 / max(rows * cols, 1), 1, 10000)` times, with alternating
+update signs. Each variant has its own Cargo target directory and the same
+dependency locks. The probe uses ndarray 0.17.2, faer 0.24.4, and nalgebra
+0.35.0; the pinned consumer supports nalgebra 0.34.2.
+[`updates_metadata.json`](updates_metadata.json) records source and binary
+hashes, the compiler and CPU, sampling settings, and the local artifact
+directory with full assembly.
+
+Reproduce from the repository root with a local Shrinkage Git checkout:
+
+```sh
+compute bench --reason "Contiguous logical column updates" -- \
+    env CARGO_TARGET_DIR=/dev/shm/lazymatrix-updates-reproduce TMPDIR=/dev/shm \
+    python benches/column_reductions/updates.py \
+    target/column-updates --shrinkage ../shrinkage
+```
+
+The runner exports the pinned revisions, applies each prototype to a separate
+source tree, and builds the kernels and consumers. It accepts `--baseline`,
+`--shrinkage-revision`, `--cpu`, `--blocks`, `--samples`, `--elements`,
+`--shapes`, and `--checks-only` overrides.
+[`updates_consumer.lock`](updates_consumer.lock) pins the consumer dependencies.
+Set `CARGO_TARGET_DIR` and `TMPDIR` to suitable build and temporary storage; the
+measured run used `/dev/shm` because the main filesystem had little free space.
+
+Validation passed `cargo fmt --all -- --check`, Clippy with all features enabled
+for the probe, standalone consumer Clippy with warnings denied, and
+`cargo doc --no-deps --all-features --locked` with documentation warnings
+denied. The runner passed Ruff checking and formatting. The numerical and
+allocation checks above execute in both prototypes as well as production.
+
+Production validation also passed the version suites for ndarray 0.15–0.17, each
+with and without `parallel`, `task fmt`, Clippy for all targets and features,
+and documentation with warnings denied. New regressions cover both scalar types,
+borrowed ranges, strided destinations, signed zeros, nonfinite values, and
+rounding before the offset addition. The release probe passes all 1,424
+numerical and allocation checks on the production implementation.
+
 ## Reversed unit-stride production reductions
 
 Ndarray 0.15–0.17 and faer 0.22–0.24 now reduce reversed unit-stride columns

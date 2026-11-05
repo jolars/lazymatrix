@@ -1,0 +1,167 @@
+--- a/src/traits/vectors.rs
++++ b/src/traits/vectors.rs
+@@ -36,6 +36,14 @@
+ /// Mutable indexed access to a dense logical vector.
+ pub trait VectorViewMut<F: Scalar>: VectorView<F> {
+     fn set(&mut self, index: usize, value: F);
++
++    /// Borrow mutable contiguous entries in logical order in O(1) time.
++    ///
++    /// The slice must agree with `len` and `get`, without allocation or gathering.
++    /// Strided implementations and existing downstream vectors may return `None`.
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        None
++    }
+ }
+ 
+ /// Construct owned vector storage compatible with a vector or borrowed view.
+@@ -93,6 +101,10 @@
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
+     }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        Some(self)
++    }
+ }
+ 
+ impl<F: Scalar> VectorView<F> for Vec<F> {
+@@ -113,6 +125,10 @@
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
+     }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        Some(self)
++    }
+ }
+ 
+ impl<F: Scalar, const N: usize> VectorView<F> for [F; N] {
+@@ -132,6 +148,10 @@
+ impl<F: Scalar, const N: usize> VectorViewMut<F> for [F; N] {
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
++    }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        Some(self)
+     }
+ }
+ 
+--- a/src/column.rs
++++ b/src/column.rs
+@@ -449,3 +449,16 @@
+         F::one()
+     }
+ }
++
++#[inline]
++pub(crate) fn affine_add_slices<F: Scalar>(
++    source: &[F],
++    destination: &mut [F],
++    raw_multiplier: F,
++    offset: F,
++) {
++    assert_eq!(source.len(), destination.len());
++    for (&raw, value) in source.iter().zip(destination) {
++        *value = *value + raw_multiplier * raw + offset;
++    }
++}
+--- a/src/backends/ndarray/vector.rs
++++ b/src/backends/ndarray/vector.rs
+@@ -35,6 +35,10 @@
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
+     }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        self.as_slice_mut()
++    }
+ }
+ 
+ fn column_reduction_values<F, S>(column: &ArrayBase<S, Ix1>) -> Option<&[F]>
+@@ -89,6 +93,12 @@
+             self.shape()[0],
+             "destination length must equal column length"
+         );
++        if let (Some(source), Some(output)) =
++            (self.dense_values(), destination.contiguous_values_mut())
++        {
++            crate::column::affine_add_slices(source, output, raw_multiplier, offset);
++            return;
++        }
+         for (row, &value) in self.iter().enumerate() {
+             destination.set(row, destination.get(row) + raw_multiplier * value + offset);
+         }
+--- a/src/backends/faer/dense.rs
++++ b/src/backends/faer/dense.rs
+@@ -33,6 +33,12 @@
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
+     }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        self.as_mut()
++            .try_as_col_major_mut()
++            .map(|column| column.as_slice_mut())
++    }
+ }
+ 
+ impl<F: Scalar> VectorView<F> for ColRef<'_, F> {
+@@ -68,6 +74,12 @@
+ impl<F: Scalar> VectorViewMut<F> for ColMut<'_, F> {
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
++    }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        self.as_mut()
++            .try_as_col_major_mut()
++            .map(|column| column.as_slice_mut())
+     }
+ }
+ 
+@@ -122,6 +134,12 @@
+             self.nrows(),
+             "destination length must equal column length"
+         );
++        if let (Some(source), Some(output)) =
++            (self.dense_values(), destination.contiguous_values_mut())
++        {
++            crate::column::affine_add_slices(source, output, raw_multiplier, offset);
++            return;
++        }
+         for row in 0..self.nrows() {
+             destination.set(
+                 row,
+--- a/src/backends/nalgebra/dense.rs
++++ b/src/backends/nalgebra/dense.rs
+@@ -89,6 +89,15 @@
+     fn set(&mut self, index: usize, value: F) {
+         self[index] = value;
+     }
++
++    fn contiguous_values_mut(&mut self) -> Option<&mut [F]> {
++        if self.strides().0 == 1 {
++            // Unit row stride identifies exactly the selected column's entries.
++            Some(unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.nrows()) })
++        } else {
++            None
++        }
++    }
+ }
+ 
+ impl<F, R, S> RawColumn<F> for Matrix<F, R, U1, S>
+@@ -124,6 +133,12 @@
+             self.nrows(),
+             "destination length must equal column length"
+         );
++        if let (Some(source), Some(output)) =
++            (self.dense_values(), destination.contiguous_values_mut())
++        {
++            crate::column::affine_add_slices(source, output, raw_multiplier, offset);
++            return;
++        }
+         for row in 0..self.nrows() {
+             destination.set(
+                 row,

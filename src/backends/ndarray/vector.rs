@@ -89,6 +89,13 @@ where
             self.shape()[0],
             "destination length must equal column length"
         );
+        // A slice iterator enables vectorization without requiring a contiguous destination.
+        if let Some(source) = self.as_slice() {
+            for (row, &value) in source.iter().enumerate() {
+                destination.set(row, destination.get(row) + raw_multiplier * value + offset);
+            }
+            return;
+        }
         for (row, &value) in self.iter().enumerate() {
             destination.set(row, destination.get(row) + raw_multiplier * value + offset);
         }

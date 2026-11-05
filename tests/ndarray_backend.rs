@@ -276,6 +276,66 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn dense_column_updates_preserve_arithmetic_order() {
+                fn build<F: lazymatrix::Scalar>(values: &[F]) -> Array2<F> {
+                    Array2::from_shape_fn((values.len() + 6, 3).f(), |(i, j)| {
+                        if j == 1 && (3..3 + values.len()).contains(&i) {
+                            values[i - 3]
+                        } else { F::nan() }
+                    }).slice_move(s![3..3 + values.len(), 1..2])
+                }
+                common::run_dense_column_updates_suite::<f32, _>(build);
+                common::run_dense_column_updates_suite::<f64, _>(build);
+            }
+
+            #[test]
+            fn column_updates_preserve_borrowed_and_strided_ranges() {
+                fn check<F: lazymatrix::Scalar + 'static>() {
+                    for rows in [0, 1, 7, 8, 9, 33] {
+                        for source_stride in [1, 3] {
+                            let storage = Array2::from_shape_fn((rows * source_stride + 6, 3).f(), |(i, j)| {
+                                F::from_f64((7 * i + 3 * j) as f64 / 8.0 - 3.5).unwrap()
+                            });
+                            for source_reverse in [false, true] {
+                                let mut source = storage.slice(s![3..3 + rows * source_stride;source_stride as isize, 1..2]);
+                                if source_reverse { source.invert_axis(ndarray::Axis(0)); }
+                                let matrix = LazyMatrix::from_column_parts(source, Some(vec![F::from_f64(0.375).unwrap()]), Some(vec![F::from_f64(-1.75).unwrap()]));
+                                for destination_stride in [1, 3] {
+                                    for destination_reverse in [false, true] {
+                                        let mut output = Array1::from_elem(rows * destination_stride + 4, F::from_u32(17).unwrap());
+                                        {
+                                            let mut destination = output.slice_mut(s![2..2 + rows * destination_stride;destination_stride as isize]);
+                                            destination.fill(F::from_f64(0.5).unwrap());
+                                            if destination_reverse { destination.invert_axis(ndarray::Axis(0)); }
+                                            matrix.column(0).scaled_add_to(F::from_f64(-0.125).unwrap(), &mut destination);
+                                        }
+                                        let mut expected = vec![17.0; output.len()];
+                                        for i in 0..rows {
+                                            let source_row = if source_reverse { rows - 1 - i } else { i };
+                                            let destination_row = if destination_reverse { rows - 1 - i } else { i };
+                                            let raw = storage[(3 + source_row * source_stride, 1)].to_f64().unwrap();
+                                            expected[2 + destination_row * destination_stride] = 0.5 - 0.125 * (raw - 0.375) / -1.75;
+                                        }
+                                        for (i, (&actual, expected)) in output.iter().zip(expected).enumerate() {
+                                            let actual = actual.to_f64().unwrap();
+                                            if i < 2 || (i - 2) % destination_stride != 0 || (i - 2) / destination_stride >= rows {
+                                                assert_eq!(actual, 17.0);
+                                            } else {
+                                                let epsilon = F::epsilon().to_f64().unwrap() * 16.0;
+                                                approx::assert_relative_eq!(actual, expected, epsilon = epsilon, max_relative = epsilon);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                check::<f32>();
+                check::<f64>();
+            }
+
+            #[test]
             fn contiguous_column_and_vector_slices_preserve_view_offsets() {
                 use lazymatrix::{RawColumn, RawColumns};
                 let storage = Array2::from_shape_fn((40, 3).f(), |(i, j)| (i + j*40) as f64);

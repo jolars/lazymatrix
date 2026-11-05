@@ -341,14 +341,21 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     time, and all numerical checks pass. Tests exercise every supported release,
     both scalar types, borrowed ranges, nonfinite values, and logical alignment.
 
-- [ ] Benchmark contiguous fast paths for logical column updates.
-  - `scaled_add_to` delegates to `RawColumn::affine_add_to`, whose dense
-    adapters use indexed destination reads and writes. Evaluate an optional
-    mutable slice capability and a shared slice kernel against the current
-    compiled loops.
-  - Preserve borrowing without allocation, strided destinations, arithmetic
-    order within each update, and sparse duplicate behavior. Check assembly and
-    consumer timings before adding a capability solely for this optimization.
+- [x] Benchmark contiguous fast paths for logical column updates.
+  - The [investigation](benches/column_reductions/README.md#contiguous-logical-column-update-investigation)
+    compares compiled production loops, an optional mutable-slice capability,
+    and a source-only ndarray slice branch. Faer and nalgebra already vectorize
+    indexed destination updates; ndarray benefits from borrowing its source.
+  - Source-only ndarray updates improve length-5,000 `f64` kernels by 2.3–2.9
+    times and the smaller hybrid fit with 64 active coefficients by 10.1%. The
+    evidence favors the existing vector API.
+  - Ndarray 0.15–0.17 now uses the source-slice branch. Regression tests cover
+    both scalar types, borrowed ranges, strided destinations, and floating-point
+    update order. The mutable-slice capability remains experimental.
+  - Numerical and allocation checks preserve borrowing, strided destinations,
+    arithmetic order, and sparse duplicate behavior. Raw data, assembly, locked
+    consumer dependencies, sampling limits, and reproduction commands accompany
+    the report.
 
 - [ ] Evaluate fused dense kernels for uncached column dots.
   - Ordinary and weighted dots currently compute a vector sum before scanning

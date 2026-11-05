@@ -1,0 +1,15 @@
+--- a/src/backends/ndarray/vector.rs
++++ b/src/backends/ndarray/vector.rs
+@@ -89,6 +89,12 @@
+             self.shape()[0],
+             "destination length must equal column length"
+         );
++        if let Some(source) = self.as_slice() {
++            for (row, &value) in source.iter().enumerate() {
++                destination.set(row, destination.get(row) + raw_multiplier * value + offset);
++            }
++            return;
++        }
+         for (row, &value) in self.iter().enumerate() {
+             destination.set(row, destination.get(row) + raw_multiplier * value + offset);
+         }
