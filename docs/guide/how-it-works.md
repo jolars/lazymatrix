@@ -42,6 +42,37 @@ storage use the identities above to preserve their storage and access patterns.
 Logical column and sparse row views also expose normalized values without
 allocating an entire normalized matrix.
 
+## Row and ordered normalization
+
+With row centers $r$ and diagonal row scales $D$, row normalization presents
+
+$$
+\widetilde{X} = D^{-1}(X - r\mathbf{1}^\top).
+$$
+
+Ordered chains apply each saved stage to the preceding stage's output. Dense
+products normalize entries before accumulation without storing an intermediate
+design matrix. Mixed and row-only chains require dense indexed access for
+fitting and products. Column-only chains also support sparse and Zarr storage.
+
+Sparse row fitting combines duplicates and includes implicit zeros. CSR fitting
+buffers one coalesced row; CSC fitting streams columns, with repeated scans for
+exact quantiles. Workspace is O(nrows + ncols). Sparse vector products use sums
+over missing index ranges, with logarithmic queries per stored cell during
+ordinary finite arithmetic. Exceptional IEEE arithmetic can require evaluating
+individual missing contributions.
+
+Zarr reads chunks serially, preserving fill values and excluding padding. Each
+vector product reads each storage chunk once. Chunk and codec buffers include
+outer shards and add to fitted vectors and operation workspace.
+
+Fused products compute `alpha * A * x + beta * out` using the same fitted vector
+kernels. Exact zero `alpha` skips storage reads, and exact zero `beta` ignores
+previous output values. Row and chain fused products hold one temporary vector
+of length `nrows` for forward products or `ncols` for transpose products. They
+merge the completed normalized product with the previous output only after the
+backend succeeds. Backend traversal and codec workspace is additional.
+
 ## Fit once, apply many times
 
 Fitting computes column centers and scales. When both are enabled, scaling

@@ -220,6 +220,32 @@ macro_rules! backend_suite {
                 lazy.mat_transpose_vec_into(&observations.slice(s![..;2]), &mut out.slice_mut(s![..;-2])).unwrap();
                 assert_eq!(out.slice(s![..;-2]), expected);
                 assert!(out.slice(s![..;2]).iter().all(|&v| v == 99.0));
+                use lazymatrix::{MatVecScaledInto, MatTransposeVecScaledInto};
+                let chain = RowNormalization::standardize()
+                    .then(ColumnNormalization::standardize()).fit_apply(storage.slice(s![..;-2, ..;3])).unwrap();
+                macro_rules! check_fused_views {
+                    ($op:expr) => {{
+                        let op = $op;
+                        let expected = op.matvec(&array![1.0,-2.0]).unwrap();
+                        let mut out = Array1::from_elem(6,99.);
+                        out.slice_mut(s![..;-2]).fill(f64::NAN);
+                        op.matvec_scaled_into(-2.,&coefficients.slice(s![..;2]),0.,&mut out.slice_mut(s![..;-2])).unwrap();
+                        for (actual,expected) in out.slice(s![..;-2]).iter().zip(expected.iter()) {
+                            approx::assert_relative_eq!(*actual,-2.*expected,epsilon=1e-9);
+                        }
+                        assert!(out.slice(s![..;2]).iter().all(|&v|v==99.));
+                        let expected = op.mat_transpose_vec(&array![1.0,-2.0,0.5]).unwrap();
+                        let mut out = Array1::from_elem(4,99.);
+                        out.slice_mut(s![..;-2]).fill(f64::NAN);
+                        op.mat_transpose_vec_scaled_into(-2.,&observations.slice(s![..;2]),0.,&mut out.slice_mut(s![..;-2])).unwrap();
+                        for (actual,expected) in out.slice(s![..;-2]).iter().zip(expected.iter()) {
+                            approx::assert_relative_eq!(*actual,-2.*expected,epsilon=1e-9);
+                        }
+                        assert!(out.slice(s![..;2]).iter().all(|&v|v==99.));
+                    }};
+                }
+                check_fused_views!(&lazy);
+                check_fused_views!(&chain);
             }
 
             #[test]

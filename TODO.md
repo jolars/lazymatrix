@@ -221,7 +221,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
 
 - [ ] Extend `LazyMatrix` capabilities to row and composed normalization.
 
-  - [ ] Add fused vector products.
+  - [x] Add fused vector products.
   - [ ] Add vector products with caller-owned workspace.
   - [ ] Add batched products.
   - [ ] Add borrowed logical rows.

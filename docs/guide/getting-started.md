@@ -157,20 +157,11 @@ let rows = LazyMatrix::new(x.view(), RowNormalization::standardize()).unwrap();
 let row_scales = rows.normalization().scales().unwrap();
 ```
 
-The fitted type is `RowNormalizationParams<f64>`, with one center and scale per
-row. Row normalization supports fitting and forward and transpose vector products
-on dense matrices, strided views, sparse CSC/CSR storage, and Zarr arrays. Sparse fitting sums
-duplicate cells and includes implicit zeros. It buffers one row for CSR or
-streams columns for CSC, with repeated scans for exact CSC quantiles. Fitting
-and products retain sparse storage and use O(nrows + ncols) workspace.
-Zarr arrays stream storage chunks serially with O(nrows) fitting state, preserving
-fill values and excluding edge padding. Standardization takes two scans, and
-exact row quantiles share repeated scans for a median and quantile range. Each
-vector product reads each storage chunk once. Chunk and codec buffers depend on
-the largest decoded chunk, including the outer shard, and add to the fitted
-vectors and output.
-Fit new samples' row parameters independently. Compose row and column recipes
-as described below.
+Each row gets its own center and scale in `RowNormalizationParams<f64>`.
+Row normalization works with dense matrices, strided views, sparse CSC/CSR
+storage, and Zarr arrays. Use `MatVec`, `MatTransposeVec`, or their reusable-output
+and fused variants. Fit new samples' row parameters independently, or
+compose row and column recipes as described below.
 
 `LazyMatrix<M, P>` stores its fitted parameter object as `P`. The default is
 `ColumnNormalizationParams<f64>`, so ordinary column-only type annotations can
@@ -252,28 +243,12 @@ let restored = LazyMatrix::from_parts(raw, fitted);
 The explicit row recipe controls future new-sample fitting; it does not change
 the supplied saved values. Dimension mismatches panic before reads or writes.
 
-Mixed and row-only chains require dense indexed access and support strided views.
-Column-only chains use native scans across every supported dense, CSC, CSR, and
-Zarr release. Chains expose allocating and reusable forward and transpose vector
-products. Fused products, batched products, weighted operations, borrowed logical
-rows and columns, and eager conversion remain separate capabilities planned for
-chains.
-
-Fitting stores each stage's fitted vectors. Dense products apply the ordered
-stages before accumulation and need no design buffer. Sparse column fitting
-coalesces duplicate cells before transforming them and includes transformed
-implicit zeros. CSR scans use O(ncols) workspace; CSC scans use at most one
-working column. Exact quantiles use repeated scans with O(ncols) state after
-the first stage.
-
-Sparse products use stored entries and sums over missing index ranges, requiring
-O(nrows + ncols) workspace and logarithmic range queries per stored cell.
-They avoid scanning every logical cell during ordinary finite arithmetic.
-Exceptional IEEE arithmetic can descend through missing ranges to evaluate
-individual contributions. Zarr scans chunks serially, retaining fill values
-and excluding edge padding; chunk and outer-shard storage adds to the fitted
-vectors and column-statistics workspace. No path materializes an intermediate
-design matrix.
+Mixed and row-only chains require dense storage for fitting and products.
+Column-only chains also support sparse CSC/CSR storage and Zarr arrays. Products
+execute the saved stages without refitting. Chains support allocating, reusable,
+and fused forward and transpose vector products.
+See [how it works](/guide/how-it-works#row-and-ordered-normalization) for storage
+and workspace costs.
 
 ## Select a normalized submatrix
 

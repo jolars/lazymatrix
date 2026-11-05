@@ -5,9 +5,9 @@ use super::{
 };
 use lazymatrix::{
     Centering, ColumnNormalization, ColumnNormalizationParams, LazyMatrix, MatTransposeVec,
-    MatTransposeVecInto, MatVec, MatVecInto, MatrixErrorType, MatrixRead, NormalizationChain,
-    NormalizationChainParams, NormalizationRecipe, RowNormalization, Scaling, VectorOwned,
-    VectorViewMut,
+    MatTransposeVecInto, MatTransposeVecScaledInto, MatVec, MatVecInto, MatVecScaledInto,
+    MatrixErrorType, MatrixRead, NormalizationChain, NormalizationChainParams, NormalizationRecipe,
+    RowNormalization, Scaling, VectorOwned, VectorViewMut,
 };
 
 fn apply(raw: &[Vec<f64>], ncols: usize, rows: bool, spec: RowNormalization) -> Vec<Vec<f64>> {
@@ -42,7 +42,9 @@ where
         + MatVecInto<V>
         + MatTransposeVec<V>
         + MatTransposeVecInto<V>
-        + lazymatrix::RectangularProducts<Scalar = f64>,
+        + lazymatrix::RectangularProducts<Scalar = f64>
+        + MatVecScaledInto<V, V, f64>
+        + MatTransposeVecScaledInto<V, V, f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     let x: Vec<_> = (0..ncols).map(|j| 0.5 - j as f64 / 3.).collect();
@@ -69,6 +71,39 @@ where
     for (j, &value) in expected_t.iter().enumerate() {
         equal(transpose.get(j), value);
         equal(reused_t.get(j), value);
+    }
+    for alpha in [0., 1., -0.75, f64::INFINITY] {
+        for beta in [0., 0.5] {
+            let old = if beta == 0. { f64::NAN } else { 1.75 };
+            let mut out = V::owned_from_fn(raw.len(), |_| old);
+            let mut out_t = V::owned_from_fn(ncols, |_| old);
+            op.matvec_scaled_into(alpha, &x, beta, &mut out).unwrap();
+            op.mat_transpose_vec_scaled_into(alpha, &u, beta, &mut out_t)
+                .unwrap();
+            for (actual, expected, rounded) in [
+                (&out, &expected, &product),
+                (&out_t, &expected_t, &transpose),
+            ] {
+                for (i, &product) in expected.iter().enumerate() {
+                    // Infinite coefficients act on the kernel's rounded sum.
+                    // An oracle's tiny rounding difference can change NaN to infinity.
+                    let product = if alpha.is_infinite() {
+                        rounded.get(i)
+                    } else {
+                        product
+                    };
+                    let value = if alpha == 0. { 0. } else { alpha * product };
+                    equal(
+                        actual.get(i),
+                        if beta == 0. {
+                            value
+                        } else {
+                            value + beta * old
+                        },
+                    );
+                }
+            }
+        }
     }
     if expected.iter().chain(&expected_t).all(|v| v.is_finite()) {
         let left: f64 = (0..u.len()).map(|i| u.get(i) * product.get(i)).sum();
@@ -228,14 +263,16 @@ where
 /// Check native column-only chains against independently materialized stages.
 pub fn run_column_pipeline_suite<M, V>(build: impl Fn(&TestMatrix) -> M, to_v: impl Fn(&[f64]) -> V)
 where
-    M: lazymatrix::MatrixShape + MatrixErrorType,
+    M: lazymatrix::MatrixTraversal<f64>,
     NormalizationChain<ColumnNormalization, ColumnNormalization>:
         NormalizationRecipe<M, ColumnChain>,
     LazyMatrix<M, ColumnChain>: MatVec<V>
         + MatVecInto<V>
         + MatTransposeVec<V>
         + MatTransposeVecInto<V>
-        + lazymatrix::RectangularProducts<Scalar = f64>,
+        + lazymatrix::RectangularProducts<Scalar = f64>
+        + MatVecScaledInto<V, V, f64>
+        + MatTransposeVecScaledInto<V, V, f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     let specs = [

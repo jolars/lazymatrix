@@ -396,3 +396,169 @@ fn materialization_failure_returns_no_wrapper_and_retry_overwrites_output() {
     assert_eq!(eager.data().values, [0.0, 0.0, 2.0, 0.0]);
     assert_eq!(source.fused_calls.get(), 1);
 }
+
+impl lazymatrix::MatrixTraversal<f64> for Source {
+    fn traversal_layout(&self) -> lazymatrix::TraversalLayout {
+        lazymatrix::TraversalLayout::Full
+    }
+    fn for_each_entry(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        mut visit: impl FnMut(usize, usize, f64),
+    ) -> Result<(), ReadError> {
+        assert!(rows.start <= rows.end && rows.end <= 2);
+        assert!(columns.start <= columns.end && columns.end <= 2);
+        if rows.is_empty() || columns.is_empty() {
+            return Ok(());
+        }
+        self.fused_calls.set(self.fused_calls.get() + 1);
+        for j in columns {
+            for i in rows.clone() {
+                visit(i, j, (2 * i + j + 1) as f64);
+                if self.fail.get() {
+                    return Err(ReadError);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn row_product<
+    X: lazymatrix::VectorView<f64> + ?Sized,
+    Y: lazymatrix::VectorViewMut<f64> + ?Sized,
+>(
+    source: &Source,
+    x: &X,
+    centers: Option<&[f64]>,
+    scales: Option<&[f64]>,
+    out: &mut Y,
+    transpose: bool,
+) -> Result<(), ReadError> {
+    use lazymatrix::MatrixTraversal;
+    assert_eq!(x.len(), 2);
+    assert_eq!(out.len(), 2);
+    for i in 0..2 {
+        out.set(i, 0.);
+    }
+    source.for_each_entry(0..2, 0..2, |i, j, raw| {
+        let mut value = raw;
+        if let Some(c) = centers {
+            value -= c[i];
+        }
+        if let Some(s) = scales {
+            value /= s[i];
+        }
+        let (to, from) = if transpose { (j, i) } else { (i, j) };
+        out.set(to, out.get(to) + value * x.get(from));
+    })
+}
+impl lazymatrix::RowNormalizationKernel<f64> for Source {
+    fn row_normalized_matvec_into<
+        X: lazymatrix::VectorView<f64> + ?Sized,
+        Y: lazymatrix::VectorViewMut<f64> + ?Sized,
+    >(
+        &self,
+        x: &X,
+        centers: Option<&[f64]>,
+        scales: Option<&[f64]>,
+        out: &mut Y,
+    ) -> Result<(), ReadError> {
+        row_product(self, x, centers, scales, out, false)
+    }
+    fn row_normalized_transpose_into<
+        X: lazymatrix::VectorView<f64> + ?Sized,
+        Y: lazymatrix::VectorViewMut<f64> + ?Sized,
+    >(
+        &self,
+        x: &X,
+        centers: Option<&[f64]>,
+        scales: Option<&[f64]>,
+        out: &mut Y,
+    ) -> Result<(), ReadError> {
+        row_product(self, x, centers, scales, out, true)
+    }
+}
+
+#[test]
+fn fused_rows_and_chains_skip_reads_and_preserve_errors() {
+    use lazymatrix::{
+        ColumnNormalizationParams, MatTransposeVecScaledInto, MatVecScaledInto,
+        NormalizationChainParams, RowNormalizationParams, VectorView, VectorViewMut,
+    };
+    struct Unreadable(Vec<f64>);
+    impl VectorView<f64> for Unreadable {
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+        fn get(&self, _: usize) -> f64 {
+            panic!("zero coefficients must skip reads");
+        }
+    }
+    impl VectorViewMut<f64> for Unreadable {
+        fn set(&mut self, i: usize, value: f64) {
+            self.0[i] = value;
+        }
+    }
+    let source = Source {
+        fail: Cell::new(true),
+        fused_calls: Cell::new(0),
+    };
+    let rows = RowNormalizationParams::from_parts(2, Some(vec![0.5; 2]), Some(vec![-2.; 2]));
+    let columns = NormalizationChainParams::from_parts(
+        ColumnNormalizationParams::from_parts(2, Some(vec![0.5; 2]), Some(vec![-2.; 2])),
+        ColumnNormalizationParams::from_parts(2, Some(vec![0.25; 2]), Some(vec![1.5; 2])),
+    );
+    macro_rules! check {
+        ($op:expr) => {{
+            let op = $op;
+            let mut out = vec![99.; 2];
+            assert_eq!(
+                op.matvec_scaled_into(2., &vec![1.; 2], 3., &mut out),
+                Err(ReadError)
+            );
+            assert_eq!(out, [99.; 2]);
+            assert_eq!(
+                op.mat_transpose_vec_scaled_into(2., &vec![1.; 2], 3., &mut out),
+                Err(ReadError)
+            );
+            assert_eq!(out, [99.; 2]);
+            let before = source.fused_calls.get();
+            let x = Unreadable(vec![0.; 2]);
+            let mut out = Unreadable(vec![f64::NAN; 2]);
+            op.matvec_scaled_into(0., &x, 0., &mut out).unwrap();
+            assert_eq!(out.0, [0.; 2]);
+            op.mat_transpose_vec_scaled_into(-0., &x, -0., &mut out)
+                .unwrap();
+            assert_eq!(out.0, [0.; 2]);
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| op.matvec_scaled_into(
+                    0.,
+                    &Unreadable(vec![0.; 1]),
+                    0.,
+                    &mut out
+                )))
+                .is_err()
+            );
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                    || op.mat_transpose_vec_scaled_into(0., &x, 0., &mut Unreadable(vec![0.; 1]))
+                ))
+                .is_err()
+            );
+            assert_eq!(source.fused_calls.get(), before);
+            source.fail.set(false);
+            op.matvec_scaled_into(2., &vec![1.; 2], 0., &mut out)
+                .unwrap();
+            assert!(out.0.iter().all(|v| v.is_finite()));
+            op.mat_transpose_vec_scaled_into(2., &vec![1.; 2], 0., &mut out)
+                .unwrap();
+            assert!(out.0.iter().all(|v| v.is_finite()));
+            assert_eq!(source.fused_calls.get(), before + 2);
+            source.fail.set(true);
+        }};
+    }
+    check!(rows.view().apply_frozen(&source));
+    check!(columns.view().apply_frozen(&source));
+}

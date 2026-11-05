@@ -1,7 +1,10 @@
 //! Row fitting and products must retain the Zarr storage and scan boundaries.
 
 use super::*;
-use lazymatrix::{MatrixShape, RowNormalization, RowNormalizationKernel};
+use lazymatrix::{
+    MatTransposeVecScaledInto, MatVecScaledInto, MatrixShape, RowNormalization,
+    RowNormalizationKernel,
+};
 
 #[test]
 fn row_normalization_matches_the_shared_oracle() {
@@ -52,6 +55,24 @@ fn row_fitting_and_products_stream_serial_scans() {
             store.reset();
             frozen.mat_transpose_vec(&vec![1.0; 5]).unwrap();
             assert_scans(&store, &matrix, 1);
+            store.reset();
+            frozen
+                .matvec_scaled_into(-0.75, &vec![1.; 3], 0.25, &mut vec![1.; 5])
+                .unwrap();
+            assert_scans(&store, &matrix, 1);
+            store.reset();
+            frozen
+                .mat_transpose_vec_scaled_into(-0.75, &vec![1.; 5], 0.25, &mut vec![1.; 3])
+                .unwrap();
+            assert_scans(&store, &matrix, 1);
+            store.reset();
+            frozen
+                .matvec_scaled_into(0., &vec![f64::NAN; 3], 0., &mut vec![f64::NAN; 5])
+                .unwrap();
+            frozen
+                .mat_transpose_vec_scaled_into(-0., &vec![f64::NAN; 5], -0., &mut vec![f64::NAN; 3])
+                .unwrap();
+            assert_scans(&store, &matrix, 0);
         }
         store.reset();
         let params = RowNormalization::robust().fit(&matrix).unwrap();

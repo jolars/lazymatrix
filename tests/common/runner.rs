@@ -887,8 +887,10 @@ pub fn check_row_normalized_products<M, V, F, S: AsRef<[F]>>(
     };
     let x = to_v(&coefficients);
     let u = to_v(&observations);
-    assert_values(&operator.matvec(&x).unwrap(), &forward);
-    assert_values(&operator.mat_transpose_vec(&u).unwrap(), &transpose);
+    let allocating_forward = operator.matvec(&x).unwrap();
+    let allocating_transpose = operator.mat_transpose_vec(&u).unwrap();
+    assert_values(&allocating_forward, &forward);
+    assert_values(&allocating_transpose, &transpose);
     let transposed = Transpose::new(operator);
     assert_values(&transposed.matvec(&u).unwrap(), &transpose);
     assert_values(&transposed.mat_transpose_vec(&x).unwrap(), &forward);
@@ -898,6 +900,56 @@ pub fn check_row_normalized_products<M, V, F, S: AsRef<[F]>>(
     let mut out = to_v(&vec![F::nan(); operator.ncols()]);
     operator.mat_transpose_vec_into(&u, &mut out).unwrap();
     assert_values(&out, &transpose);
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    for alpha in [
+        F::zero(),
+        F::one(),
+        F::from_f64(-0.75).unwrap(),
+        F::infinity(),
+    ] {
+        for beta in [F::zero(), F::from_f64(0.5).unwrap()] {
+            let old = if beta == F::zero() {
+                F::nan()
+            } else {
+                F::from_f64(1.75).unwrap()
+            };
+            let mut out = to_v(&vec![old; operator.nrows()]);
+            let mut out_t = to_v(&vec![old; operator.ncols()]);
+            operator
+                .matvec_scaled_into(alpha, &x, beta, &mut out)
+                .unwrap();
+            operator
+                .mat_transpose_vec_scaled_into(alpha, &u, beta, &mut out_t)
+                .unwrap();
+            for (actual, expected, rounded) in [
+                (&out, &forward, &allocating_forward),
+                (&out_t, &transpose, &allocating_transpose),
+            ] {
+                let expected: Vec<_> = expected
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &product)| {
+                        let product = if alpha.is_infinite() {
+                            rounded.get(i)
+                        } else {
+                            product
+                        };
+                        let value = if alpha == F::zero() {
+                            F::zero()
+                        } else {
+                            alpha * product
+                        };
+                        if beta == F::zero() {
+                            value
+                        } else {
+                            value + beta * old
+                        }
+                    })
+                    .collect();
+                assert_values(actual, &expected);
+            }
+        }
+    }
     if forward.iter().chain(&transpose).all(|v| v.is_finite()) {
         let lhs: F = forward
             .iter()

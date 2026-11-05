@@ -370,3 +370,27 @@ fn empty_and_repeated_row_chains_need_no_design_workspace() {
         assert_eq!(data.reads.get(), 0);
     }
 }
+
+#[test]
+fn fused_f32_pipeline_preserves_saved_stages_and_coefficients() {
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    let data = Dense::new(2, 3, vec![1_f32, 3., 8., -2., 5., 3.]);
+    let recipe = RowNormalization::standardize().then(ColumnNormalization::standardize());
+    let op = recipe.fit_apply(&data).unwrap();
+    let x = vec![1_f32, -2., 3.];
+    let u = vec![0.5_f32, 2.];
+    let mut out = vec![3_f32; 2];
+    let mut out_t = vec![3_f32; 3];
+    let expected = op.matvec(&x).unwrap();
+    let expected_t = op.mat_transpose_vec(&u).unwrap();
+    op.matvec_scaled_into(-2., &x, 0.5, &mut out).unwrap();
+    op.mat_transpose_vec_scaled_into(-2., &u, 0.5, &mut out_t)
+        .unwrap();
+    for (actual, expected) in out
+        .iter()
+        .chain(&out_t)
+        .zip(expected.iter().chain(&expected_t))
+    {
+        approx::assert_relative_eq!(*actual, -2. * expected + 1.5, epsilon = 1e-6);
+    }
+}

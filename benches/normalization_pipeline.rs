@@ -86,5 +86,97 @@ fn benchmark(c: &mut Criterion) {
         group.finish();
     }
 }
-criterion_group!(benches, benchmark);
+criterion_group!(benches, benchmark, fused_products);
 criterion_main!(benches);
+
+fn fused_products(c: &mut Criterion) {
+    use backend_aliases::ndarray::Array1;
+    use lazymatrix::{
+        MatTransposeVec, MatTransposeVecScaledInto, MatVec, MatVecScaledInto, RowNormalization,
+    };
+    fn compare<O>(
+        group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+        name: &str,
+        op: &O,
+        x: &Array1<f64>,
+        u: &Array1<f64>,
+    ) where
+        O: MatVec<Array1<f64>>
+            + MatTransposeVec<Array1<f64>>
+            + MatVecScaledInto<Array1<f64>, Array1<f64>, f64>
+            + MatTransposeVecScaledInto<Array1<f64>, Array1<f64>, f64>,
+    {
+        let mut y = Array1::from_elem(u.len(), 1.);
+        let mut t = Array1::from_elem(x.len(), 1.);
+        let forward = op.matvec(x).unwrap();
+        let transpose = op.mat_transpose_vec(u).unwrap();
+        op.matvec_scaled_into(-0.75, x, 0.25, &mut y).unwrap();
+        op.mat_transpose_vec_scaled_into(-0.75, u, 0.25, &mut t)
+            .unwrap();
+        for (&actual, &product) in y.iter().chain(&t).zip(forward.iter().chain(&transpose)) {
+            approx::assert_relative_eq!(
+                actual,
+                -0.75 * product + 0.25,
+                epsilon = 1e-9,
+                max_relative = 1e-9
+            );
+        }
+        group.bench_function(BenchmarkId::new(name, "manual_pair"), |b| {
+            b.iter(|| {
+                let forward = op.matvec(black_box(x)).unwrap();
+                let transpose = op.mat_transpose_vec(black_box(u)).unwrap();
+                for (old, value) in y.iter_mut().zip(forward.iter()) {
+                    *old = -0.75 * value + 0.25 * (*old);
+                }
+                for (old, value) in t.iter_mut().zip(transpose.iter()) {
+                    *old = -0.75 * value + 0.25 * (*old);
+                }
+                black_box((&y, &t));
+            })
+        });
+        group.bench_function(BenchmarkId::new(name, "fused_pair"), |b| {
+            b.iter(|| {
+                op.matvec_scaled_into(-0.75, black_box(x), 0.25, &mut y)
+                    .unwrap();
+                op.mat_transpose_vec_scaled_into(-0.75, black_box(u), 0.25, &mut t)
+                    .unwrap();
+                black_box((&y, &t));
+            })
+        });
+    }
+    for fixture in pipeline::fixtures() {
+        let mut group = c.benchmark_group(format!(
+            "fused_pipeline/{}x{}/{}",
+            fixture.rows, fixture.cols, fixture.density
+        ));
+        let (x, u, _, _) = fixture.vectors::<Array1<f64>>();
+        let source = pipeline::dense(&fixture.sparse);
+        compare(
+            &mut group,
+            "dense_rows",
+            &RowNormalization::standardize().fit_apply(&source).unwrap(),
+            &x,
+            &u,
+        );
+        compare(
+            &mut group,
+            "dense_mixed",
+            &pipeline::mixed().fit_apply(&source).unwrap(),
+            &x,
+            &u,
+        );
+        for (name, source) in [
+            ("csc_columns", fixture.sparse.clone()),
+            ("csr_columns", fixture.sparse.to_csr()),
+        ] {
+            compare(
+                &mut group,
+                name,
+                &pipeline::columns().fit_apply(source).unwrap(),
+                &x,
+                &u,
+            );
+        }
+        group.finish();
+    }
+}

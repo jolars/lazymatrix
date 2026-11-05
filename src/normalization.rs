@@ -329,16 +329,17 @@ impl ColumnNormalization {
 /// Empty rows have undefined means, standard deviations, minima, and ranges
 /// (`NaN`), and zero norms, matching column fitting along the other axis.
 ///
-/// Row-normalized operators support allocating and reusable forward and
+/// Row-normalized operators support allocating, reusable, and fused forward and
 /// transpose vector products through [`crate::RowNormalizationKernel`] on dense
 /// matrices, strided views, sparse CSC/CSR storage, and Zarr arrays. Dense
-/// products normalize entries before accumulating and use O(1) additional
+/// kernels normalize entries before accumulating and use O(1) additional
 /// workspace. Sparse products combine duplicate cells before normalization and
 /// account for transformed implicit zeros with O(nrows + ncols) workspace. Zarr products
 /// normalize entries before accumulation and scan each storage chunk once,
 /// retaining only chunk and codec buffers beyond the output and fitted vectors.
-/// Fused and batched products, borrowed logical views, weighted operations, and
-/// eager conversion are not yet supported. New samples require independently
+/// Fused products retain one temporary output vector and merge it only after
+/// the fitted kernel succeeds. Batched products, borrowed logical views,
+/// weighted operations, and eager conversion are not yet supported. New samples require independently
 /// fitted row parameters. [`crate::Transpose`] transposes the fitted operator
 /// without refitting.
 ///
@@ -366,11 +367,11 @@ impl ColumnNormalization {
 /// }
 /// ```
 ///
-/// Row normalization does not grant fused products, even if raw storage has them:
+/// Fused products require the row-normalized kernel:
 ///
-/// ```compile_fail
-/// use lazymatrix::{LazyMatrix, MatVecScaledInto, MatrixRead, RowNormalizationParams};
-/// fn fused<M: MatrixRead<f64> + MatVecScaledInto<Vec<f64>, Vec<f64>, f64>>(
+/// ```
+/// use lazymatrix::{LazyMatrix, MatVecScaledInto, RowNormalizationKernel, RowNormalizationParams};
+/// fn fused<M: RowNormalizationKernel<f64>>(
 ///     rows: &LazyMatrix<M, RowNormalizationParams>, x: &Vec<f64>, out: &mut Vec<f64>,
 /// ) {
 ///     rows.matvec_scaled_into(1.0, x, 0.0, out).unwrap();

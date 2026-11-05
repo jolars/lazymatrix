@@ -41,7 +41,9 @@
 //! fitting streams native column scans. Zarr fitting streams chunks with
 //! O(nrows) state plus chunk and codec buffers, including outer shards. Exact
 //! row quantiles use repeated scans. New samples need independently fitted
-//! row parameters. Additional operator capabilities remain future work.
+//! row parameters. Fused products use the same fitted kernels, with one temporary
+//! product vector in addition to backend workspace. Additional capabilities
+//! remain future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -92,8 +94,8 @@
 //! [`LazyMatrix::from_parts`] reconstructs a pipeline without refitting.
 //! Mixed and row-only chains support dense indexed access; column-only chains
 //! also support native sparse CSC/CSR and Zarr scans. Chains currently expose
-//! allocating and reusable forward and transpose vector products, with bounded
-//! workspace and no intermediate normalized design matrix. Sparse products use
+//! allocating, reusable, and fused forward and transpose vector products, with
+//! bounded workspace and no intermediate normalized design matrix. Sparse products use
 //! transformed implicit backgrounds and missing index ranges; exceptional IEEE
 //! cases can evaluate individual missing contributions.
 //!
@@ -591,6 +593,7 @@ mod csr_stats;
 ))]
 mod dense_products;
 mod eager;
+mod fused_normalization;
 mod gram;
 mod indexed_rows;
 #[cfg(any(
