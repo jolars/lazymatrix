@@ -18,8 +18,8 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 name = "column-reduction-probe"
 version = "0.0.0"
 dependencies = [
+ "lazymatrix 0.10.0",
  "lazymatrix 0.9.0",
- "lazymatrix 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ndarray",
  "rand",
  "rand_chacha",
@@ -39,6 +39,8 @@ dependencies = [
 [[package]]
 name = "lazymatrix"
 version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "534ff56e819d80a6eaaa0ed7e7231b5e2eeb21284d424af250d6522f77994ae0"
 dependencies = [
  "ndarray",
  "num-traits",
@@ -46,9 +48,7 @@ dependencies = [
 
 [[package]]
 name = "lazymatrix"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "534ff56e819d80a6eaaa0ed7e7231b5e2eeb21284d424af250d6522f77994ae0"
+version = "0.10.0"
 dependencies = [
  "ndarray",
  "num-traits",
