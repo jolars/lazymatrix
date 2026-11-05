@@ -219,9 +219,15 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - `RowStats::row_normalization_stats` returns raw row centers and scales.
     References and checked sparse wrappers forward the hook without refitting.
 
-- [ ] Extend `LazyMatrix` capabilities to row and composed normalization: fused
-  and workspace products, batched products, borrowed logical rows and
-  columns, weighted operations, and eager conversion.
+- [ ] Extend `LazyMatrix` capabilities to row and composed normalization.
+
+  - [ ] Add fused vector products.
+  - [ ] Add vector products with caller-owned workspace.
+  - [ ] Add batched products.
+  - [ ] Add borrowed logical rows.
+  - [ ] Add borrowed logical columns.
+  - [ ] Add weighted operations.
+  - [ ] Add eager conversion.
 
 - [ ] Expose row normalization in Python, including independent fitting for new
   samples and explicit parameters.
