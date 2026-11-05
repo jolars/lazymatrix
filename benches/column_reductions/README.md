@@ -17,6 +17,165 @@ fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
 
+## Fused uncached column dot investigation
+
+Keep the separate production reductions and the existing cached-sum methods.
+Fusing the raw product and its centering correction benefits large working sets,
+but none of the three prototypes consistently improves cache-resident inputs.
+The results support retaining these kernels as experiments. They do not
+establish a length threshold that should select fusion in the library.
+
+The [probe](../uncached_column_dots.rs) compares six methods for ordinary and
+signed weighted dots:
+
+- `Production` calls `LazyColumn::dot` or `weighted_dot`.
+- `Separate` compiles the current [reduction source](../../src/reductions.rs)
+  directly into the probe. It computes the vector sum first, then the raw
+  product, using eight independent accumulators for each reduction.
+- `Fused8` updates eight product accumulators and eight correction accumulators
+  in one traversal. It combines each reduction in the production order, handles
+  its tail in the same order, and returns
+  `(product - center * correction) / scale`.
+- `Fused8Split` updates all product accumulators before all correction
+  accumulators within each block of eight rows. It tests whether separating the
+  updates helps the compiler vectorize the two reductions.
+- `Fused4` uses four accumulators per reduction, changing the reduction order.
+- `Cached` calls the public `dot_with_sum` or `weighted_dot_with_sum` with sums
+  computed outside timing.
+
+Weighted fusion keeps `x * weight * vector` and `weight * vector` as separate
+terms. Reusing the latter in `x * (weight * vector)` would change intermediate
+overflow. All prototypes apply centering and scaling after reducing raw values.
+They allocate no normalized column or vector, add no dependencies, and leave the
+library implementation unchanged.
+
+Each method crosses the same dispatch boundary. The probe uses a minimal dense
+adapter exposing the logical-order slices shared by contiguous dense backends.
+It includes column borrowing and the public API calls, but measures no backend
+conversion, strided layout, or complete solver fit. Every column, vector, and
+weight slice has three NaN padding entries on either side and spare capacity.
+Center 0.375 and scale -1.75 exercise both normalization corrections.
+
+The fixtures cover lengths 0, 1, 7, 8, 9, 33, 256, 5,000, 65,536, 1,048,576, and
+4,194,304 for both scalar types. `single` repeatedly uses one input triple.
+`rotating` traverses enough independent triples to allocate at least 64 MiB,
+starting at length 256. Every column has its own vector and weights. The
+reported working-set size includes all three padded banks, cached sums, and
+fitted parameters; ordinary dots read only the column and vector banks. A
+`single` fixture is not necessarily cache-resident. At the largest `f64` length,
+one triple already exceeds 64 MiB, so the two regimes use identical inputs.
+
+The following table gives microseconds per dot for generic x86-64 `f64` builds
+and the `single` regime. Each value is the median of 12 observations:
+
+  | Operation | Rows      | Production | Separate   | Fused8     | Fused8Split | Fused4     | Cached     |
+  | --------- | --------: | ---------: | ---------: | ---------: | ----------: | ---------: | ---------: |
+  | Ordinary  |       256 |     0.0640 |     0.0647 |     0.0814 |      0.0827 |     0.0824 |     0.0468 |
+  | Weighted  |       256 |     0.1003 |     0.1006 |     0.1226 |      0.1222 |     0.1201 |     0.0658 |
+  | Ordinary  |     5,000 |     1.3973 |     1.4208 |     1.3304 |      1.3342 |     1.3503 |     0.9983 |
+  | Weighted  |     5,000 |     2.2894 |     2.2946 |     2.1433 |      2.1430 |     2.1437 |     1.3331 |
+  | Ordinary  |    65,536 |    19.3711 |    19.2877 |    17.7550 |     17.1997 |    17.7149 |    13.0364 |
+  | Weighted  |    65,536 |    32.8751 |    31.5586 |    30.0563 |     30.5193 |    29.7036 |    19.9422 |
+  | Ordinary  | 1,048,576 |   936.6746 |   913.5732 |   704.4982 |    709.2197 |   705.6060 |   591.0202 |
+  | Weighted  | 1,048,576 | 1,127.8024 | 1,190.5244 |   708.6659 |    709.3581 |   715.4559 |   699.7074 |
+  | Ordinary  | 4,194,304 | 3,516.3785 | 3,509.5805 | 2,513.9670 |  2,525.5745 | 2,386.1865 | 2,137.5790 |
+  | Weighted  | 4,194,304 | 5,247.0095 | 5,258.7440 | 3,067.8265 |  3,077.4140 | 3,071.6395 | 3,101.4245 |
+
+At length 4,194,304, `Fused8` is 1.29–1.71 times as fast as the separate
+reductions across both scalar types and both compiler targets in the `single`
+regime. At length 256, it instead takes 22–47% more time. Length-5,000 `f32`
+inputs take 38–41% more time with generic code generation and 31–39% more time
+with CPU-specific code generation. CPU-specific `f64` ordinary dots at that
+length also regress by 24%, despite the generic build's small improvement.
+
+Cache reuse changes the result even when length stays fixed. For CPU-specific
+length-5,000 `f64` ordinary dots, the separate and fused kernels take 1.222 and
+1.513 microseconds when reusing one input triple. With rotating inputs, they
+take 3.782 and 2.681 microseconds. These measurements therefore do not support
+selecting a kernel from vector length alone. The cached methods remain useful
+controls: they avoid recomputing the correction when a consumer already has it.
+Small differences, including fused weighted dots approaching the cached control
+on large inputs, should be read with the sampling variation in the complete
+[summary](uncached_summary.csv), which includes inclusive interquartile
+intervals.
+
+The [assembly excerpts](uncached_assembly.txt) retain the actual dense dispatch
+functions and their remaining fused helpers for both scalar types and compiler
+targets. LLVM pairs product and correction arithmetic within a row in several
+fused loops. The resulting code includes scalar multiplies and lane shuffles,
+while separate reductions can pack arithmetic across rows. Splitting the source
+updates does not provide a consistent improvement. No inspected fused helper or
+dense dispatch uses fused multiply-add instructions. The reduced input traffic
+helps explain the large-working-set benefit, but these results do not justify
+unconditional fusion or additional CPU dispatch.
+
+The [numerical cases](uncached_numerics.csv) record 1,968 method observations.
+Both eight-accumulator prototypes match production bits in every checked case,
+treating NaNs by classification. Checks include empty inputs, short tails,
+cancellation, large offsets, reduction and correction overflow, signed zeros,
+nonfinite data, and nonfinite centers and scales. Two counterexamples matter:
+
+- With 16 vector entries repeating `[4/epsilon, 1, -4/epsilon, 1]`, unit raw
+  entries, center zero, and scale one, production and both eight-accumulator
+  prototypes return 4. Four accumulators return 8, the exact mathematical sum.
+  Changing accumulator count changes results even when it improves this example.
+- With one raw entry `MAX/2`, weight 4, and vector entry 0.25, the weighted
+  product overflows in production and every prototype. Regrouping the product as
+  `x * (weight * vector)` returns the finite value `MAX/2` instead. The probe
+  asserts that this case distinguishes the multiplication orders.
+
+Fusion preserves the existing raw-dot numerical policy. For example, the large
+offset `f64` case returns 64 while directly centering its entries gives 94. Zero
+centers still multiply nonfinite vector sums, preserving the resulting NaNs. The
+`direct_centering` and `regrouped_serial` CSV columns are diagnostics, not
+interchangeable numerical oracles.
+
+Every random-input column is also compared with a compensated `f64` oracle that
+centers entries directly. The tolerance is
+`64 * epsilon * max(sqrt(rows), 1) * (1 + abs(oracle))`. The largest scaled
+error is 2.31e-3 for `f32` and 1.27e-13 for `f64`; the eight-accumulator
+prototypes preserve production's error exactly. The
+[checks](uncached_errors.csv) retain 5,136 aggregate records, and every verified
+random-input dot and timed sample performs zero allocations or reallocations.
+The [sparse checks](uncached_sparse.csv) call the public cached methods on five
+unsorted stored entries, including a duplicate and an explicit zero. Both 17-row
+and one-billion-row columns make exactly five stored visits and five vector
+reads. Weighted products also make five weight reads. A vector-sum call panics,
+and allocation counts stay zero. The cached sparse products retain O(nnz) work.
+
+All builds, checks, and measurements share one exclusive `compute bench` window
+on CPU 2 of an Intel Core Ultra 7 155U, using Rust 1.98.1, release optimization,
+16 codegen units, and default LTO. The pinned core has 48 KiB of L1 data cache,
+2 MiB of L2 cache, and access to 12 MiB of shared L3 cache. The builds
+explicitly select generic x86-64 or `target-cpu=native`. Six blocks reverse
+build order and rotate operation and method order. Two samples per block put
+every method in each timing position twice. Each sample targets eight million
+logical entries, with one untimed warmup pass and between one and 100,000
+measured passes.
+
+The [raw timings](uncached_timings.csv) preserve all 9,216 observations.
+[Metadata](uncached_metadata.json) records source and binary hashes, full
+assembly hashes, compiler and hardware details, and the local artifact
+directory. This is a kernel investigation on one machine; it establishes neither
+a complete consumer improvement nor a portable threshold. The [sum-and-norm
+summary experiment](#ndarray-production-measurements) remains separate. These
+dot measurements provide no new consumer evidence for changing that API.
+
+Reproduce from the repository root:
+
+```sh
+compute bench --reason "Fused uncached column dot evaluation" -- \
+    python benches/column_reductions/uncached.py target/uncached-column-dots
+```
+
+The runner accepts `--cpu`, `--blocks`, `--samples`, `--elements`, `--bytes`,
+`--lengths`, `--builds`, and `--checks-only` overrides. It saves complete
+assembly for every codegen unit, numerical and sparse diagnostics, raw timings,
+a summary, and metadata. It refuses to finish if measured source files change
+during the comparison. Release executions passed every check in both builds.
+Rust formatting, probe Clippy with warnings denied, core Rustdoc with warnings
+denied, and runner Ruff checking and formatting also pass.
+
 ## Contiguous logical column update investigation
 
 Ndarray 0.15–0.17 now uses the source-slice branch measured below for logical

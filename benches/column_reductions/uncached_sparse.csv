@@ -1,0 +1,9 @@
+build,rows,operation,stored_visits,vector_gets,weight_gets,allocations,actual
+generic,17,Dot,5,5,0,0,1.64285714285714279e0
+generic,17,WeightedDot,5,5,5,0,8.21428571428571397e-1
+generic,1000000000,Dot,5,5,0,0,2.14285712285714298e8
+generic,1000000000,WeightedDot,5,5,5,0,1.07142856142857149e8
+native,17,Dot,5,5,0,0,1.64285714285714279e0
+native,17,WeightedDot,5,5,5,0,8.21428571428571397e-1
+native,1000000000,Dot,5,5,0,0,2.14285712285714298e8
+native,1000000000,WeightedDot,5,5,5,0,1.07142856142857149e8

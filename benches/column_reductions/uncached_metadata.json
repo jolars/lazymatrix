@@ -1,0 +1,61 @@
+{
+  "measured_at": "2026-11-05T15:41:33.977355+00:00",
+  "revision": "94e7c1c941f3b8be8069ffbefb0b2597937196f7",
+  "source_sha256": {
+    "Cargo.toml": "e5f3e7d9f4b83637f88813a118c1ac2eb6e4ec87360b5e323e54d0f741042b5d",
+    "Cargo.lock": "27b6ae27cbc73fbe00ecfe718b57e0dc0498c7e057073f09f8e52eecb5a97fd6",
+    "rust-toolchain.toml": "e7c669a84e6912e76a8ef9c7b2240e5ca3a7d81b8005ee58bffd5f8287733ddd",
+    "src/reductions.rs": "76245d2b156ffe2b79eb9d8a1cb1e2a0cae582d628249d76648f4a9a834f5820",
+    "src/column.rs": "07f038d7db726dcc74befb14aa7fbb6f74cda7dc1ce0d8c58654ebf92f088dc1",
+    "src/traits/columns.rs": "c5118219db05daf2d747812fd50d3962a49ec1a6fad45c80ab7e03d7ab54e1f8",
+    "src/traits/vectors.rs": "bde2a34fdf68c5df38de16d3c55fb7834459e9cd24ac24b0f0b1acee8edb5f0e",
+    "benches/uncached_column_dots.rs": "d7b91177c4f0e396c6681540fba6c2d02f42cc464bc68d46204f44872a7c6142",
+    "benches/column_reductions/uncached.py": "1e47e46033b83d6febc515ba018c8e323e601dfb2e76cea276a317adb8efce2d",
+    "benches/column_reductions/strided.py": "892c4149485ee1c6b124fe30e4e561ca75e25503655246cd87cdeb5c15ded0af"
+  },
+  "binary_sha256": {
+    "generic": "46577f2837959b0ccc2c42e3897d294f25f0cfe3e020b6ce7acfcd99ae598e63",
+    "native": "2678f298f9d38b8e2eb6dfe0206a46e2518ced9c5b4fff6e2080c89987af2863"
+  },
+  "assembly_sha256": {
+    "generic": "d608255336727eade00f5d4a08b32bf5d5d91946220c7293534a42c56b229547",
+    "native": "554e1116da7ce04c1201c2d0815f5ec72fde921ca7f0d3bd7074689f64138594"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  14\nOn-line CPU(s) list:                     0-13\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 155U\nCPU family:                              6\nModel:                                   170\nThread(s) per core:                      2\nCore(s) per socket:                      12\nSocket(s):                               1\nStepping:                                4\nMicrocode version:                       0x2b\nCPU(s) scaling MHz:                      40%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5376.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               352 KiB (10 instances)\nL1i cache:                               640 KiB (10 instances)\nL2 cache:                                10 MiB (5 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-13\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+  "cpu_caches": "NAME ONE-SIZE ALL-SIZE WAYS TYPE        LEVEL  SETS PHY-LINE COHERENCY-SIZE\nL1d       48K     352K   12 Data            1    64        1             64\nL1i       64K     640K   16 Instruction     1    64        1             64\nL2         2M      10M   16 Unified         2  2048        1             64\nL3        12M      12M   12 Unified         3 16384        1             64",
+  "pinned_cpu": 2,
+  "compute_window": "One exclusive compute bench window for both builds and every method.",
+  "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO",
+  "builds": {
+    "generic": {
+      "rustflags": "-C target-cpu=x86-64"
+    },
+    "native": {
+      "rustflags": "-C target-cpu=native"
+    }
+  },
+  "features": [],
+  "seed": 8421,
+  "scalars": [
+    "f32",
+    "f64"
+  ],
+  "lengths": "0,1,7,8,9,33,256,5000,65536,1048576,4194304",
+  "rotating_target_bytes": 67108864,
+  "blocks": 6,
+  "samples_per_process": 2,
+  "elements_per_sample": 8000000,
+  "passes": "clamp(elements / max(rows * cols, 1), 1, 100000)",
+  "working_set": "Three independently generated padded column banks, cached sums, and saved centers and scales; each dot uses its own vector and weights.",
+  "warmup": "All methods and columns checked before timing; one extra pass before each sample.",
+  "order": "Build order reverses per block. Operation and method orders rotate by sample and block; the default six blocks place every method at each position twice.",
+  "verification": "Compensated f64 directly centered oracle on random inputs; tolerance 64*epsilon*max(sqrt(rows),1)*(1+abs(oracle)). All methods except Fused4 must also match production bits, treating NaNs by classification.",
+  "allocation_check": "Zero allocation or reallocation calls around every verified dot and timed sample.",
+  "numerics": "Tails, cancellation, large offsets, reduction and correction overflow, weighted multiply order, nonfinite values and parameters, and signed zeros.",
+  "sparse": "Public cached methods on unsorted duplicate entries and explicit zeros: five stored visits and vector reads at 17 and one billion logical rows; no vector sum or allocations.",
+  "checks_only": false,
+  "artifacts": "/home/jola/projects/lazymatrix/target/uncached-column-dots"
+}

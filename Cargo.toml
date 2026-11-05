@@ -244,3 +244,7 @@ required-features = ["faer_all", "nalgebra_all", "ndarray_all"]
 name = "column_updates"
 harness = false
 required-features = ["faer_all", "nalgebra_all", "ndarray_all"]
+
+[[bench]]
+name = "uncached_column_dots"
+harness = false

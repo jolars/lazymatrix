@@ -357,17 +357,19 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     consumer dependencies, sampling limits, and reproduction commands accompany
     the report.
 
-- [ ] Evaluate fused dense kernels for uncached column dots.
-  - Ordinary and weighted dots currently compute a vector sum before scanning
-    for the product. Prototype kernels that accumulate the product and its
-    centering correction in one pass, without materializing normalized entries.
-  - Compare against separate optimized reductions and cached-sum controls across
-    vector lengths and cache sizes. Preserve sparse O(nnz) cached products and
-    check cancellation, overflow, and nonfinite behavior.
-  - Keep this separate from fused sum-and-norm summaries. The existing [summary
-    experiment](benches/column_reductions/README.md#ndarray-production-measurements)
-    measured the fused prototype at 1.489 ms versus 1.250 ms for the production
-    pair; revisit that API only with new evidence from a concrete consumer.
+- [x] Evaluate fused dense kernels for uncached column dots.
+  - The
+    [investigation](benches/column_reductions/README.md#fused-uncached-column-dot-investigation)
+    compares three allocation-free prototypes with production, separate
+    optimized reductions, and cached-sum controls across vector lengths and
+    working-set sizes, both scalar types, and generic and CPU-specific builds.
+  - Fusion improves the largest tested vectors by 1.29–1.71 times but regresses
+    cache-resident cases. Retain the separate production kernels and cached
+    methods; length alone does not explain the crossover.
+  - Eight accumulators preserve production arithmetic, including cancellation,
+    overflow, and nonfinite behavior. Cached sparse products retain O(nnz) work.
+    Raw data, assembly, numerical counterexamples, and reproduction commands
+    accompany the report. The sum-and-norm summary API remains unchanged.
 
 - [ ] Explain the remaining cached-dot gap against native faer.
   - The [adapter
