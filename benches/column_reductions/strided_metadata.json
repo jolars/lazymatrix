@@ -1,0 +1,51 @@
+{
+  "measured_at": "2026-11-05T11:14:57.405465+00:00",
+  "revision": "fe416135c879b9112fb8a774a238978e3ae9937a",
+  "source_sha256": {
+    "Cargo.toml": "8ce721488ee8c28f47c7343d1101351cbd8d742fad21a5db04a1e03dab7d5d31",
+    "Cargo.lock": "27b6ae27cbc73fbe00ecfe718b57e0dc0498c7e057073f09f8e52eecb5a97fd6",
+    "rust-toolchain.toml": "e7c669a84e6912e76a8ef9c7b2240e5ca3a7d81b8005ee58bffd5f8287733ddd",
+    "src/reductions.rs": "dd203b7f22ea0f005d6ab1e0a5bb57ede8e42d6cf0b295228105e41afcec3193",
+    "src/column.rs": "5824c49fcd8a9811414dfd8eac4ee66b78f27e6149213bad7cc330d125344fde",
+    "src/traits/columns.rs": "acebda329c073aca7fbf8b5adb8d7cc1769ece0b60f668fb072197165106b1f3",
+    "src/traits/vectors.rs": "bde2a34fdf68c5df38de16d3c55fb7834459e9cd24ac24b0f0b1acee8edb5f0e",
+    "src/backends/ndarray/vector.rs": "99ad98ab166c93761d145ab185b9e09796058ba196fc5894f9be855d38685937",
+    "src/backends/faer/dense.rs": "5b824b482fab23b26f5c95dce4b043ec3b1572d117c2d8b7490a324333d2532b",
+    "src/backends/nalgebra/dense.rs": "2b1ccd75811da0cb442be36528c932c7d5b92b04a4449ab92fcdef8cc84eeb73",
+    "tests/common/backend_aliases.rs": "0702876026f701cfba8937792aa85e2bcd02e408d2fa8ae867488162b32c0ffe",
+    "benches/strided_column_reductions.rs": "d9c6b550ff1bed7044e5ca5487e8c1318a76523fe09e84ed66b86a1cdee9df20",
+    "benches/column_reductions/strided.py": "892c4149485ee1c6b124fe30e4e561ca75e25503655246cd87cdeb5c15ded0af"
+  },
+  "binary_sha256": "e086594945309c29982405e1b39a1745509ec53ca4f35f199c83515bea1af4df",
+  "assembly_sha256": "710bc1b2533398f980920fd86ef99b3a715edd2db9b643698717000c99b73a09",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  14\nOn-line CPU(s) list:                     0-13\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 155U\nCPU family:                              6\nModel:                                   170\nThread(s) per core:                      2\nCore(s) per socket:                      12\nSocket(s):                               1\nStepping:                                4\nMicrocode version:                       0x2b\nCPU(s) scaling MHz:                      37%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5376.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               352 KiB (10 instances)\nL1i cache:                               640 KiB (10 instances)\nL2 cache:                                10 MiB (5 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-13\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+  "pinned_cpu": 2,
+  "compute_window": "One exclusive compute bench window for the build, validation, and all methods.",
+  "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO",
+  "rustflags": "",
+  "features": [
+    "faer",
+    "nalgebra",
+    "ndarray"
+  ],
+  "backend_versions": "lazymatrix v0.10.0 (/home/jola/projects/lazymatrix)\n\u251c\u2500\u2500 faer v0.24.4\n\u251c\u2500\u2500 faer-traits v0.24.0\n\u251c\u2500\u2500 nalgebra v0.35.0\n\u251c\u2500\u2500 nalgebra-sparse v0.12.0\n\u251c\u2500\u2500 ndarray v0.17.2\n\u2514\u2500\u2500 num-traits v0.2.19\n    [build-dependencies]\n[dev-dependencies]\n\u251c\u2500\u2500 approx v0.5.1\n\u251c\u2500\u2500 criterion v0.8.2\n\u251c\u2500\u2500 memmap2 v0.9.12\n\u251c\u2500\u2500 ndarray-npy v0.10.0\n\u251c\u2500\u2500 rand v0.10.3\n\u251c\u2500\u2500 rand_chacha v0.10.0\n\u2514\u2500\u2500 tempfile v3.27.0",
+  "seed": 8421,
+  "scalars": [
+    "f32",
+    "f64"
+  ],
+  "shapes": "33x7,5000x64,5000x1000,262144x8",
+  "blocks": 4,
+  "samples_per_process": 5,
+  "elements_per_sample": 10000000,
+  "passes": "clamp(elements_per_sample / max(rows * cols, 1), 1, 10000)",
+  "warmup": "Every method and every column checked before timing each layout.",
+  "order": "Operation and method order reverses on alternate samples and blocks.",
+  "comparison": "Compensated f64 oracle; tolerance 32 * epsilon * max(sqrt(rows), 1) * (1 + abs(oracle)).",
+  "borrowing": "NaN padding and offset 3; logical slice and visitor contracts checked; memory order is private to the prototype.",
+  "alignment": "Untimed dot, signed weighted dot, and signed weighted norm checked in every layout against independent logical arithmetic.",
+  "artifacts": "/home/jola/projects/lazymatrix/target/strided-column-reductions"
+}

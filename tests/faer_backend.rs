@@ -744,6 +744,44 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn reversed_column_reductions_preserve_borrowed_ranges() {
+                struct Reversed<F>(Mat<F>);
+                impl<F> MatrixShape for Reversed<F> {
+                    fn nrows(&self) -> usize {
+                        self.0.nrows() - 6
+                    }
+                    fn ncols(&self) -> usize {
+                        1
+                    }
+                }
+                impl<F: lazymatrix::Scalar> lazymatrix::RawColumns<F> for Reversed<F> {
+                    type Column<'a>
+                        = faer::ColRef<'a, F>
+                    where
+                        Self: 'a;
+                    fn raw_column(&self, j: usize) -> Self::Column<'_> {
+                        assert_eq!(j, 0);
+                        self.0.col(1).subrows(3, self.nrows()).reverse_rows()
+                    }
+                }
+                fn reversed<F: lazymatrix::Scalar>(values: &[F]) -> Reversed<F> {
+                    Reversed(Mat::from_fn(values.len() + 6, 3, |i, j| {
+                        if j == 1 && (3..3 + values.len()).contains(&i) {
+                            values[values.len() - 1 - (i - 3)]
+                        } else {
+                            F::nan()
+                        }
+                    }))
+                }
+                common::run_reversed_column_reductions_suite::<f32, _, _>(reversed, |v| {
+                    Col::from_fn(v.len(), |i| v[i])
+                });
+                common::run_reversed_column_reductions_suite::<f64, _, _>(reversed, |v| {
+                    Col::from_fn(v.len(), |i| v[i])
+                });
+            }
+
+            #[test]
             fn vector_reductions() {
                 common::run_vector_reductions_suite::<f32, _>(|v| Col::from_fn(v.len(), |i| v[i]));
                 common::run_vector_reductions_suite::<f64, _>(|v| Col::from_fn(v.len(), |i| v[i]));
@@ -802,6 +840,13 @@ macro_rules! backend_suite {
                 let reversed = contiguous.reverse_rows();
                 let transposed = rows.as_ref().submatrix(1, 0, 1, 33).transpose();
                 assert!(contiguous.raw_column(0).dense_values().is_some());
+                assert!(reversed.raw_column(0).centered_sum_squares(0.375).is_some());
+                assert!(
+                    transposed
+                        .raw_column(0)
+                        .centered_sum_squares(0.375)
+                        .is_none()
+                );
                 for matrix in [reversed, transposed] {
                     assert!(matrix.raw_column(0).dense_values().is_none());
                 }

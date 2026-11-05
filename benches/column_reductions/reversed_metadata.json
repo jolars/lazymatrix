@@ -1,0 +1,70 @@
+{
+  "measured_at": "2026-11-05T12:14:51.233718+00:00",
+  "baseline_revision": "fe416135c879b9112fb8a774a238978e3ae9937a",
+  "candidate_base_revision": "fe416135c879b9112fb8a774a238978e3ae9937a",
+  "candidate_source_sha256": {
+    "Cargo.toml": "8ce721488ee8c28f47c7343d1101351cbd8d742fad21a5db04a1e03dab7d5d31",
+    "Cargo.lock": "27b6ae27cbc73fbe00ecfe718b57e0dc0498c7e057073f09f8e52eecb5a97fd6",
+    "rust-toolchain.toml": "e7c669a84e6912e76a8ef9c7b2240e5ca3a7d81b8005ee58bffd5f8287733ddd",
+    "src/column.rs": "07f038d7db726dcc74befb14aa7fbb6f74cda7dc1ce0d8c58654ebf92f088dc1",
+    "src/reductions.rs": "76245d2b156ffe2b79eb9d8a1cb1e2a0cae582d628249d76648f4a9a834f5820",
+    "src/traits/columns.rs": "c5118219db05daf2d747812fd50d3962a49ec1a6fad45c80ab7e03d7ab54e1f8",
+    "src/traits/vectors.rs": "bde2a34fdf68c5df38de16d3c55fb7834459e9cd24ac24b0f0b1acee8edb5f0e",
+    "src/backends/faer/dense.rs": "5e0d1db52adf653f785695283f3191991527ae9a204e0a83afb4e08b72e7c4ba",
+    "src/backends/ndarray/vector.rs": "b22ae3f8aac82518a9772645812a109c9481d75bdad12fb5f85ae79e0be44be2",
+    "src/backends/nalgebra/dense.rs": "2b1ccd75811da0cb442be36528c932c7d5b92b04a4449ab92fcdef8cc84eeb73",
+    "tests/common/backend_aliases.rs": "0702876026f701cfba8937792aa85e2bcd02e408d2fa8ae867488162b32c0ffe",
+    "benches/strided_column_reductions.rs": "d9c6b550ff1bed7044e5ca5487e8c1318a76523fe09e84ed66b86a1cdee9df20",
+    "benches/column_reductions/strided.py": "892c4149485ee1c6b124fe30e4e561ca75e25503655246cd87cdeb5c15ded0af",
+    "benches/column_reductions/reversed.py": "855821b3c7bd3842ad84c6c50627d64b4a61325b4de9fec2ef423b07d9f4924e",
+    "benches/column_reductions/reversed_consumer.rs": "683e7c07e951c0e0b3c77c408a95be446c6330a44c6fa87fce618db7f3c06ae0"
+  },
+  "binary_sha256": {
+    "baseline-kernel": "e086594945309c29982405e1b39a1745509ec53ca4f35f199c83515bea1af4df",
+    "baseline-consumer": "5f0d2cbd916e13cf1a2f0ae35e2608d308556248e86f6fdc0b40fabf42b4ee7c",
+    "candidate-kernel": "01720d5b4c7e84cbbbf95c0c37b7470b3f22f2de4f8af7a851fa0e942365cc06",
+    "candidate-consumer": "744f88b8796bbc9e30974b694057b910a0bc7386eff488f14231d7b3a8dbdb65"
+  },
+  "baseline_source_sha256": {
+    "Cargo.toml": "8ce721488ee8c28f47c7343d1101351cbd8d742fad21a5db04a1e03dab7d5d31",
+    "Cargo.lock": "27b6ae27cbc73fbe00ecfe718b57e0dc0498c7e057073f09f8e52eecb5a97fd6",
+    "rust-toolchain.toml": "e7c669a84e6912e76a8ef9c7b2240e5ca3a7d81b8005ee58bffd5f8287733ddd",
+    "src/column.rs": "5824c49fcd8a9811414dfd8eac4ee66b78f27e6149213bad7cc330d125344fde",
+    "src/reductions.rs": "dd203b7f22ea0f005d6ab1e0a5bb57ede8e42d6cf0b295228105e41afcec3193",
+    "src/traits/columns.rs": "acebda329c073aca7fbf8b5adb8d7cc1769ece0b60f668fb072197165106b1f3",
+    "src/traits/vectors.rs": "bde2a34fdf68c5df38de16d3c55fb7834459e9cd24ac24b0f0b1acee8edb5f0e",
+    "src/backends/faer/dense.rs": "5b824b482fab23b26f5c95dce4b043ec3b1572d117c2d8b7490a324333d2532b",
+    "src/backends/ndarray/vector.rs": "99ad98ab166c93761d145ab185b9e09796058ba196fc5894f9be855d38685937",
+    "src/backends/nalgebra/dense.rs": "2b1ccd75811da0cb442be36528c932c7d5b92b04a4449ab92fcdef8cc84eeb73",
+    "tests/common/backend_aliases.rs": "0702876026f701cfba8937792aa85e2bcd02e408d2fa8ae867488162b32c0ffe",
+    "benches/strided_column_reductions.rs": "d9c6b550ff1bed7044e5ca5487e8c1318a76523fe09e84ed66b86a1cdee9df20"
+  },
+  "shrinkage_revision": "87a735cdac7880cfe43a1219b19465587c1e9754",
+  "consumer_lock_sha256": "6170e4d6d948317d0c4f183ed4a09333f35d1e3ab4a4c7c688d5de9658fef74a",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  14\nOn-line CPU(s) list:                     0-13\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 155U\nCPU family:                              6\nModel:                                   170\nThread(s) per core:                      2\nCore(s) per socket:                      12\nSocket(s):                               1\nStepping:                                4\nMicrocode version:                       0x2b\nCPU(s) scaling MHz:                      34%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5376.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               352 KiB (10 instances)\nL1i cache:                               640 KiB (10 instances)\nL2 cache:                                10 MiB (5 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-13\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+  "pinned_cpu": 2,
+  "compute_window": "Both builds, kernel controls, and complete consumer fits in one exclusive compute bench window.",
+  "profile": "release, 16 codegen units, default LTO",
+  "rustflags": "",
+  "features": [
+    "faer",
+    "nalgebra",
+    "ndarray"
+  ],
+  "seed": 8421,
+  "shapes": "33x7,5000x64,5000x1000",
+  "scalars": [
+    "f32",
+    "f64"
+  ],
+  "blocks": 4,
+  "samples_per_process": 3,
+  "elements_per_sample": 10000000,
+  "order": "Process order alternates by block; kernel method and operation order alternates by sample and block.",
+  "consumer": "Shrinkage Lasso, 5000 x {64, 1000}, penalties 0.01 and 2, centered columns, fitted intercept, relative gap target 1e-8; forward and reverse borrowed ndarray views with aligned responses.",
+  "consumer_timing": "Complete fit; construction, verification, serialization, and returned-fit destruction outside timing.",
+  "consumer_checks": "Every warmup and timed fit independently checked with raw input products, primal and dual objectives, KKT violation, dual feasibility, and relative gap.",
+  "artifacts": "/dev/shm/lazymatrix-reversed-production-v3"
+}

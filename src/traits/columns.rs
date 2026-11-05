@@ -37,6 +37,21 @@ pub trait RawColumn<F: Scalar> {
         sum
     }
 
+    /// Optionally reduce `(value - center)^2` over the complete raw column.
+    ///
+    /// Subtract `center` before squaring each logical value. Include implicit
+    /// zeros and combine duplicate cells before applying this nonlinear map.
+    /// A specialization must take O(nnz) time and constant workspace without
+    /// materializing the column. Reduction order may follow storage order.
+    ///
+    /// The default reduces [`Self::dense_values`] and otherwise returns `None`,
+    /// leaving duplicate handling and implicit zeros to the caller's fallback.
+    /// This hook does not change the logical-order contract of borrowed slices.
+    fn centered_sum_squares(&self, center: F) -> Option<F> {
+        self.dense_values()
+            .map(|values| crate::reductions::centered_sum_squares(values, center))
+    }
+
     /// Add `raw_multiplier * raw_column + offset` to a dense destination.
     ///
     /// Sparse implementations take O(nnz) when `offset == 0`, and O(n + nnz)

@@ -234,3 +234,8 @@ required-features = ["faer_all", "nalgebra_all", "ndarray_all"]
 name = "vector_reductions"
 harness = false
 required-features = ["faer_all", "nalgebra_all", "ndarray_all"]
+
+[[bench]]
+name = "strided_column_reductions"
+harness = false
+required-features = ["faer_all", "nalgebra_all", "ndarray_all"]

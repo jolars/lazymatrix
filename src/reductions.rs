@@ -8,6 +8,14 @@ pub(crate) fn sum<F: Scalar>(values: &[F]) -> F {
 }
 
 #[inline]
+pub(crate) fn centered_sum_squares<F: Scalar>(values: &[F], center: F) -> F {
+    sum_map(values, |value| {
+        let deviation = value - center;
+        deviation * deviation
+    })
+}
+
+#[inline]
 pub(crate) fn sum_map<F: Scalar>(values: &[F], term: impl Fn(F) -> F) -> F {
     // Independent accumulators permit packed arithmetic without fast-math.
     let mut sums = [F::zero(); 8];

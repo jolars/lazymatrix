@@ -71,6 +71,17 @@ impl<F: Scalar> VectorViewMut<F> for ColMut<'_, F> {
     }
 }
 
+fn column_reduction_values<F>(column: ColRef<'_, F>) -> Option<&[F]> {
+    // Single-column reductions can borrow reversed unit-stride storage
+    // without changing the logical slices used by paired operations.
+    let column = if column.row_stride() == -1 {
+        column.reverse_rows()
+    } else {
+        column
+    };
+    column.try_as_col_major().map(|column| column.as_slice())
+}
+
 impl<F: Scalar> RawColumn<F> for ColRef<'_, F> {
     fn len(&self) -> usize {
         self.nrows()
@@ -82,6 +93,18 @@ impl<F: Scalar> RawColumn<F> for ColRef<'_, F> {
 
     fn dense_values(&self) -> Option<&[F]> {
         self.contiguous_values()
+    }
+
+    fn raw_sum(&self) -> F {
+        if let Some(values) = column_reduction_values(*self) {
+            return crate::reductions::sum(values);
+        }
+        (0..self.nrows()).fold(F::zero(), |sum, row| sum + self[row])
+    }
+
+    fn centered_sum_squares(&self, center: F) -> Option<F> {
+        column_reduction_values(*self)
+            .map(|values| crate::reductions::centered_sum_squares(values, center))
     }
 
     fn for_each_stored(&self, mut f: impl FnMut(usize, F)) {

@@ -150,11 +150,7 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
     /// duplicate indices use O(n + nnz) time and one O(n) working column to
     /// combine raw duplicates before squaring.
     pub fn norm_squared(&self) -> F {
-        if let Some(values) = self.raw.dense_values() {
-            let squared_deviations = crate::reductions::sum_map(values, |value| {
-                let deviation = value - self.center;
-                deviation * deviation
-            });
+        if let Some(squared_deviations) = self.raw.centered_sum_squares(self.center) {
             return squared_deviations / (self.scale * self.scale);
         }
         let mut stored_squared_deviations = F::zero();

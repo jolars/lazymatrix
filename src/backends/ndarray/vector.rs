@@ -37,6 +37,14 @@ where
     }
 }
 
+fn column_reduction_values<F, S>(column: &ArrayBase<S, Ix1>) -> Option<&[F]>
+where
+    S: Data<Elem = F>,
+{
+    // Older releases recognize some singleton layouts only as logical slices.
+    column.as_slice().or_else(|| column.as_slice_memory_order())
+}
+
 impl<F, S> RawColumn<F> for ArrayBase<S, Ix1>
 where
     F: Scalar,
@@ -48,6 +56,18 @@ where
 
     fn dense_values(&self) -> Option<&[F]> {
         self.as_slice()
+    }
+
+    fn raw_sum(&self) -> F {
+        if let Some(values) = column_reduction_values(self) {
+            return crate::reductions::sum(values);
+        }
+        self.iter().fold(F::zero(), |sum, &value| sum + value)
+    }
+
+    fn centered_sum_squares(&self, center: F) -> Option<F> {
+        column_reduction_values(self)
+            .map(|values| crate::reductions::centered_sum_squares(values, center))
     }
 
     fn stored_len(&self) -> usize {

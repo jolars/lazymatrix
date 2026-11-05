@@ -16,8 +16,8 @@ use lazymatrix::VectorView;
 use lazymatrix::{
     Centering, ColumnNormalization, ColumnStats, DotProduct, DotSlice, ElemDivAssign, L2Norm,
     LazyMatrix, LazySparseColumn, MatTransposeVec, MatTransposeVecInto, MatVec, MatVecInto,
-    MatrixShape, QuantileRange, RawColumns, ScaleAssign, ScaledAddAssign, ScaledSubSlice, Scaling,
-    SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
+    MatrixShape, QuantileRange, RawColumn, RawColumns, ScaleAssign, ScaledAddAssign,
+    ScaledSubSlice, Scaling, SparseColumns, SparseRows, SubScalarAssign, SumEntries, Transpose,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -2187,6 +2187,12 @@ pub fn run_column_reductions_suite<F, M, V>(
                 );
                 let column = matrix.column(0);
                 let logical: Vec<F> = raw.iter().map(|&x| (x - center) / scale).collect();
+                if let Some(squares) = column.raw().centered_sum_squares(center) {
+                    check(
+                        squares,
+                        raw.iter().map(|&x| (x - center) * (x - center)).sum(),
+                    );
+                }
                 check(column.sum(), logical.iter().copied().sum());
                 check(column.norm_squared(), logical.iter().map(|&x| x * x).sum());
                 let expected = logical.iter().zip(&vector).map(|(&x, &y)| x * y).sum();
@@ -2289,7 +2295,45 @@ pub fn run_column_reductions_suite<F, M, V>(
             column.weighted_norm_squared(&to_vector(&[F::one(); 17])),
             raw.iter().map(|&x| x * x).sum(),
         );
+        let matrix = LazyMatrix::from_column_parts(
+            build(&[F::one(); 17]),
+            Some(vec![exceptional]),
+            Some(vec![F::from_f64(-2.0).unwrap()]),
+        );
+        let deviation = (F::one() - exceptional) / F::from_f64(-2.0).unwrap();
+        check(
+            matrix.column(0).norm_squared(),
+            F::from_u32(17).unwrap() * deviation * deviation,
+        );
     }
+}
+
+/// Exercise storage-order reductions while logical borrowing stays unavailable.
+pub fn run_reversed_column_reductions_suite<F, M, V>(
+    build: impl Fn(&[F]) -> M,
+    to_vector: impl Fn(&[F]) -> V,
+) where
+    F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
+    M: RawColumns<F>,
+    V: VectorView<F>,
+{
+    run_column_reductions_suite(
+        |values| {
+            let matrix = build(values);
+            let column = matrix.raw_column(0);
+            assert!(
+                column.centered_sum_squares(F::zero()).is_some(),
+                "length {}",
+                values.len()
+            );
+            if values.len() > 1 {
+                assert!(column.dense_values().is_none());
+            }
+            drop(column);
+            matrix
+        },
+        to_vector,
+    );
 }
 
 /// Check that a vector hook borrows exactly the expected storage range.

@@ -244,6 +244,19 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn reversed_column_reductions_preserve_borrowed_ranges() {
+                fn reversed<F: lazymatrix::Scalar>(values: &[F]) -> Array2<F> {
+                    Array2::from_shape_fn((values.len() + 6, 3).f(), |(i, j)| {
+                        if j == 1 && (3..3 + values.len()).contains(&i) {
+                            values[values.len() - 1 - (i - 3)]
+                        } else { F::nan() }
+                    }).slice_move(s![3..3 + values.len();-1, 1..2])
+                }
+                common::run_reversed_column_reductions_suite::<f32, _, _>(reversed, |v| Array1::from_vec(v.to_vec()));
+                common::run_reversed_column_reductions_suite::<f64, _, _>(reversed, |v| Array1::from_vec(v.to_vec()));
+            }
+
+            #[test]
             fn vector_reductions() {
                 fn strided<F: lazymatrix::Scalar>(v: &[F], stride: isize) -> Array1<F> {
                     let mut storage = Array1::from_elem(2 * v.len() + 4, F::nan());
@@ -278,6 +291,11 @@ macro_rules! backend_suite {
                 assert_eq!(values.as_ptr(), &storage[(3, 2)] as *const f64);
                 assert!(storage.slice(s![..;2, ..]).raw_column(0).dense_values().is_none());
                 assert!(storage.slice(s![..;-1, ..]).raw_column(0).dense_values().is_none());
+                assert!(storage.slice(s![..;-1, ..]).raw_column(0).centered_sum_squares(0.375).is_some());
+                for stride in [2, -2] {
+                    assert!(storage.slice(s![..;stride, ..]).raw_column(0).centered_sum_squares(0.375).is_none());
+                }
+                assert!(input.slice(s![..;-1]).contiguous_values().is_none());
                 for vector in [input.slice(s![..;2]), input.slice(s![..;-2])] {
                     assert!(vector.contiguous_values().is_none());
                     let len = vector.len();
@@ -300,15 +318,19 @@ macro_rules! backend_suite {
                     let overflow: Vec<F> = (0..8).map(|i| if i%2==0 {F::max_value()} else {-F::max_value()}).collect();
                     for values in [cancellation, overflow] {
                         let raw = Array2::from_shape_vec((values.len(), 1), values).unwrap();
-                        let column = raw.column(0);
-                        let vector = Array1::from_elem(raw.nrows(), F::one());
-                        let expected_dot = ndarray::linalg::Dot::dot(&column, &vector.view());
-                        let expected_sum = column.into_dyn().sum();
-                        let matrix = LazyMatrix::<_, ColumnNormalizationParams<F>>::from_column_parts(&raw, None, None);
-                        let actual_dot = matrix.column(0).dot(&vector);
-                        let actual_sum = matrix.column(0).sum();
-                        if expected_dot.is_nan() { assert!(actual_dot.is_nan()); } else { assert_eq!(actual_dot, expected_dot); }
-                        if expected_sum.is_nan() { assert!(actual_sum.is_nan()); } else { assert_eq!(actual_sum, expected_sum); }
+                        for reverse in [false, true] {
+                            let mut view = raw.view();
+                            if reverse { view.invert_axis(ndarray::Axis(0)); }
+                            let column = view.column(0);
+                            let vector = Array1::from_elem(raw.nrows(), F::one());
+                            let expected_dot = ndarray::linalg::Dot::dot(&column, &vector.view());
+                            let expected_sum = column.into_dyn().sum();
+                            let matrix = LazyMatrix::<_, ColumnNormalizationParams<F>>::from_column_parts(view, None, None);
+                            let actual_dot = matrix.column(0).dot(&vector);
+                            let actual_sum = matrix.column(0).sum();
+                            if expected_dot.is_nan() { assert!(actual_dot.is_nan()); } else { assert_eq!(actual_dot, expected_dot); }
+                            if expected_sum.is_nan() { assert!(actual_sum.is_nan()); } else { assert_eq!(actual_sum, expected_sum); }
+                        }
                     }
                 }
                 check::<f32>();

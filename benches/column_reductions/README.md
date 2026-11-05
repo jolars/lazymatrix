@@ -6,7 +6,9 @@ vector sums use the same kernels, including the sums computed by uncached dots.
 This covers ndarray 0.15–0.17, faer 0.22–0.24, and nalgebra 0.32–0.35. The core
 shares the reduction implementation through optional `RawColumn::dense_values`
 and `VectorView::contiguous_values` hooks. Both owned and borrowed contiguous
-vectors expose the vector hook. Other storage and vector layouts retain their
+vectors expose the vector hook. Reversed unit-stride ndarray and faer columns
+also use storage-order sums and centered norms through `raw_sum` and
+`centered_sum_squares`. Other strided storage and vector layouts retain their
 default implementations.
 
 Reduction order follows the usual backend convention: rounding, cancellation,
@@ -14,6 +16,278 @@ and intermediate overflow may differ from sequential accumulation. The dense
 fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
+
+## Reversed unit-stride production reductions
+
+Ndarray 0.15–0.17 and faer 0.22–0.24 now reduce reversed unit-stride columns
+in memory order for raw sums and centered squared norms. The implementation
+reuses the shared eight-accumulator kernels without allocation. Ndarray checks
+logical slices first, preserving singleton layouts recognized by older releases,
+then tries its memory-order slice. Faer reverses a negative unit-stride view
+before borrowing its slice. Both paths respect the selected view's bounds.
+
+`RawColumn::centered_sum_squares(center)` is an optional reduction hook over
+the complete raw column. Its default uses `dense_values` and otherwise returns
+`None`. The contract requires direct centering before squaring, coalesced
+duplicates, implicit-zero contributions, and constant workspace. `LazyColumn`
+uses a supplied result before applying its squared scale correction. Sparse and
+unsupported strided columns retain the existing fallback. `dense_values`,
+`contiguous_values`, visitors, paired products, and updates retain logical order.
+
+The production comparison uses baseline revision `fe41613` and the candidate
+identified by [`reversed_metadata.json`](reversed_metadata.json). Both builds
+contain the same investigation probe. The following values are milliseconds per
+pass over reversed `f64` columns, using medians of 12 observations per build:
+
+| Backend | Shape          | Baseline sum | Production sum | Baseline norm | Production norm |
+| ------- | -------------- | -----------: | -------------: | ------------: | --------------: |
+| ndarray | 5,000 by 64    |       0.1391 |         0.0403 |        0.1477 |          0.0467 |
+| faer    | 5,000 by 64    |       0.1417 |         0.0403 |        0.1426 |          0.0472 |
+| ndarray | 5,000 by 1,000 |       2.5594 |         1.5557 |        2.8467 |          1.4757 |
+| faer    | 5,000 by 1,000 |       2.5666 |         1.5872 |        2.6689 |          1.5126 |
+
+On the smaller fixture, production `f64` sums improve by 3.45–3.52 times and
+norms by 3.02–3.17 times. The corresponding `f32` improvements are 4.74–4.80
+and 3.51–3.62 times. On the larger fixture, `f64` sums improve by 1.62–1.65
+times and norms by 1.76–1.93 times. Its `f32` sums improve by 2.82–2.85 times
+and norms by 2.68–2.95 times.
+
+Forward `f64` kernel controls for these backends stay within about 3% of
+baseline. Larger `f32` controls vary more, including a 16% slower ndarray sum.
+Unchanged native controls on these fixtures also vary by up to 16% in elapsed
+time. These controls limit claims about small performance differences. The
+reversed-column gains are substantially larger.
+[`reversed_summary.csv`](reversed_summary.csv)
+includes every layout, both scalar types, short columns, and inclusive
+interquartile intervals.
+
+The consumer runs the existing Shrinkage lasso solver at revision
+`87a735cdac7880cfe43a1219b19465587c1e9754`, with its algorithm unchanged in
+both builds. [`reversed_consumer.rs`](reversed_consumer.rs) generates seeded
+Fortran-contiguous inputs, borrows either their forward or reversed rows, and
+aligns the response with that view. Fits center columns, fit an intercept, and
+target a relative duality gap of 1e-8. Penalty 0.01 gives eight active
+coefficients and ten sweeps in every build; penalty 2 gives zero active
+coefficients and zero sweeps. Input construction and returned-fit destruction
+remain outside timing. All normalization, solver setup, iterations, and final
+diagnostics inside `Lasso::fit` are timed.
+
+Complete-fit times for reversed inputs, in milliseconds, with inclusive
+interquartile intervals:
+
+| Shape          | Penalty |                Baseline |              Production | Time reduction |
+| -------------- | ------: | ----------------------: | ----------------------: | -------------: |
+| 5,000 by 64    |    0.01 |    2.418 [2.401, 2.456] |    2.071 [2.047, 2.085] |          14.4% |
+| 5,000 by 64    |       2 |    1.183 [1.149, 1.305] |    0.840 [0.818, 0.861] |          29.0% |
+| 5,000 by 1,000 |    0.01 | 27.360 [27.188, 27.702] | 23.083 [23.019, 23.221] |          15.6% |
+| 5,000 by 1,000 |       2 | 19.390 [19.144, 19.470] | 14.840 [14.801, 14.984] |          23.5% |
+
+Forward consumer controls take 13.5–17.1% less time on the smaller fixture.
+On the larger fixture, the active fit takes 1.4% more time, and the zero fit
+takes 2.9% less time. The forward changes show that code generation and process
+variation also affect these comparisons; the complete-fit differences do not
+isolate summation order alone. The larger reversed cases still improve while
+their forward controls remain close to baseline.
+
+Each warmup and measured fit is checked outside timing with independently
+computed raw-input products, primal and dual objectives, KKT violations, dual
+feasibility, and a relative gap using the fit's reference loss. All 192 measured
+fits pass. The largest relative gap is 8.48e-15, largest KKT violation is
+2.95e-15, and largest feasibility excess is 5.09e-18.
+[`reversed_fits.csv`](reversed_fits.csv) preserves all measured results.
+
+The kernel probe preserves 18,288 timing observations and 7,968 aggregate
+accuracy and alignment checks in [`reversed_timings.csv`](reversed_timings.csv)
+and [`reversed_errors.csv`](reversed_errors.csv). All checks pass. It compares
+reversed unit strides, positive and negative stride-three views, row-major
+columns, and forward contiguous controls, using the fixtures described in the
+initial investigation below. General strided kernels remain unchanged.
+
+Both builds and all final measurements share one exclusive `compute bench`
+window, CPU 2 of an AMD Ryzen 9 7900, Rust 1.98.1, release optimization, and
+16 codegen units. Four blocks alternate baseline and candidate process order,
+with three observations per process and case. Kernel operation and method order
+reverse on alternate observations and blocks. Each kernel observation repeats a
+full pass `clamp(10_000_000 / max(rows * cols, 1), 1, 10000)` times. The two
+variants use separate Cargo target directories and the same
+dependency lockfiles. Metadata records source and binary hashes, sampling
+settings, compiler and CPU details, and the local artifact directory, which
+also retains assembly for every kernel codegen unit.
+
+Reproduce from the repository root with a local Shrinkage Git checkout:
+
+```sh
+compute bench --reason "Production reversed-column reductions" -- \
+    python benches/column_reductions/reversed.py \
+    target/reversed-column-production --shrinkage ../shrinkage
+```
+
+The runner exports the pinned baseline and consumer revisions, copies the
+candidate core into an isolated source tree, checks distinct kernel binaries,
+and generates the paired kernel and consumer data. It accepts `--baseline`,
+`--shrinkage-revision`, `--cpu`, `--blocks`, `--samples`, `--elements`, and
+`--shapes` overrides. [`reversed_consumer.lock`](reversed_consumer.lock) pins
+the standalone consumer dependencies. Set `CARGO_TARGET_DIR` to move build
+storage elsewhere; the runner creates one directory per variant beneath it.
+The measured run used `/dev/shm` because the main filesystem was nearly full.
+
+Validation passed `task fmt`, `task lint`, `task docs`, and the full `task test`
+backend, parallelism, and feature-unification matrix. Shared tests cover both
+scalar types across every supported ndarray and faer release, including borrowed
+ranges, reduction tails, large offsets, nonfinite entries and centers, and
+logical alignment for paired products. A core test verifies that logical norms
+use the optional reduction and apply their scale afterward. The runner passed
+Ruff, and the consumer passed Rustfmt and Clippy with warnings denied.
+
+The test matrix used a scratch Cargo target with debug information and
+incremental compilation disabled. A local Cargo wrapper discarded completed
+test and example executables between commands to keep storage bounded; it
+preserved Cargo arguments, dependencies, and exit statuses.
+
+## Reversed and strided column investigation
+
+The November 5, 2026 investigation compares the current library with independent
+prototypes in [`strided_column_reductions.rs`](../strided_column_reductions.rs).
+Memory-order reductions are a clear opportunity for reversed unit-stride
+columns. General strided reductions need a more selective policy: removing
+indexing overhead helps smaller working sets, but it does not consistently help
+large stride-three or row-major views. This investigation adds a reproducible
+probe and records the implementation options used by the production follow-up
+above.
+
+The probe measures raw sums through `RawColumn::raw_sum` and centered squared
+norms through `LazyColumn::norm_squared`. Norms subtract center 0.375 before
+squaring and divide by scale -1.75 squared. Its controls are a serial indexed
+fold, eight indexed accumulators (`Indexed8`), eight pointer-based accumulators
+over the backend's actual row stride (`Pointer8`), and eight accumulators over a
+borrowed memory-order slice (`Memory8`). Native backend sums provide another
+control. Centered-norm controls use the explicit per-entry kernels above.
+
+Ndarray supplies memory-order slices directly. Faer reverses negative-stride
+column views before borrowing their unit-stride slices. Nalgebra supports the
+positive-stride cases; its unsigned strides cannot represent reversed views.
+The pointer prototype obtains each column's pointer and stride from the backend
+view, uses constant workspace, and makes no allocation. These prototypes keep
+memory-order access separate from `dense_values` and `contiguous_values`, whose
+entries must follow logical row order.
+
+The following times are milliseconds per pass over all columns, for `f64`.
+Each value is the median of 20 observations. `Current` identifies the library
+path, and `Memory8` identifies the memory-order prototype:
+
+| Backend | Shape          | Current sum | Memory8 sum | Current norm | Memory8 norm |
+| ------- | -------------- | ----------: | ----------: | -----------: | -----------: |
+| ndarray | 5,000 by 64    |      0.1448 |      0.0400 |       0.1560 |       0.0495 |
+| faer    | 5,000 by 64    |      0.1441 |      0.0391 |       0.1537 |       0.0492 |
+| ndarray | 5,000 by 1,000 |      2.6567 |      1.5736 |       3.0314 |       1.4497 |
+| faer    | 5,000 by 1,000 |      2.6627 |      1.5392 |       2.7865 |       1.4594 |
+
+On the smaller reversed fixture, memory order improves sums by 3.62–3.68 times
+and norms by 3.13–3.15 times. For `f32`, the corresponding improvements are
+4.83–5.04 and 3.55–3.72 times. The larger reversed fixture improves by
+1.69–1.73 times for `f64` sums and 1.91–2.09 times for norms. Its `f32` sums and
+norms improve by about three times. Native ndarray and faer sums also use the
+opportunity offered by reversed unit strides.
+
+The next table compares the current path with `Pointer8` on genuinely strided
+columns. Each entry is current time divided by prototype time, so values above
+one favor the prototype. All entries use `f64`:
+
+| Backend  | Layout    | Sum, 64 columns | Norm, 64 columns | Sum, 1,000 columns | Norm, 1,000 columns |
+| -------- | --------- | --------------: | ---------------: | -----------------: | ------------------: |
+| ndarray  | stride 3  |            1.30 |             1.42 |               0.99 |                0.89 |
+| ndarray  | stride -3 |            1.33 |             1.48 |               1.03 |                0.98 |
+| ndarray  | row-major |            1.25 |             1.34 |               0.98 |                0.92 |
+| faer     | stride 3  |            1.32 |             1.39 |               0.98 |                0.94 |
+| faer     | stride -3 |            1.35 |             1.41 |               1.02 |                0.99 |
+| faer     | row-major |            1.24 |             1.26 |               0.97 |                0.92 |
+| nalgebra | stride 3  |            1.33 |             1.40 |               0.98 |                0.94 |
+| nalgebra | row-major |            1.19 |             1.26 |               0.98 |                0.93 |
+
+Every column in this table has 5,000 entries. Removing indexing checks and using
+independent accumulators improves the smaller views, but the larger views show
+little sum improvement and several norm regressions. `Indexed8` is generally
+less effective than `Pointer8` on the smaller fixture. The difference between
+these controls separates some indexing overhead from the reduction itself.
+The weaker large-layout results are consistent with memory access dominating
+more of the runtime; the probe does not collect hardware counters. Short columns
+also need care: for the 33-by-7 fixture, some `Pointer8` sums take up to 44% more
+time than the current path. The full summary includes both scalar types and
+the tall 262,144-by-8 control.
+
+These results support backend-specific memory-order sums and directly centered
+norms for reversed unit-stride columns. Sums can specialize the existing
+`raw_sum` hook. Norms need a reduction hook that permits storage order,
+while preserving direct centering and leaving logical borrowing unchanged.
+The results do not justify replacing every strided fallback with the same
+eight-accumulator kernel. A production integration should preserve the existing
+contiguous path and evaluate a consumer before choosing a general stride policy.
+
+The probe uses `ChaCha8Rng`, seed 8421, for uniform values in \[-1, 1). Both scalar
+types share the same generation recipe. Each allocation has NaN padding, an
+offset of three entries, and gaps between columns or rows. Column-major views
+use column stride `rows + 6`; stride-three views use column stride
+`3 * rows + 6`; row-major views use row stride `cols + 6`. Reversed layouts
+reverse the logical rows without copying. The small and large fixtures therefore
+separate layout effects without reusing the historical Shrinkage input or its
+absolute timings.
+
+Before timing, every column and method is checked against compensated `f64`
+arithmetic. Distinct logical vectors and signed weights independently check dots,
+weighted dots, and weighted norms, including reversed columns. Visitor order and
+the contents of every exposed logical slice are checked as well. Empty columns
+and lengths 1, 7, 8, 9, 15, 16, 17, 31, 32, and 33 run separately without timing.
+The comparison tolerance is
+`32 * epsilon * max(sqrt(rows), 1) * (1 + abs(oracle))`. All 8,988 aggregate
+accuracy and alignment records pass. Among the three eight-accumulator
+prototypes, the largest error divided by `1 + abs(oracle)` is 3.03e-5 for `f32`
+and 1.30e-12 for `f64`. These are observed errors, not accuracy guarantees.
+
+The separate 990-row numerical record checks explicit NaNs and infinities,
+empty inputs, and large-offset centered norms, and records cancellation and
+intermediate-overflow counterexamples. Eight accumulators can lose a unit that
+the serial fold retains or recover units it loses. Alternating maximum finite
+values can sum to zero serially and NaN after reordering. Memory order and
+logical order can also differ on these fixtures. The investigation accepts the
+library's existing backend-dependent reduction order; it does not assume
+bitwise or IEEE-class agreement for every finite input.
+
+All final methods run in one exclusive `compute bench` window on CPU 2 of an
+AMD Ryzen 9 7900, with Rust 1.98.1, release optimization, 16 codegen units, and
+the `faer,nalgebra,ndarray` features. Four processes each collect five
+observations. Operation and method order reverse on alternate observations and
+processes. Each observation repeats a full-column pass
+`clamp(10_000_000 / max(rows * cols, 1), 1, 10000)` times. Construction,
+normalization parameters, verification, and serialization remain outside timing.
+Every method uses the same non-inlined dispatch boundary.
+
+[`strided_timings.csv`](strided_timings.csv) contains all 20,320 timing
+observations; [`strided_summary.csv`](strided_summary.csv) reports medians and
+inclusive interquartile intervals. [`strided_errors.csv`](strided_errors.csv)
+and [`strided_numerics.csv`](strided_numerics.csv) retain the checks described
+above. [`strided_metadata.json`](strided_metadata.json) records source, binary,
+and assembly hashes, backend and compiler versions, CPU details, sampling
+settings, and the local artifact directory. The runner preserves assembly there.
+
+Reproduce the investigation from the repository root:
+
+```sh
+compute bench --reason "Reversed and strided column reductions" -- \
+    python benches/column_reductions/strided.py \
+    target/strided-column-reductions --blocks 4 --samples 5 \
+    --elements 10000000 --shapes 33x7,5000x64,5000x1000,262144x8
+```
+
+The runner builds one binary containing the current path and every control,
+checks numerical edge cases and short lengths, performs the comparison, and
+writes the combined data, summary, and metadata. `--cpu`, `--blocks`,
+`--samples`, `--elements`, and `--shapes` override its settings. Backend-specific
+measurements cover ndarray 0.17.2, faer 0.24.4, and nalgebra 0.35.0.
+
+Validation passed all 57 dense-backend tests for the measured feature set,
+`task fmt`, Clippy for the new benchmark, Rustdoc with warnings denied, and Ruff
+lint and formatting checks for the runner. The benchmark also compiles with the
+oldest supported dense releases: ndarray 0.15, faer 0.22, and nalgebra 0.32.
 
 ## Remaining solver-facing vector reductions
 

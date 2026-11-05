@@ -319,18 +319,27 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     existing ridge consumer takes 6–14% less time. Raw data, numerical checks,
     short-vector tradeoffs, and reproduction commands accompany the report.
 
-- [ ] Investigate reductions over reversed and strided columns.
-  - The [layout
-    investigation](benches/column_reductions/README.md#layout-and-numerical-checks)
-    measured reversed-row sums at 3.329 ms for the logical visitor versus 0.610
-    ms for ndarray's memory-order reduction. Current contiguous hooks leave
-    these views on their fallback paths.
-  - Evaluate backend-specific memory-order sums and centered norms, along with
-    independent accumulators for strided reductions. Preserve logical row
-    alignment for dots and weighted operations; do not weaken the logical-order
-    contracts of `dense_values` or `contiguous_values`.
-  - Measure reversed views, arbitrary strides, and row-major columns separately
-    to distinguish reduction overhead from the cost of memory access.
+- [x] Investigate reductions over reversed and strided columns.
+  - The [measurements](benches/column_reductions/README.md#reversed-and-strided-column-investigation)
+    compare memory-order sums and centered norms with indexed and pointer-based
+    independent accumulators on ndarray, faer, and nalgebra.
+  - Reversed unit-stride reductions benefit from memory order. General strided
+    kernels help smaller working sets but do not consistently help larger
+    stride-three or row-major views. The report records implementation options
+    that preserve logical borrowing contracts.
+  - Separate reversed, positive- and negative-stride, and row-major measurements
+    cover both scalar types, short tails, and multiple working-set sizes. Logical
+    dots and weighted operations pass independent alignment checks. Raw data,
+    numerical counterexamples, and reproduction commands accompany the report.
+
+- [x] Implement memory-order reductions for reversed unit-stride columns.
+  - Ndarray and faer reuse the shared sum and directly centered norm kernels.
+    `RawColumn::centered_sum_squares` separates reduction order from logical
+    borrowing. Sparse and general strided fallbacks retain their behavior.
+  - The [production measurements](benches/column_reductions/README.md#reversed-unit-stride-production-reductions)
+    compare kernels and complete Shrinkage fits. Reversed fits use 14–29% less
+    time, and all numerical checks pass. Tests exercise every supported release,
+    both scalar types, borrowed ranges, nonfinite values, and logical alignment.
 
 - [ ] Benchmark contiguous fast paths for logical column updates.
   - `scaled_add_to` delegates to `RawColumn::affine_add_to`, whose dense
