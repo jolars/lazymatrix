@@ -82,6 +82,9 @@ where
 {
     fn dot(&self, other: &Self) -> F {
         assert_eq!(self.shape(), other.shape(), "dot: length mismatch");
+        if let (Some(left), Some(right)) = (self.as_slice(), other.as_slice()) {
+            return crate::reductions::dot(left, right);
+        }
         self.iter().zip(other.iter()).map(|(&a, &b)| a * b).sum()
     }
 }
@@ -92,6 +95,9 @@ where
     S: Data<Elem = F>,
 {
     fn norm_l2(&self) -> F {
+        if let Some(values) = self.as_slice() {
+            return crate::reductions::sum_map(values, |value| value * value).sqrt();
+        }
         self.iter().map(|&value| value * value).sum::<F>().sqrt()
     }
 }
@@ -149,6 +155,9 @@ where
 {
     fn dot_slice(&self, coeffs: &[F]) -> F {
         assert_eq!(self.shape()[0], coeffs.len(), "dot_slice: length mismatch");
+        if let Some(values) = self.as_slice() {
+            return crate::reductions::dot(values, coeffs);
+        }
         self.iter()
             .zip(coeffs)
             .map(|(&value, &coefficient)| value * coefficient)
@@ -174,6 +183,9 @@ where
     S: Data<Elem = F>,
 {
     fn sum_entries(&self) -> F {
+        if let Some(values) = self.as_slice() {
+            return crate::reductions::sum(values);
+        }
         self.iter().copied().sum()
     }
 }

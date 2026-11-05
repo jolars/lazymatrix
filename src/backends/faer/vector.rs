@@ -6,7 +6,7 @@ use faer::Col;
 
 use crate::traits::{
     DotProduct, DotSlice, ElemDivAssign, L2Norm, Scalar, ScaleAssign, ScaledAddAssign,
-    ScaledSubSlice, SubScalarAssign, SumEntries,
+    ScaledSubSlice, SubScalarAssign, SumEntries, VectorView,
 };
 
 // --- vector traits on Col<F> (scalar arithmetic only: bound F: Scalar) -------
@@ -14,6 +14,9 @@ use crate::traits::{
 impl<F: Scalar> DotProduct<F> for Col<F> {
     fn dot(&self, other: &Self) -> F {
         assert_eq!(self.nrows(), other.nrows(), "dot: length mismatch");
+        if let (Some(left), Some(right)) = (self.contiguous_values(), other.contiguous_values()) {
+            return crate::reductions::dot(left, right);
+        }
         (0..self.nrows()).map(|i| self[i] * other[i]).sum()
     }
 }
@@ -64,6 +67,9 @@ impl<F: Scalar> ElemDivAssign<F> for Col<F> {
 impl<F: Scalar> DotSlice<F> for Col<F> {
     fn dot_slice(&self, coeffs: &[F]) -> F {
         assert_eq!(self.nrows(), coeffs.len(), "dot_slice: length mismatch");
+        if let Some(values) = self.contiguous_values() {
+            return crate::reductions::dot(values, coeffs);
+        }
         (0..self.nrows()).map(|j| self[j] * coeffs[j]).sum()
     }
 }
@@ -78,7 +84,7 @@ impl<F: Scalar> SubScalarAssign<F> for Col<F> {
 
 impl<F: Scalar> SumEntries<F> for Col<F> {
     fn sum_entries(&self) -> F {
-        (0..self.nrows()).map(|j| self[j]).sum()
+        VectorView::sum(self)
     }
 }
 

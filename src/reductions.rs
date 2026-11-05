@@ -1,4 +1,4 @@
-//! Contiguous reductions shared by storage-independent column operations.
+//! Contiguous reductions shared by vector and column operations.
 
 use crate::Scalar;
 

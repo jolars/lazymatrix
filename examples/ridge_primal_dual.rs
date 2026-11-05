@@ -8,7 +8,7 @@
 //! Run with: `cargo run --example ridge_primal_dual --features faer`
 
 #[path = "../tests/common/backend_aliases.rs"]
-mod backend_aliases;
+pub(crate) mod backend_aliases;
 use backend_aliases::*;
 
 use faer::Col;
@@ -53,7 +53,7 @@ where
 }
 
 /// Minimize `||A beta - y||² / 2 + penalty * ||beta||² / 2`.
-fn ridge<M>(design: &M, response: &Col<f64>, penalty: f64) -> Result<Col<f64>, M::Error>
+pub(crate) fn ridge<M>(design: &M, response: &Col<f64>, penalty: f64) -> Result<Col<f64>, M::Error>
 where
     M: MatVecInto<Col<f64>> + MatTransposeVecInto<Col<f64>>,
 {

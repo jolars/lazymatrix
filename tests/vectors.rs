@@ -6,6 +6,12 @@ use lazymatrix::{
 };
 
 #[test]
+fn vector_reductions() {
+    common::run_vector_reductions_suite::<f32, _>(|v| v.to_vec());
+    common::run_vector_reductions_suite::<f64, _>(|v| v.to_vec());
+}
+
+#[test]
 fn vec_algebra_and_normalization_work_without_a_backend() {
     common::vector_algebra(&|v| v.to_vec(), &Clone::clone);
     let mut values = vec![6.0, -8.0, 10.0];

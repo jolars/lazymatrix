@@ -1858,6 +1858,73 @@ fn reusable_output_parity<M, V>(
     assert!(from_v(&empty).is_empty());
 }
 
+/// Check vector reductions against indexed arithmetic for both scalar types.
+pub fn run_vector_reductions_suite<F, V>(to_vector: impl Fn(&[F]) -> V)
+where
+    F: lazymatrix::Scalar + approx::RelativeEq<Epsilon = F>,
+    V: DotProduct<F> + DotSlice<F> + L2Norm<F> + SumEntries<F>,
+{
+    let epsilon = F::epsilon() * F::from_u32(128).unwrap();
+    let check = |actual: F, expected: F| {
+        if expected.is_nan() {
+            assert!(actual.is_nan());
+        } else if expected.is_infinite() {
+            assert_eq!(actual, expected);
+        } else {
+            approx::assert_relative_eq!(
+                actual,
+                expected,
+                epsilon = epsilon,
+                max_relative = epsilon
+            );
+        }
+    };
+    let mut rng = ChaCha8Rng::seed_from_u64(8421);
+    for len in (0..=33).chain([65, 129, 257, 5000]) {
+        let values: Vec<F> = (0..len)
+            .map(|_| F::from_i32(rng.random_range(-16..=16)).unwrap() / F::from_u32(8).unwrap())
+            .collect();
+        let coefficients: Vec<F> = (0..len)
+            .map(|_| F::from_i32(rng.random_range(-16..=16)).unwrap() / F::from_u32(16).unwrap())
+            .collect();
+        let vector = to_vector(&values);
+        let other = to_vector(&coefficients);
+        let expected_dot = values.iter().zip(&coefficients).map(|(&a, &b)| a * b).sum();
+        check(vector.dot(&other), expected_dot);
+        check(vector.dot_slice(&coefficients), expected_dot);
+        check(vector.sum_entries(), values.iter().copied().sum());
+        check(
+            vector.norm_l2(),
+            values.iter().map(|&v| v * v).sum::<F>().sqrt(),
+        );
+        if len > 0 {
+            let short = to_vector(&values[..len - 1]);
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| vector.dot(&short)))
+                    .is_err()
+            );
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                    || vector.dot_slice(&coefficients[..len - 1])
+                ))
+                .is_err()
+            );
+        }
+    }
+    for exceptional in [F::nan(), F::infinity(), F::neg_infinity()] {
+        for index in [0, 7, 8, 16] {
+            let mut values = vec![F::one(); 17];
+            values[index] = exceptional;
+            let vector = to_vector(&values);
+            let ones = to_vector(&[F::one(); 17]);
+            check(vector.sum_entries(), exceptional);
+            check(vector.dot(&ones), exceptional);
+            check(vector.dot_slice(&[F::one(); 17]), exceptional);
+            check(vector.norm_l2(), exceptional.abs());
+        }
+    }
+}
+
 pub fn vector_algebra<V>(to_v: &impl Fn(&[f64]) -> V, from_v: &impl Fn(&V) -> Vec<f64>)
 where
     V: DotProduct<f64> + L2Norm<f64> + ScaledAddAssign<f64> + ScaleAssign<f64>,

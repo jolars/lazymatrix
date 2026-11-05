@@ -137,6 +137,9 @@ impl<F: Scalar, const N: usize> VectorViewMut<F> for [F; N] {
 
 /// Dot product of two backend vectors: `Σ self[i] · other[i]`.
 ///
+/// Reduction order can depend on storage, as in native backend reductions.
+/// Rounding and intermediate overflow may differ from sequential accumulation.
+///
 /// # Panics
 ///
 /// Panics if the vectors have different lengths.
@@ -145,6 +148,9 @@ pub trait DotProduct<F: Scalar> {
 }
 
 /// Euclidean norm of a backend vector.
+///
+/// Reduction order and protection against intermediate overflow and underflow
+/// depend on the backend. Core vectors use the square root of a sum of squares.
 pub trait L2Norm<F: Scalar> {
     fn norm_l2(&self) -> F;
 }
@@ -175,6 +181,7 @@ pub trait ElemDivAssign<F: Scalar> {
 /// Dot product of `self` with a coefficient slice: `Σ self[i] · coeffs[i]`.
 ///
 /// Used to form the scalar `cᵀw` in the forward operator.
+/// Reduction order can depend on storage, as with [`DotProduct`].
 pub trait DotSlice<F: Scalar> {
     fn dot_slice(&self, coeffs: &[F]) -> F;
 }
@@ -189,6 +196,7 @@ pub trait SubScalarAssign<F: Scalar> {
 /// Sum of all entries: `Σ self[i]`.
 ///
 /// Used to form `Σu` in the transpose operator.
+/// Reduction order can depend on storage, as with [`VectorView::sum`].
 pub trait SumEntries<F: Scalar> {
     fn sum_entries(&self) -> F;
 }
@@ -208,7 +216,7 @@ impl<F: Scalar> DotProduct<F> for Vec<F> {
 
 impl<F: Scalar> L2Norm<F> for Vec<F> {
     fn norm_l2(&self) -> F {
-        self.iter().map(|&value| value * value).sum::<F>().sqrt()
+        crate::reductions::sum_map(self, |value| value * value).sqrt()
     }
 }
 
@@ -245,7 +253,7 @@ impl<F: Scalar> ElemDivAssign<F> for Vec<F> {
 impl<F: Scalar> DotSlice<F> for Vec<F> {
     fn dot_slice(&self, coeffs: &[F]) -> F {
         assert_eq!(self.len(), coeffs.len(), "dot_slice: length mismatch");
-        self.iter().zip(coeffs).map(|(&a, &b)| a * b).sum()
+        crate::reductions::dot(self, coeffs)
     }
 }
 
@@ -259,7 +267,7 @@ impl<F: Scalar> SubScalarAssign<F> for Vec<F> {
 
 impl<F: Scalar> SumEntries<F> for Vec<F> {
     fn sum_entries(&self) -> F {
-        self.iter().copied().sum()
+        crate::reductions::sum(self)
     }
 }
 

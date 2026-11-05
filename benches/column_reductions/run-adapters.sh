@@ -14,6 +14,9 @@ baseline="$output/baseline-source"
 mkdir -p "$baseline"
 git -C "$repository" archive "$baseline_ref" | tar -x -C "$baseline"
 cp "$repository/benches/$benchmark.rs" "$baseline/benches/"
+if [[ $benchmark == vector_reductions ]]; then
+    cp "$repository/examples/ridge_primal_dual.rs" "$baseline/examples/"
+fi
 if ! rg -q "^name = \"$benchmark\"$" "$baseline/Cargo.toml"; then
     cat >>"$baseline/Cargo.toml" <<TOML
 
@@ -103,10 +106,12 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 sources = ["Cargo.toml", "Cargo.lock", "src/backends/faer/dense.rs",
+           "src/backends/faer/vector.rs", "src/backends/nalgebra/vector.rs",
            "src/backends/nalgebra/dense.rs", "src/column.rs", "src/reductions.rs",
            "src/traits/vectors.rs", "src/backends/ndarray/vector.rs",
            f"benches/{benchmark}.rs", "benches/column_reductions/run-adapters.sh"]
 metadata = {
+    "benchmark": benchmark,
     "measured_at": datetime.now(timezone.utc).isoformat(),
     "baseline_revision": command("git", "rev-parse", baseline_ref),
     "candidate_base_revision": command("git", "rev-parse", "HEAD"),
@@ -134,5 +139,20 @@ metadata = {
     "order": "Baseline/candidate process order alternates by block; operation/method order alternates by sample.",
     "comparison": "Each column checked against sequential indexed arithmetic, tolerance 1e-10 * (1 + abs(expected)).",
 }
+if benchmark == "vector_reductions":
+    sources.extend(["examples/ridge_primal_dual.rs", "benches/column_reductions/summarize-vectors.py"])
+    metadata["candidate_source_sha256"] = {source: sha(repository / source) for source in sources}
+    for key in ["rows", "cols", "passes_per_sample"]:
+        del metadata[key]
+    metadata.update({
+        "scalar": ["f32", "f64"],
+        "lengths": [int(value) for value in os.environ.get("PROBE_LENGTHS", "0,1,7,8,9,33,256,5000,262144").split(",")],
+        "elements_per_sample": int(os.environ.get("PROBE_ELEMENTS", "1000000")),
+        "repetitions": "clamp(elements_per_sample / max(length, 1), 8, 100000)",
+        "fits_per_sample": int(os.environ.get("PROBE_FITS", "10")),
+        "consumer": "Existing ridge_primal_dual example, with 512 x 512 and 32768 x 256 sparse designs, four triplets per row, center 0.001, scale 1.75, penalty 2.",
+        "warmup": "All reductions and both complete fits checked before timing each case.",
+        "comparison": "Reductions checked against compensated f64 arithmetic; complete fits checked with independently computed objective and gradient.",
+    })
 (output / f"{prefix}_metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 PY

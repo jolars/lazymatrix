@@ -351,6 +351,12 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn vector_reductions() {
+                common::run_vector_reductions_suite::<f32, _>(DVector::from_column_slice);
+                common::run_vector_reductions_suite::<f64, _>(DVector::from_column_slice);
+            }
+
+            #[test]
             fn contiguous_column_and_vector_slices_preserve_view_offsets() {
                 use lazymatrix::RawColumns;
                 for len in [0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 65] {

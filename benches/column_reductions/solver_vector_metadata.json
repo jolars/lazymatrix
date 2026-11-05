@@ -1,0 +1,70 @@
+{
+  "benchmark": "vector_reductions",
+  "measured_at": "2026-11-05T08:15:23.610847+00:00",
+  "baseline_revision": "8750c46a3ac1852a84403c82c952ce025dbb3bb4",
+  "candidate_base_revision": "8750c46a3ac1852a84403c82c952ce025dbb3bb4",
+  "candidate_has_uncommitted_changes": true,
+  "candidate_source_sha256": {
+    "Cargo.toml": "a866c8d4185cad28ca27e1d1ec81272886092ea21894424fa1af5349ec68d1dd",
+    "Cargo.lock": "27b6ae27cbc73fbe00ecfe718b57e0dc0498c7e057073f09f8e52eecb5a97fd6",
+    "src/backends/faer/dense.rs": "5b824b482fab23b26f5c95dce4b043ec3b1572d117c2d8b7490a324333d2532b",
+    "src/backends/faer/vector.rs": "737afd31c295b68ad140201eb260bd22a40394ae5e585417217169f117004778",
+    "src/backends/nalgebra/vector.rs": "a45d751322a0a04cfe64b50c6e92632eb1b7b0c8707fe9b7ea3691882060f68f",
+    "src/backends/nalgebra/dense.rs": "2b1ccd75811da0cb442be36528c932c7d5b92b04a4449ab92fcdef8cc84eeb73",
+    "src/column.rs": "5824c49fcd8a9811414dfd8eac4ee66b78f27e6149213bad7cc330d125344fde",
+    "src/reductions.rs": "dd203b7f22ea0f005d6ab1e0a5bb57ede8e42d6cf0b295228105e41afcec3193",
+    "src/traits/vectors.rs": "bde2a34fdf68c5df38de16d3c55fb7834459e9cd24ac24b0f0b1acee8edb5f0e",
+    "src/backends/ndarray/vector.rs": "99ad98ab166c93761d145ab185b9e09796058ba196fc5894f9be855d38685937",
+    "benches/vector_reductions.rs": "bccbbb0340dbb2c5fd92bbf9d5daaadc5f9d0a54dcdf8a5e5e895a97360e5d01",
+    "benches/column_reductions/run-adapters.sh": "91071f2728695d66dca49b5f6deeca5971f92ae617751170627be7223edf1bc4",
+    "examples/ridge_primal_dual.rs": "8712aac3a72518a388e95c99e65b6c8977402d1ac9af6e95d012c1951d47d5a6",
+    "benches/column_reductions/summarize-vectors.py": "cac5ac27190e20b0c4d7e0e0385c60c30588c2844621e0df0469a58200d40c8a"
+  },
+  "binary_sha256": {
+    "baseline": "cbc479e75e6109f4d1f77b4e020ac7b1f67b0f9c4d5fc98098ba8f409dedd7b1",
+    "candidate": "680208eed3fff972f984bc9d4fab55c70a83aadada4b20d276b8817b8a5848f4"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  14\nOn-line CPU(s) list:                     0-13\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 155U\nCPU family:                              6\nModel:                                   170\nThread(s) per core:                      2\nCore(s) per socket:                      12\nSocket(s):                               1\nStepping:                                4\nMicrocode version:                       0x2b\nCPU(s) scaling MHz:                      47%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5376.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               352 KiB (10 instances)\nL1i cache:                               640 KiB (10 instances)\nL2 cache:                                10 MiB (5 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-13\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+  "pinned_cpu": 2,
+  "compute_window": "One exclusive compute bench window for both builds and all measurements.",
+  "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO, generic x86-64",
+  "rustflags": "",
+  "features": [
+    "faer",
+    "nalgebra",
+    "ndarray"
+  ],
+  "backend_versions": {
+    "faer": "0.24.4",
+    "nalgebra": "0.35.0",
+    "ndarray": "0.17.2"
+  },
+  "seed": 8421,
+  "scalar": [
+    "f32",
+    "f64"
+  ],
+  "blocks": 6,
+  "samples_per_process": 5,
+  "warmup": "All reductions and both complete fits checked before timing each case.",
+  "order": "Baseline/candidate process order alternates by block; operation/method order alternates by sample.",
+  "comparison": "Reductions checked against compensated f64 arithmetic; complete fits checked with independently computed objective and gradient.",
+  "lengths": [
+    0,
+    1,
+    7,
+    8,
+    9,
+    33,
+    256,
+    5000,
+    262144
+  ],
+  "elements_per_sample": 5000000,
+  "repetitions": "clamp(elements_per_sample / max(length, 1), 8, 100000)",
+  "fits_per_sample": 30,
+  "consumer": "Existing ridge_primal_dual example, with 512 x 512 and 32768 x 256 sparse designs, four triplets per row, center 0.001, scale 1.75, penalty 2."
+}

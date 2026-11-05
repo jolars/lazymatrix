@@ -744,6 +744,29 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn vector_reductions() {
+                common::run_vector_reductions_suite::<f32, _>(|v| Col::from_fn(v.len(), |i| v[i]));
+                common::run_vector_reductions_suite::<f64, _>(|v| Col::from_fn(v.len(), |i| v[i]));
+                // The native scaled norm must survive squares that overflow or underflow.
+                for value in [1e200_f64, 1e-200] {
+                    let vector = Col::from_fn(17, |_| value);
+                    approx::assert_relative_eq!(
+                        lazymatrix::L2Norm::norm_l2(&vector),
+                        value * 17.0_f64.sqrt(),
+                        max_relative = 1e-14
+                    );
+                }
+                for value in [1e30_f32, 1e-30] {
+                    let vector = Col::from_fn(17, |_| value);
+                    approx::assert_relative_eq!(
+                        lazymatrix::L2Norm::norm_l2(&vector),
+                        value * 17.0_f32.sqrt(),
+                        max_relative = 1e-6
+                    );
+                }
+            }
+
+            #[test]
             fn contiguous_column_and_vector_slices_preserve_view_offsets() {
                 use lazymatrix::RawColumns;
                 for len in [0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 65] {

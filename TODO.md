@@ -305,15 +305,19 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     tests cover both scalar types, borrowed ranges, short tails, and nonfinite
     values.
 
-- [ ] Reuse contiguous kernels in the remaining vector reductions.
-  - Investigate sequential implementations of `SumEntries::sum_entries`,
-    `DotSlice::dot_slice`, `DotProduct::dot`, and `L2Norm::norm_l2` in core
-    vectors and backend adapters. Compare shared kernels with existing native
-    reductions before replacing them, preserving any stronger numerical
-    behavior.
-  - Prioritize this work and reversed-column reductions below. Measure both
-    scalar types across short and long vectors, preserve strided fallbacks, and
-    check numerical behavior and effects on concrete consumers.
+- [x] Reuse contiguous kernels in the remaining vector reductions.
+  - Core `Vec` and contiguous ndarray reductions, faer sums and dots, and
+    nalgebra's `sum_entries` and `dot_slice` reuse the shared kernels. Faer
+    retains its scaled L2 norm, and nalgebra retains its native dots and norms.
+    Ndarray's strided and reversed views preserve their original fallbacks.
+  - Shared tests cover both scalar types, empty inputs, reduction tails,
+    nonfinite values, dimension checks, and extreme faer norms across releases.
+  - The
+    [measurements](benches/column_reductions/README.md#remaining-solver-facing-vector-reductions)
+    include native controls, short and long vectors, borrowed ranges, and
+    strided layouts. Length-5,000 sums improve by 4.4–5.1 times, and the
+    existing ridge consumer takes 6–14% less time. Raw data, numerical checks,
+    short-vector tradeoffs, and reproduction commands accompany the report.
 
 - [ ] Investigate reductions over reversed and strided columns.
   - The [layout

@@ -244,6 +244,25 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn vector_reductions() {
+                fn strided<F: lazymatrix::Scalar>(v: &[F], stride: isize) -> Array1<F> {
+                    let mut storage = Array1::from_elem(2 * v.len() + 4, F::nan());
+                    let end = 2 + v.len() * stride.unsigned_abs();
+                    let start = if stride > 0 { 2 } else { end - 1 };
+                    for (i, &value) in v.iter().enumerate() {
+                        storage[(start as isize + i as isize * stride) as usize] = value;
+                    }
+                    storage.slice_move(s![2..end;stride])
+                }
+                common::run_vector_reductions_suite::<f32, _>(|v| Array1::from_vec(v.to_vec()));
+                common::run_vector_reductions_suite::<f64, _>(|v| Array1::from_vec(v.to_vec()));
+                for stride in [1_isize, 2, -1, -2] {
+                    common::run_vector_reductions_suite::<f32, _>(|v| strided(v, stride));
+                    common::run_vector_reductions_suite::<f64, _>(|v| strided(v, stride));
+                }
+            }
+
+            #[test]
             fn contiguous_column_and_vector_slices_preserve_view_offsets() {
                 use lazymatrix::{RawColumn, RawColumns};
                 let storage = Array2::from_shape_fn((40, 3).f(), |(i, j)| (i + j*40) as f64);

@@ -61,7 +61,7 @@ impl<F: Scalar + nalgebra::Scalar> DotSlice<F> for DVector<F> {
     fn dot_slice(&self, coeffs: &[F]) -> F {
         let s = self.as_slice();
         assert_eq!(s.len(), coeffs.len(), "dot_slice: length mismatch");
-        s.iter().zip(coeffs).map(|(&a, &c)| a * c).sum()
+        crate::reductions::dot(s, coeffs)
     }
 }
 
@@ -75,7 +75,7 @@ impl<F: Scalar + nalgebra::Scalar> SubScalarAssign<F> for DVector<F> {
 
 impl<F: Scalar + nalgebra::Scalar> SumEntries<F> for DVector<F> {
     fn sum_entries(&self) -> F {
-        self.as_slice().iter().copied().sum()
+        crate::reductions::sum(self.as_slice())
     }
 }
 

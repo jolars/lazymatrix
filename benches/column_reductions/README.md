@@ -15,6 +15,148 @@ fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
 
+## Remaining solver-facing vector reductions
+
+The follow-up uses baseline revision `8750c46` and the production source
+identified in [`solver_vector_metadata.json`](solver_vector_metadata.json). Core
+`Vec` reductions, ndarray's contiguous vector reductions, and faer's sequential
+sums and dots now reuse the shared eight-accumulator kernels. Nalgebra's
+`sum_entries` and `dot_slice` use them as well. Nalgebra retains its native dot
+and norm implementations. Faer retains its native scaled L2 norm, which avoids
+intermediate overflow and underflow for extreme magnitudes. No new dependency,
+allocation, or public capability is required. Ndarray's strided and reversed
+views retain their original iterator fallbacks.
+
+The harness compares `sum_entries`, `dot_slice`, `DotProduct::dot`, and
+`norm_l2` for `f32` and `f64` at lengths 0, 1, 7, 8, 9, 33, 256, 5,000, and
+262,144. Each type uses `ChaCha8Rng`, seed 8421, and values drawn uniformly from
+\[-1, 1). Owned core, faer, and nalgebra vectors share the same logical inputs.
+Borrowed ndarray views include an offset into NaN-padded storage and strides 1,
+2, -1, and -2. Every reduction is checked against compensated `f64` arithmetic
+outside timing. Native controls use faer's sum, inner product, and scaled norm,
+nalgebra's sum, dot, and norm, and ndarray's sum and dot. Ndarray's norm control
+takes the square root of its self-dot. The core vector control uses sequential
+slice arithmetic.
+
+Both release builds and all final measurements run in one exclusive
+`compute bench` window on CPU 2, with Rust 1.98.1, 16 codegen units, generic
+x86-64 code generation, and the `faer,nalgebra,ndarray` features. Six blocks
+alternate baseline and candidate process order. Each process collects five
+observations, reversing operation and method order on alternate observations.
+Each observation repeats a reduction
+`clamp(5_000_000 / max(length, 1), 8, 100_000)` times. Timings include the same
+non-inlined benchmark dispatch in both builds, so dispatch matters most for
+short vectors. Input construction and verification are outside timing.
+
+The table reports baseline time divided by candidate time at length 5,000, using
+the median of 30 observations per build. These are observed ratios on this
+machine, rather than guarantees for other workloads. Native faer control ratios
+vary by up to 15% in this run; the other contiguous native controls at this
+length vary by at most 8%.
+
+  | Backend  | Scalar | Sum   | Slice dot | Vector dot | L2 norm |
+  | -------- | ------ | ----: | --------: | ---------: | ------: |
+  | Vec      | f32    | 4.96x |     3.99x |      4.19x |   5.49x |
+  | Vec      | f64    | 4.99x |     2.69x |      2.81x |   5.44x |
+  | ndarray  | f32    | 5.05x |     4.31x |      5.38x |   5.68x |
+  | ndarray  | f64    | 4.97x |     2.74x |      3.40x |   5.52x |
+  | faer     | f32    | 4.38x |     4.17x |      4.45x |  native |
+  | faer     | f64    | 4.67x |     2.50x |      2.63x |  native |
+  | nalgebra | f32    | 4.96x |     4.05x |     native |  native |
+  | nalgebra | f64    | 4.90x |     2.74x |     native |  native |
+
+Here, `native` identifies an unchanged implementation. Nalgebra's unchanged dots
+and norms measure within 3% of baseline, as does faer's unchanged norm, at this
+length. The shared kernels replace serial accumulation dependencies with eight
+independent accumulators, permitting packed arithmetic without fast-math.
+Retaining native kernels also preserves their existing numerical strategies and
+avoids unnecessary replacements.
+
+The gains persist at length 262,144: changed sums improve by 4.4–4.9 times,
+changed dots by 3.0–4.4 times for `f32` and 1.7–2.5 times for `f64`, and changed
+norms by 4.6–5.7 times. The smaller dot gains with larger working sets are
+consistent with memory traffic limiting more of their runtime, although these
+measurements do not include hardware counters. Strided and reversed ndarray
+fallbacks at lengths 256 and above range from 5% slower to 37% faster, with a
+median improvement near 3–4%. Their arithmetic is unchanged, so those timing
+differences do not establish a separate fallback optimization.
+
+Short vectors do not improve uniformly. At lengths up to nine, some changed
+operations cost about 0.3–2.2 ns more per call. For example, the length-seven
+`f32` Vec norm rises from 4.18 to 6.36 ns. The slice checks, reduction setup,
+and benchmark dispatch can outweigh the saved accumulation work at these sizes.
+A separate small-vector policy would need a consumer that benefits enough to
+justify another branch or kernel.
+
+The consumer comparison calls the existing ridge solver from
+[`ridge_primal_dual.rs`](../../examples/ridge_primal_dual.rs), with its
+algorithm unchanged in both builds. Each sparse design has four random triplets
+per row, including possible duplicates, center 0.001, scale 1.75, and ridge
+penalty 2. Shapes are 512 by 512 and 32,768 by 256. Each observation times 30
+complete fits, including solver allocations and result destruction. Design
+construction is outside timing. An untimed fit in every process is checked with
+independent triplet-based products, an objective, and a stationarity residual.
+The fit benchmark covers `f64` with faer storage; it does not establish consumer
+gains for the other backends or `f32`.
+
+Complete-fit medians and inclusive interquartile intervals, in milliseconds:
+
+  | Shape         | Baseline             | Candidate            | Time reduction |
+  | ------------- | -------------------: | -------------------: | -------------: |
+  | 512 by 512    | 0.079 [0.076, 0.081] | 0.068 [0.064, 0.070] |          14.1% |
+  | 32,768 by 256 | 2.625 [2.592, 2.642] | 2.478 [2.464, 2.530] |           5.6% |
+
+The smaller fit gains show that the reductions are only part of the solver's
+work. The independent objectives agree between builds in every process:
+879.4507901820218 for the square design and 64,971.86056845501 for the tall
+design. The largest independently computed gradient norm is 3.56e-9.
+
+[`solver_vector_timings.csv`](solver_vector_timings.csv) retains the timing
+observations, [`solver_vector_errors.csv`](solver_vector_errors.csv) retains the
+numerical checks, and [`solver_vector_summary.csv`](solver_vector_summary.csv)
+reports medians and inclusive interquartile intervals for every case. In the
+error CSV, ridge rows use `absolute_error` for the gradient norm and
+`scaled_error_or_objective` for the independently computed objective.
+
+The data contain 60,600 timing observations, 12,096 reduction checks, and 24
+independent fit checks. Every numerical check passes. Among candidate contiguous
+vector reductions, the largest observed error divided by `1 + abs(oracle)` is
+4.71e-6 for `f32` and 6.16e-15 for `f64`. These fixtures do not imply uniformly
+better accuracy: reduction order still affects rounding and intermediate
+overflow, as documented above. Shared correctness tests also cover empty
+vectors, short tails, nonfinite values, dimension mismatches, and the native
+faer norm's protection against overflow and underflow.
+
+Validation passed the full `task test` backend, parallelism, and feature
+unification matrix, `task fmt`, `task lint`, and `task docs`. The benchmark
+runner passed its shell syntax and formatting checks, and the summary script
+passed Ruff checks.
+
+Reproduce the comparison and its summary from the repository root:
+
+```sh
+compute bench --reason "Remaining solver-facing vector reductions" -- \
+    env PROBE_BENCH=vector_reductions \
+    PROBE_FEATURES=faer,nalgebra,ndarray PROBE_PREFIX=solver_vector \
+    PROBE_BLOCKS=6 PROBE_SAMPLES=5 PROBE_ELEMENTS=5000000 PROBE_FITS=30 \
+    bash benches/column_reductions/run-adapters.sh \
+    target/solver-vector-reductions 8750c46
+python benches/column_reductions/summarize-vectors.py \
+    target/solver-vector-reductions/solver_vector_timings.csv \
+    > target/solver-vector-reductions/solver_vector_summary.csv
+```
+
+The runner copies the same benchmark and ridge example into the exported
+baseline. The example differs from the baseline only in exposing its existing
+ridge entry point and backend aliases to the benchmark. `PROBE_LENGTHS`,
+`PROBE_ELEMENTS`, and `PROBE_FITS` override the vector lengths, work per sample,
+and fits per sample. The runner records source and binary hashes, compiler and
+CPU information, and all sampling settings. The measured run used temporary
+build directories in `/dev/shm` because the main filesystem initially ran out of
+space. A shorter pilot showed substantial variation in unchanged native controls
+and remains local; the final measurements use longer samples and more
+observations.
+
 ## Vector sums and weighted column reductions
 
 The follow-up comparison uses baseline revision `52b1bac` and the production
