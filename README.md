@@ -137,16 +137,9 @@ Machine-readable metadata is available in [CITATION.cff](CITATION.cff).
 
 ## Contributing
 
-Enter the development environment and run the complete check with:
-
-```sh
-devenv shell
-task ci
-```
-
-Run `task --list` for focused checks. See the [Python contribution
-guide](python/CONTRIBUTING.md) and [website README](docs/README.md) for their
-workflows.
+Bug reports, documentation improvements, and code contributions are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, and pull request guidance
+for Rust, Python, and the website.
 
 ## License
 

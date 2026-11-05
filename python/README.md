@@ -89,8 +89,8 @@ archive and citation metadata.
 From a [repository checkout](https://github.com/jolars/lazymatrix), run
 `task python:check` at the repository root to build, lint, and test the package.
 See the [contribution
-guide](https://github.com/jolars/lazymatrix/blob/main/python/CONTRIBUTING.md)
-for setup, packaging, and release workflows.
+guide](https://github.com/jolars/lazymatrix/blob/main/CONTRIBUTING.md) for
+setup, packaging checks, and pull request guidance.
 
 ## License
 
