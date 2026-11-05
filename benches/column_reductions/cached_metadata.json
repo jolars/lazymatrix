@@ -1,0 +1,74 @@
+{
+  "measured_at": "2026-11-05T18:19:40.362210+00:00",
+  "revision": "73b5d212fd1c3f6c32aff9f6841aa13694220c15",
+  "source_sha256": {
+    "Cargo.toml": "cc2878ec7c9cd18f43614fde3e18e0171101f908c210fb7a51e3d702f9b247f3",
+    "Cargo.lock": "27b6ae27cbc73fbe00ecfe718b57e0dc0498c7e057073f09f8e52eecb5a97fd6",
+    "rust-toolchain.toml": "e7c669a84e6912e76a8ef9c7b2240e5ca3a7d81b8005ee58bffd5f8287733ddd",
+    "rustfmt.toml": "4dfb06a044cd98b4a5dcd1a72caed09b1f0fecad5a5bb3d93118ddeb40df5ec6",
+    "src/reductions.rs": "76245d2b156ffe2b79eb9d8a1cb1e2a0cae582d628249d76648f4a9a834f5820",
+    "src/column.rs": "07f038d7db726dcc74befb14aa7fbb6f74cda7dc1ce0d8c58654ebf92f088dc1",
+    "src/traits/columns.rs": "c5118219db05daf2d747812fd50d3962a49ec1a6fad45c80ab7e03d7ab54e1f8",
+    "src/traits/vectors.rs": "bde2a34fdf68c5df38de16d3c55fb7834459e9cd24ac24b0f0b1acee8edb5f0e",
+    "src/backends/faer/dense.rs": "5e0d1db52adf653f785695283f3191991527ae9a204e0a83afb4e08b72e7c4ba",
+    "tests/common/backend_aliases.rs": "0702876026f701cfba8937792aa85e2bcd02e408d2fa8ae867488162b32c0ffe",
+    "benches/cached_column_dots.rs": "114e0c9b471a34729f5ed1fa4e0fd98702660723a21140ee9d2ed7facce9140c",
+    "benches/column_reductions/cached.py": "3a5a059ec1da8bc84f8a036509c269dfe29e8e76e5db650b47a87a23ef8c746f",
+    "benches/column_reductions/strided.py": "892c4149485ee1c6b124fe30e4e561ca75e25503655246cd87cdeb5c15ded0af"
+  },
+  "binary_sha256": {
+    "generic": "b6b9dc8045be4dfe9c2c9648a62a58cdea9c27e7a3b1e5c6c1b09aeb2aacc9a1",
+    "native": "09488a866f61fe4c64dad53e457ffcbca098a64dbc3b0bfe1f2089efbfdb20df"
+  },
+  "faer_cpu_dispatch": {
+    "generic": "f32: V3(V3 { sse: Sse, sse2: Sse2, fxsr: Fxsr, sse3: Sse3, ssse3: Ssse3, sse4_1: Sse4_1, sse4_2: Sse4_2, popcnt: Popcnt, avx: Avx, avx2: Avx2, bmi1: Bmi1, bmi2: Bmi2, fma: Fma, lzcnt: Lzcnt })\nf64: V3(V3 { sse: Sse, sse2: Sse2, fxsr: Fxsr, sse3: Sse3, ssse3: Ssse3, sse4_1: Sse4_1, sse4_2: Sse4_2, popcnt: Popcnt, avx: Avx, avx2: Avx2, bmi1: Bmi1, bmi2: Bmi2, fma: Fma, lzcnt: Lzcnt })",
+    "native": "f32: V3(V3 { sse: Sse, sse2: Sse2, fxsr: Fxsr, sse3: Sse3, ssse3: Ssse3, sse4_1: Sse4_1, sse4_2: Sse4_2, popcnt: Popcnt, avx: Avx, avx2: Avx2, bmi1: Bmi1, bmi2: Bmi2, fma: Fma, lzcnt: Lzcnt })\nf64: V3(V3 { sse: Sse, sse2: Sse2, fxsr: Fxsr, sse3: Sse3, ssse3: Ssse3, sse4_1: Sse4_1, sse4_2: Sse4_2, popcnt: Popcnt, avx: Avx, avx2: Avx2, bmi1: Bmi1, bmi2: Bmi2, fma: Fma, lzcnt: Lzcnt })"
+  },
+  "assembly_sha256": {
+    "generic": "c73d3b9c2cc1a96c8ee93e7f9a854642f54a226b07323728adacb9f138f48052",
+    "native": "eaa5990da70ee1636931f898da8538dc6127570ac6d47cbd00be20724475936f"
+  },
+  "disassembly_sha256": {
+    "generic": "674f9da1659a0c6dc0c298ef3dc62429dee2aa243fe56b8748d6abb6c2b88728",
+    "native": "575da3d431b8ec28d51a905ae4d20df3e3e3999dcc77f3bff657c8febeb21e3c"
+  },
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  14\nOn-line CPU(s) list:                     0-13\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 155U\nCPU family:                              6\nModel:                                   170\nThread(s) per core:                      2\nCore(s) per socket:                      12\nSocket(s):                               1\nStepping:                                4\nMicrocode version:                       0x2b\nCPU(s) scaling MHz:                      65%\nCPU max MHz:                             4800.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                5376.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               352 KiB (10 instances)\nL1i cache:                               640 KiB (10 instances)\nL2 cache:                                10 MiB (5 instances)\nL3 cache:                                12 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-13\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace",
+  "cpu_caches": "NAME ONE-SIZE ALL-SIZE WAYS TYPE        LEVEL  SETS PHY-LINE COHERENCY-SIZE\nL1d       48K     352K   12 Data            1    64        1             64\nL1i       64K     640K   16 Instruction     1    64        1             64\nL2         2M      10M   16 Unified         2  2048        1             64\nL3        12M      12M   12 Unified         3 16384        1             64",
+  "pinned_cpu": 2,
+  "compute_window": "One exclusive compute bench window for both builds, every method, and all fits.",
+  "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO",
+  "builds": {
+    "generic": "-C target-cpu=x86-64",
+    "native": "-C target-cpu=native"
+  },
+  "features": [
+    "faer"
+  ],
+  "faer_version": "0.24.4",
+  "pulp_version": "0.22.3",
+  "seed": 8421,
+  "scalars": [
+    "f32",
+    "f64"
+  ],
+  "shapes": "0x1,1x1,7x1,8x1,9x1,33x1,256x1,5000x1,5000x64,5000x1000,65536x1,1048576x1",
+  "blocks": 8,
+  "samples_per_process": 2,
+  "elements_per_sample": 8000000,
+  "passes": "clamp(elements / max(rows*cols, 1), 1, 100000)",
+  "working_set": "Padded faer matrix, one reused vector, and centers and scales. Includes allocated leading dimension and outer padding.",
+  "normalization": "Center 0.375, scale -1.75; every method applies the same cached correction.",
+  "order": "Build order alternates by block; method order rotates by block and sample, including fits. Eight blocks put each method at each position twice.",
+  "verification": "Compensated f64 directly centered oracle; tolerance 64*epsilon*max(sqrt(rows),1)*(1+abs(oracle)). Slice8 and Avx8 must also match production bits, treating NaNs by classification.",
+  "allocation_check": "Every verified kernel and timed pass must make zero allocation or reallocation calls.",
+  "numerics": "All lengths 0 through 65, cancellation, intermediate overflow, offsets, FMA rounding, nonfinite values and parameters, and signed zeros.",
+  "consumer": "Complete f64 cyclic Lasso coordinate descent, adapted from examples/coordinate_descent.rs to dense faer. Fits include mean centering, summaries, residual state, coordinate updates, and per-sweep KKT checks. No screening or working sets. Only cached dots vary.",
+  "consumer_cases": "5000x64 and 5000x1000, (8 signals, penalty .01), (64 signals, penalty .005), and (8 signals, penalty 2).",
+  "consumer_verification": "Outside timing, reconstruct residuals from raw X and fitted coefficients/intercept. Require KKT <= 2e-9, coefficient difference <= 1e-10, objective difference <= 1e-12, and the same sweep count as Public8.",
+  "warmup": "Check every column and method before timings, plus an extra pass immediately before each sample. Each timed fit has an untimed warmup.",
+  "checks_only": false,
+  "artifacts": "/home/jola/projects/lazymatrix/target/cached-column-dots"
+}

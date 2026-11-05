@@ -371,16 +371,19 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     Raw data, assembly, numerical counterexamples, and reproduction commands
     accompany the report. The sum-and-norm summary API remains unchanged.
 
-- [ ] Explain the remaining cached-dot gap against native faer.
-  - The [adapter
-    measurements](benches/column_reductions/README.md#faer-and-nalgebra-adapter-measurements)
-    report 1.715 ms for the shared kernel versus 1.325 ms for native faer on the
-    same borrowed layout. Inspect assembly and CPU dispatch before choosing
-    explicit SIMD, backend specialization, or a different accumulator strategy.
-  - Compare baseline and candidates in one exclusive compute window, including
-    generic and CPU-specific builds, both scalar types, and multiple lengths.
-    Require consumer benefit before accepting additional dispatch or dependency
-    complexity, and preserve the dependency-light core.
+- [x] Explain the remaining cached-dot gap against native faer.
+  - The
+    [investigation](benches/column_reductions/README.md#cached-column-dot-gap-against-native-faer)
+    identifies narrower packed arithmetic in the shared kernel and faer's
+    runtime AVX2/FMA dispatch. Eight methods cover both scalar types, borrowed
+    offsets, multiple lengths, and generic and CPU-specific builds.
+  - Native faer improves the larger CPU-specific Lasso fits by 19–20%, but gives
+    no gain for those generic fits. Explicit SIMD also has regressions, and FMA
+    changes numerical behavior. Retain the shared default and require downstream
+    evidence before adding a targeted specialization.
+  - Raw timings, complete consumer fits, numerical diagnostics, assembly, source
+    hashes, and reproduction commands accompany the report. The dependency-light
+    core remains unchanged.
 
 ## Lazy design matrices
 

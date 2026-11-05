@@ -1,0 +1,422 @@
+[
+  {
+    "build": "generic",
+    "symbol": "00000000000204d0 <cached_column_dots::dispatch::<f64>>:",
+    "lines": 177,
+    "xmm_operands": 15,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "00000000000207a0 <cached_column_dots::dispatch::<f32>>:",
+    "lines": 178,
+    "xmm_operands": 15,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000021820 <cached_column_dots::native_f32>:",
+    "lines": 30,
+    "xmm_operands": 0,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000021870 <cached_column_dots::native_f64>:",
+    "lines": 30,
+    "xmm_operands": 0,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000028c70 <cached_column_dots::avx8_f32>:",
+    "lines": 133,
+    "xmm_operands": 78,
+    "ymm_operands": 31,
+    "packed_multiplies": 5,
+    "packed_adds": 6,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000028e70 <cached_column_dots::avx8_f64>:",
+    "lines": 108,
+    "xmm_operands": 76,
+    "ymm_operands": 40,
+    "packed_multiplies": 6,
+    "packed_adds": 7,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000029030 <cached_column_dots::acc16_f32>:",
+    "lines": 144,
+    "xmm_operands": 120,
+    "ymm_operands": 0,
+    "packed_multiplies": 8,
+    "packed_adds": 12,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000029280 <cached_column_dots::acc16_f64>:",
+    "lines": 144,
+    "xmm_operands": 120,
+    "ymm_operands": 0,
+    "packed_multiplies": 8,
+    "packed_adds": 12,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "00000000000294f0 <cached_column_dots::acc32_f32>:",
+    "lines": 203,
+    "xmm_operands": 222,
+    "ymm_operands": 0,
+    "packed_multiplies": 14,
+    "packed_adds": 20,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000029860 <cached_column_dots::acc32_f64>:",
+    "lines": 211,
+    "xmm_operands": 230,
+    "ymm_operands": 0,
+    "packed_multiplies": 16,
+    "packed_adds": 22,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000029c60 <cached_column_dots::avx32_f32>:",
+    "lines": 132,
+    "xmm_operands": 130,
+    "ymm_operands": 32,
+    "packed_multiplies": 4,
+    "packed_adds": 6,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "0000000000029e70 <cached_column_dots::avx32_f64>:",
+    "lines": 150,
+    "xmm_operands": 142,
+    "ymm_operands": 64,
+    "packed_multiplies": 8,
+    "packed_adds": 12,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002a110 <cached_column_dots::fma32_f32>:",
+    "lines": 156,
+    "xmm_operands": 121,
+    "ymm_operands": 44,
+    "packed_multiplies": 0,
+    "packed_adds": 2,
+    "fma_instructions": 17
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002a3c0 <cached_column_dots::fma32_f64>:",
+    "lines": 140,
+    "xmm_operands": 127,
+    "ymm_operands": 40,
+    "packed_multiplies": 0,
+    "packed_adds": 4,
+    "fma_instructions": 13
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002a630 <cached_column_dots::slice_f32>:",
+    "lines": 95,
+    "xmm_operands": 80,
+    "ymm_operands": 0,
+    "packed_multiplies": 4,
+    "packed_adds": 6,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002a7b0 <cached_column_dots::slice_f64>:",
+    "lines": 99,
+    "xmm_operands": 80,
+    "ymm_operands": 0,
+    "packed_multiplies": 4,
+    "packed_adds": 6,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002ace0 <faer::linalg::matmul::dot::inner_prod::<usize, f64>>:",
+    "lines": 230,
+    "xmm_operands": 120,
+    "ymm_operands": 0,
+    "packed_multiplies": 8,
+    "packed_adds": 9,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002b050 <faer::linalg::matmul::dot::inner_prod::<usize, f32>>:",
+    "lines": 235,
+    "xmm_operands": 138,
+    "ymm_operands": 0,
+    "packed_multiplies": 8,
+    "packed_adds": 9,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002b3d0 <<pulp::x86::v3::V3>::vectorize::imp_fastcall::<<pulp::x86::v3::V3 as pulp::Simd>::vectorize::Impl<faer::linalg::matmul::dot::inner_prod_slice::Impl<f64>>>>:",
+    "lines": 251,
+    "xmm_operands": 40,
+    "ymm_operands": 125,
+    "packed_multiplies": 0,
+    "packed_adds": 7,
+    "fma_instructions": 30
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002b800 <<pulp::x86::v3::V3>::vectorize::imp_fastcall::<<pulp::x86::v3::V3 as pulp::Simd>::vectorize::Impl<faer::linalg::matmul::dot::inner_prod_slice::Impl<f32>>>>:",
+    "lines": 261,
+    "xmm_operands": 45,
+    "ymm_operands": 125,
+    "packed_multiplies": 0,
+    "packed_adds": 8,
+    "fma_instructions": 30
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002e2c0 <<lazymatrix::column::LazyColumn<faer::col::generic::Col<faer::col::colref::Ref<f64>>, f64>>::dot_with_sum::<faer::col::generic::Col<faer::col::colref::Ref<f64>>>>:",
+    "lines": 159,
+    "xmm_operands": 104,
+    "ymm_operands": 0,
+    "packed_multiplies": 4,
+    "packed_adds": 6,
+    "fma_instructions": 0
+  },
+  {
+    "build": "generic",
+    "symbol": "000000000002e560 <<lazymatrix::column::LazyColumn<faer::col::generic::Col<faer::col::colref::Ref<f32>>, f32>>::dot_with_sum::<faer::col::generic::Col<faer::col::colref::Ref<f32>>>>:",
+    "lines": 159,
+    "xmm_operands": 104,
+    "ymm_operands": 0,
+    "packed_multiplies": 4,
+    "packed_adds": 6,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000020210 <cached_column_dots::dispatch::<f64>>:",
+    "lines": 93,
+    "xmm_operands": 19,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "00000000000203a0 <cached_column_dots::dispatch::<f32>>:",
+    "lines": 107,
+    "xmm_operands": 19,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "00000000000213a0 <cached_column_dots::native_f32>:",
+    "lines": 30,
+    "xmm_operands": 0,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "00000000000213f0 <cached_column_dots::native_f64>:",
+    "lines": 30,
+    "xmm_operands": 0,
+    "ymm_operands": 0,
+    "packed_multiplies": 0,
+    "packed_adds": 0,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000028d60 <cached_column_dots::avx8_f32>:",
+    "lines": 141,
+    "xmm_operands": 78,
+    "ymm_operands": 55,
+    "packed_multiplies": 9,
+    "packed_adds": 10,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000028fc0 <cached_column_dots::avx8_f64>:",
+    "lines": 149,
+    "xmm_operands": 79,
+    "ymm_operands": 64,
+    "packed_multiplies": 10,
+    "packed_adds": 11,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000029230 <cached_column_dots::acc16_f32>:",
+    "lines": 234,
+    "xmm_operands": 323,
+    "ymm_operands": 0,
+    "packed_multiplies": 24,
+    "packed_adds": 28,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000029660 <cached_column_dots::acc16_f64>:",
+    "lines": 210,
+    "xmm_operands": 279,
+    "ymm_operands": 0,
+    "packed_multiplies": 24,
+    "packed_adds": 28,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000029a60 <cached_column_dots::acc32_f32>:",
+    "lines": 239,
+    "xmm_operands": 358,
+    "ymm_operands": 0,
+    "packed_multiplies": 12,
+    "packed_adds": 18,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "0000000000029ed0 <cached_column_dots::acc32_f64>:",
+    "lines": 186,
+    "xmm_operands": 268,
+    "ymm_operands": 16,
+    "packed_multiplies": 14,
+    "packed_adds": 21,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002a270 <cached_column_dots::avx32_f32>:",
+    "lines": 225,
+    "xmm_operands": 169,
+    "ymm_operands": 128,
+    "packed_multiplies": 20,
+    "packed_adds": 22,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002a6c0 <cached_column_dots::avx32_f64>:",
+    "lines": 225,
+    "xmm_operands": 172,
+    "ymm_operands": 160,
+    "packed_multiplies": 24,
+    "packed_adds": 28,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002ab40 <cached_column_dots::fma32_f32>:",
+    "lines": 198,
+    "xmm_operands": 142,
+    "ymm_operands": 68,
+    "packed_multiplies": 0,
+    "packed_adds": 2,
+    "fma_instructions": 29
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002af10 <cached_column_dots::fma32_f64>:",
+    "lines": 194,
+    "xmm_operands": 145,
+    "ymm_operands": 88,
+    "packed_multiplies": 0,
+    "packed_adds": 4,
+    "fma_instructions": 33
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002b310 <cached_column_dots::slice_f32>:",
+    "lines": 202,
+    "xmm_operands": 254,
+    "ymm_operands": 0,
+    "packed_multiplies": 20,
+    "packed_adds": 22,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002b6b0 <cached_column_dots::slice_f64>:",
+    "lines": 180,
+    "xmm_operands": 216,
+    "ymm_operands": 0,
+    "packed_multiplies": 20,
+    "packed_adds": 22,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002bdc0 <faer::linalg::matmul::dot::inner_prod::<usize, f64>>:",
+    "lines": 507,
+    "xmm_operands": 209,
+    "ymm_operands": 135,
+    "packed_multiplies": 8,
+    "packed_adds": 16,
+    "fma_instructions": 30
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002c650 <faer::linalg::matmul::dot::inner_prod::<usize, f32>>:",
+    "lines": 516,
+    "xmm_operands": 233,
+    "ymm_operands": 125,
+    "packed_multiplies": 8,
+    "packed_adds": 17,
+    "fma_instructions": 30
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002f640 <<lazymatrix::column::LazyColumn<faer::col::generic::Col<faer::col::colref::Ref<f64>>, f64>>::dot_with_sum::<faer::col::generic::Col<faer::col::colref::Ref<f64>>>>:",
+    "lines": 290,
+    "xmm_operands": 286,
+    "ymm_operands": 0,
+    "packed_multiplies": 20,
+    "packed_adds": 22,
+    "fma_instructions": 0
+  },
+  {
+    "build": "native",
+    "symbol": "000000000002fb60 <<lazymatrix::column::LazyColumn<faer::col::generic::Col<faer::col::colref::Ref<f32>>, f32>>::dot_with_sum::<faer::col::generic::Col<faer::col::colref::Ref<f32>>>>:",
+    "lines": 317,
+    "xmm_operands": 324,
+    "ymm_operands": 0,
+    "packed_multiplies": 20,
+    "packed_adds": 22,
+    "fma_instructions": 0
+  }
+]

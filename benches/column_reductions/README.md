@@ -17,6 +17,195 @@ fast paths use the same arithmetic strategy as ndarray's non-BLAS contiguous
 reductions. The regression suite covers both `f32` and `f64`, short tails,
 large-offset centered norms, nonfinite values, and strided inputs.
 
+## Cached column dot gap against native faer
+
+Retain the shared eight-accumulator default. Native faer uses wider SIMD, FMA,
+and a different reduction tree. Those choices explain its advantage on reused
+inputs, but their benefit depends on the compiler target, scalar, and working
+set. The full-fit measurements support further work on a targeted dense-dot
+specialization if a downstream consumer needs it. They do not support replacing
+the shared kernel or adding a SIMD dependency to the core.
+
+The [probe](../cached_column_dots.rs) compares eight methods on the same
+borrowed faer columns and input vector. Every method applies the same cached
+centering and scaling correction:
+
+  | Method    | Raw reduction                                                                           |
+  | --------- | --------------------------------------------------------------------------------------- |
+  | `Public8` | Actual `LazyColumn::dot_with_sum`, with a borrowed faer vector.                         |
+  | `Slice8`  | Actual [production reduction source](../../src/reductions.rs), compiled into the probe. |
+  | `Acc16`   | Portable loop with 16 independent scalar accumulators.                                  |
+  | `Acc32`   | Portable loop with 32 independent scalar accumulators.                                  |
+  | `Avx8`    | Explicit 256-bit SIMD with eight scalar accumulators and production arithmetic order.   |
+  | `Avx32`   | Explicit 256-bit SIMD with 32 scalar accumulators and `Acc32` arithmetic order.         |
+  | `Fma32`   | `Avx32` with fused multiply-add, including the scalar tail.                             |
+  | `Faer`    | Native `faer::linalg::matmul::dot::inner_prod`.                                         |
+
+The explicit SIMD methods use unaligned loads and runtime AVX2 checks. `Fma32`
+also checks FMA support. They remain benchmark-only implementations. All methods
+cross a common dispatch function; the raw controls have non-inlined kernel entry
+points. The inspected binaries also retain the public library method as a
+separate function. The probe borrows columns and constructs vector views without
+copying. Its allocation checks require zero allocation or reallocation calls
+around every verified dot and timed pass.
+
+### Assembly and CPU dispatch
+
+The [final-binary disassembly](cached_assembly.txt) includes the public method,
+raw kernels, faer dispatcher, and selected SIMD helpers for both scalar types
+and compiler targets. The [instruction inventory](cached_assembly.json) records
+their symbols and packed arithmetic. Inspection shows:
+
+- The production loop uses four XMM accumulators with two populated lanes each.
+  For `f32`, it loads pairs with `movsd` and uses `mulps` and `addps`; half of
+  each 128-bit register is unused. For `f64`, it uses full 128-bit `mulpd` and
+  `addpd`. CPU-specific compilation unrolls the loop and uses VEX instructions,
+  but retains two populated lanes and separate multiplies and adds.
+- Faer's architecture selection returns `V3` for both scalar types in both
+  builds. Its selected kernel uses 256-bit `vfmadd` instructions and four vector
+  accumulators: 32 scalar lanes for `f32` and 16 for `f64`. It also uses a
+  different final reduction tree and handles partial vectors through its SIMD
+  machinery. A generic application build therefore still gets faer's runtime
+  AVX2/FMA implementation on this CPU.
+- The explicit `Avx8` and `Avx32` loops use full YMM registers with separate
+  multiplies and adds. `Fma32` uses packed FMA. These controls separate vector
+  width, accumulator count, and FMA instead of assuming that enabling AVX2 on a
+  scalar Rust loop makes LLVM choose wider vectors.
+
+At length 5,000, repeated use of one aligned column and vector gives the
+following medians, in microseconds per dot:
+
+  | Build   | Scalar | Public8 | Acc16  | Acc32  | Avx8   | Avx32  | Fma32  | Faer   |
+  | ------- | ------ | ------: | -----: | -----: | -----: | -----: | -----: | -----: |
+  | Generic | f32    |  0.6137 | 0.6883 | 0.5950 | 0.3672 | 0.2279 | 0.2064 | 0.1993 |
+  | Native  | f32    |  0.5568 | 0.6433 | 1.0061 | 0.3500 | 0.2115 | 0.1955 | 0.1922 |
+  | Generic | f64    |  0.9841 | 0.8889 | 0.8278 | 0.6085 | 0.5977 | 0.5723 | 0.5569 |
+  | Native  | f64    |  0.7644 | 0.8026 | 0.7669 | 0.5859 | 0.5518 | 0.5543 | 0.5644 |
+
+Here, native faer is 2.90–3.08 times as fast for `f32` and 1.35–1.77 times as
+fast for `f64`. Widening the eight-accumulator loop already closes much of the
+gap while preserving its arithmetic. More independent SIMD accumulators help
+`f32` further. FMA contributes a smaller, workload-dependent improvement over
+the widened separate arithmetic. Merely increasing portable accumulator counts
+does not give a consistent improvement across targets.
+
+The `f64` public and direct-slice controls have medians within 1% at length
+5,000 for the aligned fixtures with 1, 64, and 1,000 columns, in both builds.
+The standalone shared reduction retains the gap on reused inputs. Borrowing and
+the normalization wrapper therefore do not explain the main difference there.
+
+### Working sets and complete consumers
+
+The earlier [adapter measurements](#faer-and-nalgebra-adapter-measurements)
+reported 1.715 ms for the shared kernel and 1.325 ms for native faer over 1,000
+length-5,000 `f64` columns. That ratio is not a fixed adapter cost. In this
+probe's normalized, padded fixture with the same dimensions, a complete pass
+takes 1.494 ms versus 1.716 ms in the generic build, and 2.017 ms versus 1.687
+ms in the CPU-specific build. The new fixture uses nonidentity parameters and
+applies their correction to the native control as well, so it is not an exact
+reproduction of the historical identity-normalization benchmark.
+
+Working-set changes also alter the comparison within this run. At 5,000 by 64,
+the aligned `f64` public and native controls take 1.028 and 0.880 microseconds
+per dot with generic compilation, then 0.855 and 0.859 with CPU-specific
+compilation. At 1,048,576 by 1, the corresponding values are 603.9 and 467.1,
+then 520.7 and 457.0. Offset borrowed inputs retain the broad result, with their
+own alignment costs recorded in the [summary](cached_summary.csv). A dispatch
+rule based only on column length would miss these differences.
+
+The consumer adapts the existing [coordinate-descent
+example](../../examples/coordinate_descent.rs) to dense faer columns. Each
+complete `f64` Lasso fit includes mean centering, column summaries, residual and
+coefficient allocation, cyclic coordinate updates, cached residual sums, and a
+KKT check after each sweep. Only the cached-dot implementation changes. The
+benchmark uses no screening or working sets. The following table gives
+milliseconds per fit:
+
+  | Build   | Columns | Signals | Penalty | Public8 | Avx8   | Avx32  | Fma32  | Faer   |
+  | ------- | ------: | ------: | ------: | ------: | -----: | -----: | -----: | -----: |
+  | Generic |      64 |       8 |   0.010 |   1.046 |  1.054 |  0.949 |  0.925 |  0.927 |
+  | Generic |      64 |      64 |   0.005 |   1.986 |  1.780 |  1.747 |  1.793 |  1.701 |
+  | Generic |   1,000 |       8 |   0.010 |  21.446 | 27.705 | 24.721 | 23.263 | 21.587 |
+  | Generic |   1,000 |      64 |   0.005 |  28.207 | 35.914 | 32.501 | 30.481 | 28.631 |
+  | Native  |      64 |       8 |   0.010 |   0.905 |  0.945 |  0.899 |  0.903 |  0.909 |
+  | Native  |      64 |      64 |   0.005 |   1.461 |  1.482 |  1.435 |  1.423 |  1.451 |
+  | Native  |   1,000 |       8 |   0.010 |  27.061 | 23.930 | 24.249 | 23.112 | 21.993 |
+  | Native  |   1,000 |      64 |   0.005 |  35.747 | 31.480 | 31.432 | 30.014 | 28.695 |
+
+Native faer reduces the larger CPU-specific fits by 18.7–19.7%, but gives no
+improvement for those generic fits. The explicit SIMD candidates regress the
+same generic cases by 8–29%. The smaller generic fits benefit, whereas the
+smaller CPU-specific cases show little difference. The [fit
+summary](cached_fit_summary.csv) includes inclusive interquartile ranges; many
+small differences have overlapping ranges. Penalty-2 cases with all-zero
+solutions are retained in the [raw fit results](cached_fits.csv).
+
+These are complete fits of a benchmark consumer, not measurements of an
+integrated library specialization or of Shrinkage. Only `f64` consumer fits and
+one CPU are covered. A public backend hook, additional scalar bounds, or runtime
+SIMD dispatch would need validation in the intended downstream consumer before
+becoming production API. The evidence favors that targeted investigation over a
+global accumulator-count change.
+
+### Numerical behavior and reproduction
+
+All 10,368 aggregate [column error records](cached_errors.csv) pass against a
+compensated `f64` oracle that centers each value directly. The tolerance is
+`64 * epsilon * max(sqrt(rows), 1) * (1 + abs(oracle))`. The largest absolute
+error is 0.001311 for `f32`; the largest error divided by `1 + abs(oracle)` is
+1.714e-5. For `f64`, those maxima are 3.98e-12 and 4.57e-14, respectively.
+`Slice8` and `Avx8` must additionally match production bits, treating NaNs by
+classification. `Avx32` must match `Acc32` by the same rule. All checks pass.
+
+The [generic diagnostics](generic-numerics.csv) and [CPU-specific
+diagnostics](native-numerics.csv) retain 1,408 observations each. They cover
+every length from 0 through 65, cancellation, large offsets, intermediate
+overflow, signed zeros, and nonfinite data and parameters. Changing the
+accumulator count changes cancellation and offset results. The `f32` overflow
+case returns a finite 1.7014e38 with production arithmetic and NaN with native
+faer. In the FMA-rounding case, separately rounded products return zero, while
+`Fma32` and faer return `-epsilon^2`: about -1.4211e-14 for `f32` and
+-4.9304e-32 for `f64`. FMA and faer's reduction tree therefore require an
+explicit numerical choice even when random-input errors remain small.
+
+All 1,536 timed fits pass independent residual reconstruction from raw inputs,
+objective and KKT checks, and comparison with the production fit. Their maximum
+KKT violation is 3.36e-10, and their maximum coefficient difference is 3.89e-16.
+Every method takes the same number of sweeps as production. Input generation,
+verification, and warmup fits run outside timing.
+
+Both builds and every measurement ran in one exclusive `compute bench` window on
+CPU 2 of an Intel Core Ultra 7 155U, using Rust 1.98.1, faer 0.24.4, and pulp
+0.22.3. Release builds use 16 codegen units and Cargo's default LTO setting. The
+builds explicitly select generic x86-64 or `target-cpu=native`. Eight blocks
+alternate build order and rotate method order, giving 16 observations per
+configuration and placing every method at each timing position twice. The [raw
+timings](cached_timings.csv) retain all 12,288 observations. Medians and
+inclusive interquartile ranges describe this machine and run; they are not
+confidence intervals or guarantees for other systems.
+
+The fixtures have 0, 1, 7, 8, 9, 33, 256, 5,000, 65,536, or 1,048,576 rows.
+Length 5,000 also has 64- and 1,000-column fixtures sharing one vector. Every
+shape uses both scalar types and row offsets 0 and 3. NaN padding surrounds the
+selected rows and columns. Values come from `ChaCha8Rng` with seed 8421. Center
+0.375 and scale -1.75 exercise both corrections. The reported footprint includes
+the matrix and vector's allocated leading dimensions and saved parameters.
+
+Reproduce from the repository root on an AVX2/FMA-capable x86-64 machine:
+
+```sh
+compute bench --reason "Explain cached column dot gap against native faer" -- \
+    python benches/column_reductions/cached.py target/cached-column-dots
+```
+
+The runner preserves emitted assembly, final-binary disassembly, numerical
+diagnostics, timings, and fit checks. [Metadata](cached_metadata.json) records
+source, binary, and assembly hashes, actual faer CPU dispatch, toolchain and
+hardware details, settings, and the local artifact directory. `--checks-only`
+runs the numerical and tail checks without timings or consumer fits. Formatting,
+Clippy, Rustdoc, and all 29 selected column, vector, and faer backend tests
+pass.
+
 ## Fused uncached column dot investigation
 
 Keep the separate production reductions and the existing cached-sum methods.
