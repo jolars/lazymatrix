@@ -264,40 +264,101 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     prototype patches accompany the report.
 
 - [x] Implement production dense column-reduction fast paths for ndarray.
-  - `RawColumn::dense_values` and `VectorView::contiguous_values` expose optional
-    borrowed slices. Contiguous ndarray columns use shared eight-accumulator
-    sums, dots, and directly centered squared norms. Default paths preserve
-    strided access, sparse duplicates, implicit zeros, and O(nnz) products.
+  - `RawColumn::dense_values` and `VectorView::contiguous_values` expose
+    optional borrowed slices. Contiguous ndarray columns use shared
+    eight-accumulator sums, dots, and directly centered squared norms. Default
+    paths preserve strided access, sparse duplicates, implicit zeros, and O(nnz)
+    products.
   - Reduction order follows the usual backend convention. Shared tests cover
-    `f32`, `f64`, empty inputs, short tails, nonfinite values, and large offsets.
-    All backend releases, feature combinations, parallelism, and BLAS checks pass.
+    `f32`, `f64`, empty inputs, short tails, nonfinite values, and large
+    offsets. All backend releases, feature combinations, parallelism, and BLAS
+    checks pass.
   - The [implementation measurements](benches/column_reductions/README.md)
     include kernel assembly, fused-summary controls, and separate native and
     Python Shrinkage fits with independently checked objectives, KKT violations,
     and certificate feasibility. Python timings include owned input copies.
 
 - [x] Extend dense column-reduction fast paths to faer and nalgebra.
-  - faer 0.22–0.24 and nalgebra 0.32–0.35 expose borrowed contiguous columns
-    and owned and borrowed vectors through both reduction hooks. Slice access
-    takes O(1) time and preserves view offsets, lengths, and logical order.
+  - faer 0.22–0.24 and nalgebra 0.32–0.35 expose borrowed contiguous columns and
+    owned and borrowed vectors through both reduction hooks. Slice access takes
+    O(1) time and preserves view offsets, lengths, and logical order.
     Noncontiguous views retain their existing paths.
-  - Adapter tests check hook availability and borrowed ranges, including mutable,
-    strided, and reversed views. The shared reduction suite covers native vectors,
-    `f32`, `f64`, empty inputs, short tails, normalization, and exceptional values.
-  - The [adapter measurements](benches/column_reductions/README.md#faer-and-nalgebra-adapter-measurements)
+  - Adapter tests check hook availability and borrowed ranges, including
+    mutable, strided, and reversed views. The shared reduction suite covers
+    native vectors, `f32`, `f64`, empty inputs, short tails, normalization, and
+    exceptional values.
+  - The [adapter
+    measurements](benches/column_reductions/README.md#faer-and-nalgebra-adapter-measurements)
     compare baseline, candidate, and native reductions in one exclusive compute
-    window. Contiguous sums improve by 4.6–4.7 times, squared norms by 4.3 times,
-    and cached dots by about twice. Strided controls retain baseline performance,
-    and all numerical comparisons pass. Raw data and reproduction commands are
-    included in the report.
+    window. Contiguous sums improve by 4.6–4.7 times, squared norms by 4.3
+    times, and cached dots by about twice. Strided controls retain baseline
+    performance, and all numerical comparisons pass. Raw data and reproduction
+    commands are included in the report.
 
 - [x] Extend contiguous reductions to vector sums and weighted columns.
   - Reuse the shared kernels for `VectorView::sum`, weighted column dots, and
     weighted squared norms. Preserve indexed fallbacks and normalize entries
     before squaring to support extreme scales and signed weights.
-  - The [measurements](benches/column_reductions/README.md#vector-sums-and-weighted-column-reductions)
-    include uncached dots, cached-dot controls, and strided layouts. Shared tests
-    cover both scalar types, borrowed ranges, short tails, and nonfinite values.
+  - The
+    [measurements](benches/column_reductions/README.md#vector-sums-and-weighted-column-reductions)
+    include uncached dots, cached-dot controls, and strided layouts. Shared
+    tests cover both scalar types, borrowed ranges, short tails, and nonfinite
+    values.
+
+- [ ] Reuse contiguous kernels in the remaining vector reductions.
+  - Investigate sequential implementations of `SumEntries::sum_entries`,
+    `DotSlice::dot_slice`, `DotProduct::dot`, and `L2Norm::norm_l2` in core
+    vectors and backend adapters. Compare shared kernels with existing native
+    reductions before replacing them, preserving any stronger numerical
+    behavior.
+  - Prioritize this work and reversed-column reductions below. Measure both
+    scalar types across short and long vectors, preserve strided fallbacks, and
+    check numerical behavior and effects on concrete consumers.
+
+- [ ] Investigate reductions over reversed and strided columns.
+  - The [layout
+    investigation](benches/column_reductions/README.md#layout-and-numerical-checks)
+    measured reversed-row sums at 3.329 ms for the logical visitor versus 0.610
+    ms for ndarray's memory-order reduction. Current contiguous hooks leave
+    these views on their fallback paths.
+  - Evaluate backend-specific memory-order sums and centered norms, along with
+    independent accumulators for strided reductions. Preserve logical row
+    alignment for dots and weighted operations; do not weaken the logical-order
+    contracts of `dense_values` or `contiguous_values`.
+  - Measure reversed views, arbitrary strides, and row-major columns separately
+    to distinguish reduction overhead from the cost of memory access.
+
+- [ ] Benchmark contiguous fast paths for logical column updates.
+  - `scaled_add_to` delegates to `RawColumn::affine_add_to`, whose dense
+    adapters use indexed destination reads and writes. Evaluate an optional
+    mutable slice capability and a shared slice kernel against the current
+    compiled loops.
+  - Preserve borrowing without allocation, strided destinations, arithmetic
+    order within each update, and sparse duplicate behavior. Check assembly and
+    consumer timings before adding a capability solely for this optimization.
+
+- [ ] Evaluate fused dense kernels for uncached column dots.
+  - Ordinary and weighted dots currently compute a vector sum before scanning
+    for the product. Prototype kernels that accumulate the product and its
+    centering correction in one pass, without materializing normalized entries.
+  - Compare against separate optimized reductions and cached-sum controls across
+    vector lengths and cache sizes. Preserve sparse O(nnz) cached products and
+    check cancellation, overflow, and nonfinite behavior.
+  - Keep this separate from fused sum-and-norm summaries. The existing [summary
+    experiment](benches/column_reductions/README.md#ndarray-production-measurements)
+    measured the fused prototype at 1.489 ms versus 1.250 ms for the production
+    pair; revisit that API only with new evidence from a concrete consumer.
+
+- [ ] Explain the remaining cached-dot gap against native faer.
+  - The [adapter
+    measurements](benches/column_reductions/README.md#faer-and-nalgebra-adapter-measurements)
+    report 1.715 ms for the shared kernel versus 1.325 ms for native faer on the
+    same borrowed layout. Inspect assembly and CPU dispatch before choosing
+    explicit SIMD, backend specialization, or a different accumulator strategy.
+  - Compare baseline and candidates in one exclusive compute window, including
+    generic and CPU-specific builds, both scalar types, and multiple lengths.
+    Require consumer benefit before accepting additional dispatch or dependency
+    complexity, and preserve the dependency-light core.
 
 ## Lazy design matrices
 
