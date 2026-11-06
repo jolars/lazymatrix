@@ -42,8 +42,10 @@
 //! O(nrows) state plus chunk and codec buffers, including outer shards. Exact
 //! row quantiles use repeated scans. New samples need independently fitted
 //! row parameters. Fused products use the same fitted kernels, with one temporary
-//! product vector in addition to backend workspace. Additional capabilities
-//! remain future work.
+//! product vector in addition to backend workspace. Workspace methods reuse
+//! a caller-provided product vector instead. Dense kernels need no additional
+//! workspace; sparse traversal and chunk decoding retain their backend buffers.
+//! Additional capabilities remain future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -94,9 +96,10 @@
 //! [`LazyMatrix::from_parts`] reconstructs a pipeline without refitting.
 //! Mixed and row-only chains support dense indexed access; column-only chains
 //! also support native sparse CSC/CSR and Zarr scans. Chains currently expose
-//! allocating, reusable, and fused forward and transpose vector products, with
-//! bounded workspace and no intermediate normalized design matrix. Sparse products use
-//! transformed implicit backgrounds and missing index ranges; exceptional IEEE
+//! allocating, reusable, and fused forward and transpose vector products, including
+//! caller-owned product workspace. They use bounded workspace without an
+//! intermediate normalized design matrix. Sparse products use transformed implicit
+//! backgrounds and missing index ranges; exceptional IEEE
 //! cases can evaluate individual missing contributions.
 //!
 //! The fitted parameter type selects the axis and scalar:
@@ -332,7 +335,11 @@
 //! normalization can require O(ncols) coefficient scratch. The optional
 //! [`LazyMatrix::matvec_scaled_with_workspace`] and
 //! [`LazyMatrix::mat_transpose_vec_scaled_with_workspace`] methods let callers
-//! reuse that storage across calls.
+//! reuse that storage across calls. For row normalization and chains, these
+//! methods instead take product scratch of length `nrows` for forward products
+//! or `ncols` for transpose products. They allocate no product vector and leave
+//! the final output unchanged on backend errors. Backend traversal and decoding
+//! may still allocate internal workspace.
 //! [`WithIntercept::matvec_scaled_with_workspace`] and
 //! [`WithIntercept::mat_transpose_vec_scaled_with_workspace`] reuse the wrapper's
 //! predictor buffer, whose length excludes the intercept. Inner normalization

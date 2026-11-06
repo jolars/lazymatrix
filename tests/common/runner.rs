@@ -901,6 +901,8 @@ pub fn check_row_normalized_products<M, V, F, S: AsRef<[F]>>(
     operator.mat_transpose_vec_into(&u, &mut out).unwrap();
     assert_values(&out, &transpose);
     use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto};
+    let mut scratch = to_v(&vec![F::nan(); operator.nrows()]);
+    let mut scratch_t = to_v(&vec![F::nan(); operator.ncols()]);
     for alpha in [
         F::zero(),
         F::one(),
@@ -921,9 +923,25 @@ pub fn check_row_normalized_products<M, V, F, S: AsRef<[F]>>(
             operator
                 .mat_transpose_vec_scaled_into(alpha, &u, beta, &mut out_t)
                 .unwrap();
+            let mut workspace_out = to_v(&vec![old; operator.nrows()]);
+            let mut workspace_out_t = to_v(&vec![old; operator.ncols()]);
+            operator
+                .matvec_scaled_with_workspace(alpha, &x, beta, &mut workspace_out, &mut scratch)
+                .unwrap();
+            operator
+                .mat_transpose_vec_scaled_with_workspace(
+                    alpha,
+                    &u,
+                    beta,
+                    &mut workspace_out_t,
+                    &mut scratch_t,
+                )
+                .unwrap();
             for (actual, expected, rounded) in [
                 (&out, &forward, &allocating_forward),
                 (&out_t, &transpose, &allocating_transpose),
+                (&workspace_out, &forward, &allocating_forward),
+                (&workspace_out_t, &transpose, &allocating_transpose),
             ] {
                 let expected: Vec<_> = expected
                     .iter()

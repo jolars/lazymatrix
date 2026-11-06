@@ -1,0 +1,7 @@
+rows,cols,density,operator,fused_peak_bytes,workspace_peak_bytes
+256,128,0.01,csc_columns,9536,7488
+256,128,0.01,csc_rows,10560,8512
+256,128,0.01,csr_columns,8352,7328
+256,128,0.01,csr_rows,9376,8352
+256,128,0.01,dense_mixed,2048,0
+256,128,0.01,dense_rows,2048,0
