@@ -7,6 +7,8 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lazymatrix::{MatTransposeVecInto, MatVecInto};
 use std::hint::black_box;
 
+#[path = "common/allocations.rs"]
+mod allocations;
 #[path = "../tests/common/backend_aliases.rs"]
 mod backend_aliases;
 #[path = "common/normalization.rs"]
@@ -86,7 +88,7 @@ fn benchmark(c: &mut Criterion) {
         group.finish();
     }
 }
-criterion_group!(benches, benchmark, fused_products);
+criterion_group!(benches, benchmark, fused_products, workspace_products);
 criterion_main!(benches);
 
 fn fused_products(c: &mut Criterion) {
@@ -175,6 +177,112 @@ fn fused_products(c: &mut Criterion) {
                 &pipeline::columns().fit_apply(source).unwrap(),
                 &x,
                 &u,
+            );
+        }
+        group.finish();
+    }
+}
+
+fn workspace_products(c: &mut Criterion) {
+    use backend_aliases::ndarray::Array1;
+    use lazymatrix::{MatTransposeVecScaledInto, MatVecScaledInto, RowNormalization};
+
+    fn compare(
+        group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+        label: &str,
+        name: &str,
+        shape: (usize, usize),
+        mut fused: impl FnMut(&mut Array1<f64>, &mut Array1<f64>),
+        mut workspace: impl FnMut(&mut Array1<f64>, &mut Array1<f64>),
+    ) {
+        let mut y = Array1::from_elem(shape.0, 1.);
+        let mut t = Array1::from_elem(shape.1, 1.);
+        let mut expected = y.clone();
+        let mut expected_t = t.clone();
+        fused(&mut expected, &mut expected_t);
+        workspace(&mut y, &mut t);
+        pipeline::check(&(y.clone(), t.clone()), &(expected, expected_t));
+        let baseline = allocations::measure(|| fused(&mut y, &mut t));
+        let candidate = allocations::measure(|| workspace(&mut y, &mut t));
+        if name.starts_with("dense") {
+            assert_eq!(candidate, 0, "dense workspace calls must not allocate");
+        }
+        eprintln!("workspace_peak_bytes,{label}/{name},{baseline},{candidate}");
+        group.bench_function(BenchmarkId::new(name, "fused_pair"), |b| {
+            b.iter(|| {
+                fused(&mut y, &mut t);
+                black_box((&y, &t));
+            })
+        });
+        group.bench_function(BenchmarkId::new(name, "workspace_pair"), |b| {
+            b.iter(|| {
+                workspace(&mut y, &mut t);
+                black_box((&y, &t));
+            })
+        });
+    }
+
+    for fixture in pipeline::fixtures() {
+        let label = format!(
+            "workspace_pipeline/{}x{}/{}",
+            fixture.rows, fixture.cols, fixture.density
+        );
+        let mut group = c.benchmark_group(&label);
+        let (x, u, _, _) = fixture.vectors::<Array1<f64>>();
+        macro_rules! compare {
+            ($name:expr, $op:expr) => {{
+                let op = $op;
+                let mut scratch = Array1::zeros(fixture.rows);
+                let mut scratch_t = Array1::zeros(fixture.cols);
+                compare(
+                    &mut group,
+                    &label,
+                    $name,
+                    (fixture.rows, fixture.cols),
+                    |y, t| {
+                        op.matvec_scaled_into(-0.75, black_box(&x), 0.25, y)
+                            .unwrap();
+                        op.mat_transpose_vec_scaled_into(-0.75, black_box(&u), 0.25, t)
+                            .unwrap();
+                    },
+                    |y, t| {
+                        op.matvec_scaled_with_workspace(
+                            -0.75,
+                            black_box(&x),
+                            0.25,
+                            y,
+                            &mut scratch,
+                        )
+                        .unwrap();
+                        op.mat_transpose_vec_scaled_with_workspace(
+                            -0.75,
+                            black_box(&u),
+                            0.25,
+                            t,
+                            &mut scratch_t,
+                        )
+                        .unwrap();
+                    },
+                );
+            }};
+        }
+        let dense = pipeline::dense(&fixture.sparse);
+        compare!(
+            "dense_rows",
+            RowNormalization::standardize().fit_apply(&dense).unwrap()
+        );
+        compare!("dense_mixed", pipeline::mixed().fit_apply(&dense).unwrap());
+        for (orientation, source) in [
+            ("csc", fixture.sparse.clone()),
+            ("csr", fixture.sparse.to_csr()),
+        ] {
+            compare!(
+                &format!("{orientation}_rows"),
+                RowNormalization::standardize().fit_apply(&source).unwrap()
+            );
+            compare!(
+                &format!("{orientation}_columns"),
+                pipeline::columns().fit_apply(&source).unwrap()
             );
         }
         group.finish();

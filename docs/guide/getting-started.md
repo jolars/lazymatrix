@@ -160,8 +160,20 @@ let row_scales = rows.normalization().scales().unwrap();
 Each row gets its own center and scale in `RowNormalizationParams<f64>`.
 Row normalization works with dense matrices, strided views, sparse CSC/CSR
 storage, and Zarr arrays. Use `MatVec`, `MatTransposeVec`, or their reusable-output
-and fused variants. Fit new samples' row parameters independently, or
-compose row and column recipes as described below.
+and fused variants. For repeated fused products, provide product scratch:
+
+```rust
+let mut scratch = vec![0.; rows.nrows()];
+let mut out = vec![0.; rows.nrows()];
+let coefficients = vec![1.; rows.ncols()];
+rows.matvec_scaled_with_workspace(1., &coefficients, 0., &mut out, &mut scratch)
+    .unwrap();
+```
+
+Forward scratch has length `nrows`; transpose scratch has length `ncols`.
+Workspace calls reuse this vector while sparse traversal and chunk decoding
+may still allocate internal buffers. Fit new samples' row parameters
+independently, or compose row and column recipes as described below.
 
 `LazyMatrix<M, P>` stores its fitted parameter object as `P`. The default is
 `ColumnNormalizationParams<f64>`, so ordinary column-only type annotations can
@@ -246,7 +258,8 @@ the supplied saved values. Dimension mismatches panic before reads or writes.
 Mixed and row-only chains require dense storage for fitting and products.
 Column-only chains also support sparse CSC/CSR storage and Zarr arrays. Products
 execute the saved stages without refitting. Chains support allocating, reusable,
-and fused forward and transpose vector products.
+and fused forward and transpose vector products, including caller-owned product
+workspace. Chains use the same product scratch lengths as row normalization.
 See [how it works](/guide/how-it-works#row-and-ordered-normalization) for storage
 and workspace costs.
 

@@ -222,7 +222,10 @@ with single-axis fitting and reuse before introducing fitted pipelines.
 - [ ] Extend `LazyMatrix` capabilities to row and composed normalization.
 
   - [x] Add fused vector products.
-  - [ ] Add vector products with caller-owned workspace.
+  - [x] Add vector products with caller-owned workspace.
+    - Row and chain fused calls reuse a product vector of length `nrows` for
+      forward products or `ncols` for transpose products. Sparse traversal and
+      chunk decoding retain their internal bounded workspace.
   - [ ] Add batched products.
   - [ ] Add borrowed logical rows.
   - [ ] Add borrowed logical columns.

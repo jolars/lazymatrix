@@ -1,0 +1,48 @@
+{
+  "collected_at_utc": "2026-11-06T06:43:45.866117+00:00",
+  "cpu": "Intel(R) Core(TM) Ultra 7 155U",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "git_revision": "df88d1b14b7bc250b62be355bf7b65b7d593a042",
+  "working_tree": true,
+  "features": [
+    "ndarray_v0_17",
+    "sprs_v0_11"
+  ],
+  "seed": 205,
+  "threads": 1,
+  "alpha": -0.75,
+  "beta": 0.25,
+  "warm_up_seconds": 0.1,
+  "measurement_seconds": 0.3,
+  "sample_size": 20,
+  "bootstrap_resamples": 10000,
+  "confidence_level": 0.95,
+  "estimator": "Criterion median",
+  "operation": "One forward and one transpose product per iteration",
+  "baseline": "Fused products with internally allocated product scratch",
+  "candidate": "Fused products with caller-owned product scratch",
+  "excluded": [
+    "fitting",
+    "source construction",
+    "final output allocation",
+    "caller scratch allocation"
+  ],
+  "included": [
+    "backend traversal workspace",
+    "allocation bookkeeping in both timing paths"
+  ],
+  "memory_measure": "Peak additional live requested Rust bytes during one product pair",
+  "correctness": "Compare workspace outputs with fused outputs before timing; assert zero dense workspace allocation",
+  "source_sha256": {
+    "src/fused_normalization.rs": "64a8c6ad75a1e58b9c6f905588de8d3d8a2db1715745f14c067266774611c74b",
+    "src/normalization/pipeline/products.rs": "4fb6d4fdd46e0be399dcce48703c9d7c3606c5a0791bcb23506a41daa68667cb",
+    "src/normalization/pipeline/dense.rs": "3ca14d337ee2a96c09521660f70c0bb46279dbdffc8f4b0bed6c32edacf4bbc6",
+    "src/normalization/row/traversal.rs": "c197ca38a2b195c3fc3edf451d531ce588370febd49df138890086aba136533b",
+    "benches/normalization_pipeline.rs": "41e3d4bab8c4f4a4a432ac3072db3dd2b42ca1b8e325446af70795a4ecf22460",
+    "benches/common/allocations.rs": "146b4820548811afa3bfe91267ca14d6f7bf6084c9e807ec9a5b78a451928c24",
+    "benches/common/pipeline.rs": "6b3356d9ea12470ca8ce8a43255d98415fa351a46c0528807b00fed11dfa510f",
+    "benches/common/normalization.rs": "d134fe1f1ae0ba50dab16c4f03254753636f6986c39fdd434a03af90caca7e71"
+  },
+  "reservation": "All baseline and candidate timings in one compute bench window"
+}

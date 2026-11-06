@@ -326,3 +326,83 @@ fn f32_products_scale_entries_before_accumulation() {
     assert_eq!(normalized.matvec(&vec![1e-30]).unwrap(), [1e-30]);
     assert_eq!(normalized.mat_transpose_vec(&vec![1e-30]).unwrap(), [1e-30]);
 }
+
+#[test]
+fn workspace_products_accept_independent_strided_vectors() {
+    use lazymatrix::{ColumnNormalization, VectorView, VectorViewMut};
+    struct Strided<'a>(&'a mut [f64]);
+    impl VectorView<f64> for Strided<'_> {
+        fn len(&self) -> usize {
+            self.0.len() / 2
+        }
+        fn get(&self, i: usize) -> f64 {
+            self.0[2 * i]
+        }
+    }
+    impl VectorViewMut<f64> for Strided<'_> {
+        fn set(&mut self, i: usize, value: f64) {
+            self.0[2 * i] = value;
+        }
+    }
+    let source = Dense::new(2, 3, vec![1., 3., 8., -2., 5., 3.]);
+    macro_rules! check {
+        ($op:expr) => {{
+            let op = $op;
+            let x = [1., -2., 3.];
+            let u = [0.5, 2.];
+            let forward = op.matvec(&x.to_vec()).unwrap();
+            let transpose = op.mat_transpose_vec(&u.to_vec()).unwrap();
+            let reads = source.reads.get();
+            let mut out = [3., 99., 3., 99.];
+            let mut scratch = [f64::NAN, 99., f64::NAN, 99.];
+            op.matvec_scaled_with_workspace(
+                -2.,
+                &x,
+                0.5,
+                &mut Strided(&mut out),
+                &mut Strided(&mut scratch),
+            )
+            .unwrap();
+            assert_eq!(source.reads.get() - reads, 6);
+            assert_eq!(out[1], 99.);
+            assert_eq!(out[3], 99.);
+            assert_eq!(scratch[1], 99.);
+            assert_eq!(scratch[3], 99.);
+            for (i, expected) in forward.iter().enumerate() {
+                approx::assert_relative_eq!(out[2 * i], -2. * expected + 1.5, epsilon = 1e-12);
+            }
+            let mut out_t = [3., 99., 3., 99., 3., 99.];
+            let mut scratch_t = vec![f64::NAN; 3];
+            op.mat_transpose_vec_scaled_with_workspace(
+                -2.,
+                &u,
+                0.5,
+                &mut Strided(&mut out_t),
+                &mut scratch_t,
+            )
+            .unwrap();
+            for (i, expected) in transpose.iter().enumerate() {
+                approx::assert_relative_eq!(out_t[2 * i], -2. * expected + 1.5, epsilon = 1e-12);
+                assert_eq!(out_t[2 * i + 1], 99.);
+            }
+            assert_eq!(x, [1., -2., 3.]);
+            assert_eq!(u, [0.5, 2.]);
+        }};
+    }
+    let row = RowNormalization::standardize().fit(&source).unwrap();
+    check!(row.view().apply_frozen(&source));
+    check!(row.apply_frozen(&source));
+    check!(
+        RowNormalization::standardize()
+            .then(ColumnNormalization::standardize())
+            .fit_apply(&source)
+            .unwrap()
+    );
+    check!(
+        ColumnNormalization::standardize()
+            .then(RowNormalization::standardize())
+            .then(RowNormalization::min_max())
+            .fit_apply(&source)
+            .unwrap()
+    );
+}

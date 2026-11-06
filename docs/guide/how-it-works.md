@@ -71,7 +71,12 @@ kernels. Exact zero `alpha` skips storage reads, and exact zero `beta` ignores
 previous output values. Row and chain fused products hold one temporary vector
 of length `nrows` for forward products or `ncols` for transpose products. They
 merge the completed normalized product with the previous output only after the
-backend succeeds. Backend traversal and codec workspace is additional.
+backend succeeds. The `matvec_scaled_with_workspace` and
+`mat_transpose_vec_scaled_with_workspace` methods reuse caller-provided product
+scratch of those same lengths. Dense calls need no additional workspace. Sparse
+traversal and codec workspace is additional for both fused and workspace calls.
+Dimensions are checked even when `alpha` is zero. After a backend error, scratch
+may be partial, and the final output remains unchanged.
 
 ## Fit once, apply many times
 

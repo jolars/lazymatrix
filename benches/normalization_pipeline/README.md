@@ -95,3 +95,53 @@ and 95% confidence intervals.
 On this fixture, fused and manual timings are close. Fused calls provide the
 coefficient and output-reuse contract while retaining the existing kernels;
 they still allocate product scratch and do not imply a general speedup.
+
+## Caller-owned product workspace
+
+Compare the existing fused methods with workspace methods in one exclusive
+reservation:
+
+```sh
+compute bench --reason "Compare fused and caller-workspace row and chain products" -- \
+  env CARGO_INCREMENTAL=0 LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked \
+  --no-default-features --features ndarray,sprs --bench normalization_pipeline -- \
+  workspace_pipeline/256x128/0.01 --noplot --warm-up-time 0.1 \
+  --measurement-time 0.3 --sample-size 20 --nresamples 10000
+```
+
+The seed-205 fixture, coefficients, and timing settings match the fused
+comparison above. Each iteration computes one forward and one transpose
+product. The comparison covers dense row normalization, a dense row-then-column
+chain, and row normalization and column chains in both CSC and CSR storage.
+Each workspace result is checked against the fused result before measurement;
+the shared correctness suites separately compare both methods with dense
+normalization oracles.
+
+The baseline allocates temporary product vectors inside the fused methods. The
+candidate reuses two vectors allocated before measurement, with lengths `nrows`
+and `ncols`. Fitting, source construction, and allocation of outputs and
+caller-owned scratch are excluded. Sparse traversal still allocates its own
+bounded workspace. The benchmark also measures peak additional live Rust bytes
+for one pair, excluding buffers allocated before the call, and asserts that the
+dense workspace calls allocate zero bytes. The counting allocator adds atomic
+bookkeeping to allocation and deallocation in both timing paths.
+
+The [timings](workspace.csv), [memory measurements](workspace-memory.csv), and
+[metadata](workspace-metadata.json) were collected November 6, 2026, on an Intel
+Core Ultra 7 155U with Rust 1.98.1. Timings report pair medians; the CSV includes 95%
+confidence intervals. Memory reports peak additional bytes per pair.
+
+| Operator              | Fused pair | Workspace pair | Fused peak | Workspace peak |
+| --------------------- | ---------: | -------------: | ---------: | -------------: |
+| Dense rows            |  114.56 µs |      111.09 µs |    2,048 B |            0 B |
+| Dense row then column |  152.48 µs |      150.25 µs |    2,048 B |            0 B |
+| CSC rows              |   45.84 µs |       46.81 µs |   10,560 B |        8,512 B |
+| CSR rows              |   45.56 µs |       46.33 µs |    9,376 B |        8,352 B |
+| CSC column chain      |   46.92 µs |       47.86 µs |    9,536 B |        7,488 B |
+| CSR column chain      |   47.35 µs |       49.69 µs |    8,352 B |        7,328 B |
+
+Reusing product scratch removes additional allocation in dense calls and reduces
+sparse peak workspace. It provides no consistent timing improvement on this
+fixture. Both methods execute the same fitted kernels, and sparse traversal
+retains its own buffers. These timings come from a separate run from the earlier
+manual/fused comparison and should be compared within this table.

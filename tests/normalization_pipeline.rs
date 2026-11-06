@@ -386,10 +386,20 @@ fn fused_f32_pipeline_preserves_saved_stages_and_coefficients() {
     op.matvec_scaled_into(-2., &x, 0.5, &mut out).unwrap();
     op.mat_transpose_vec_scaled_into(-2., &u, 0.5, &mut out_t)
         .unwrap();
+    let mut scratch = vec![f32::NAN; 2];
+    let mut scratch_t = vec![f32::NAN; 3];
+    let mut workspace_out = vec![3_f32; 2];
+    let mut workspace_out_t = vec![3_f32; 3];
+    op.matvec_scaled_with_workspace(-2., &x, 0.5, &mut workspace_out, &mut scratch)
+        .unwrap();
+    op.mat_transpose_vec_scaled_with_workspace(-2., &u, 0.5, &mut workspace_out_t, &mut scratch_t)
+        .unwrap();
     for (actual, expected) in out
         .iter()
         .chain(&out_t)
-        .zip(expected.iter().chain(&expected_t))
+        .chain(&workspace_out)
+        .chain(&workspace_out_t)
+        .zip(expected.iter().chain(&expected_t).cycle())
     {
         approx::assert_relative_eq!(*actual, -2. * expected + 1.5, epsilon = 1e-6);
     }

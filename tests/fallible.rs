@@ -524,6 +524,26 @@ fn fused_rows_and_chains_skip_reads_and_preserve_errors() {
                 Err(ReadError)
             );
             assert_eq!(out, [99.; 2]);
+            let mut scratch = vec![f64::NAN; 2];
+            assert_eq!(
+                op.matvec_scaled_with_workspace(2., &vec![1.; 2], 3., &mut out, &mut scratch),
+                Err(ReadError)
+            );
+            assert_eq!(out, [99.; 2]);
+            assert!(scratch[0].is_finite());
+            scratch.fill(f64::NAN);
+            assert_eq!(
+                op.mat_transpose_vec_scaled_with_workspace(
+                    2.,
+                    &vec![1.; 2],
+                    3.,
+                    &mut out,
+                    &mut scratch,
+                ),
+                Err(ReadError)
+            );
+            assert_eq!(out, [99.; 2]);
+            assert!(scratch[0].is_finite());
             let before = source.fused_calls.get();
             let x = Unreadable(vec![0.; 2]);
             let mut out = Unreadable(vec![f64::NAN; 2]);
@@ -547,6 +567,46 @@ fn fused_rows_and_chains_skip_reads_and_preserve_errors() {
                 ))
                 .is_err()
             );
+            scratch.fill(42.);
+            op.matvec_scaled_with_workspace(-0., &x, -0., &mut out, &mut scratch)
+                .unwrap();
+            op.mat_transpose_vec_scaled_with_workspace(0., &x, 0., &mut out, &mut scratch)
+                .unwrap();
+            assert_eq!(out.0, [0.; 2]);
+            assert_eq!(scratch, [42.; 2]);
+            for transpose in [false, true] {
+                for (input_len, output_len, scratch_len) in [(1, 2, 2), (2, 1, 2), (2, 2, 1)] {
+                    let input = Unreadable(vec![0.; input_len]);
+                    let mut out = Unreadable(vec![99.; output_len]);
+                    let mut scratch = vec![42.; scratch_len];
+                    assert!(
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            if transpose {
+                                op.mat_transpose_vec_scaled_with_workspace(
+                                    0.,
+                                    &input,
+                                    0.,
+                                    &mut out,
+                                    &mut scratch,
+                                )
+                                .unwrap();
+                            } else {
+                                op.matvec_scaled_with_workspace(
+                                    0.,
+                                    &input,
+                                    0.,
+                                    &mut out,
+                                    &mut scratch,
+                                )
+                                .unwrap();
+                            }
+                        }))
+                        .is_err()
+                    );
+                    assert_eq!(out.0, vec![99.; output_len]);
+                    assert_eq!(scratch, vec![42.; scratch_len]);
+                }
+            }
             assert_eq!(source.fused_calls.get(), before);
             source.fail.set(false);
             op.matvec_scaled_into(2., &vec![1.; 2], 0., &mut out)
@@ -555,7 +615,19 @@ fn fused_rows_and_chains_skip_reads_and_preserve_errors() {
             op.mat_transpose_vec_scaled_into(2., &vec![1.; 2], 0., &mut out)
                 .unwrap();
             assert!(out.0.iter().all(|v| v.is_finite()));
-            assert_eq!(source.fused_calls.get(), before + 2);
+            op.matvec_scaled_with_workspace(2., &vec![1.; 2], 0., &mut out, &mut scratch)
+                .unwrap();
+            assert!(out.0.iter().all(|v| v.is_finite()));
+            op.mat_transpose_vec_scaled_with_workspace(
+                2.,
+                &vec![1.; 2],
+                0.,
+                &mut out,
+                &mut scratch,
+            )
+            .unwrap();
+            assert!(out.0.iter().all(|v| v.is_finite()));
+            assert_eq!(source.fused_calls.get(), before + 4);
             source.fail.set(true);
         }};
     }

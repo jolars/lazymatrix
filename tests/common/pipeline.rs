@@ -36,9 +36,15 @@ fn equal(actual: f64, expected: f64) {
     }
 }
 
-fn check<O, V>(op: &O, raw: &[Vec<f64>], ncols: usize, to_v: &impl Fn(&[f64]) -> V)
-where
-    O: MatVec<V>
+fn check<M, A, B, V>(
+    op: &LazyMatrix<M, NormalizationChainParams<A, B>>,
+    raw: &[Vec<f64>],
+    ncols: usize,
+    to_v: &impl Fn(&[f64]) -> V,
+) where
+    M: lazymatrix::MatrixShape + MatrixErrorType,
+    NormalizationChainParams<A, B>: lazymatrix::NormalizationParams<Scalar = f64>,
+    LazyMatrix<M, NormalizationChainParams<A, B>>: MatVec<V>
         + MatVecInto<V>
         + MatTransposeVec<V>
         + MatTransposeVecInto<V>
@@ -72,6 +78,8 @@ where
         equal(transpose.get(j), value);
         equal(reused_t.get(j), value);
     }
+    let mut scratch = V::owned_from_fn(raw.len(), |_| f64::NAN);
+    let mut scratch_t = V::owned_from_fn(ncols, |_| f64::NAN);
     for alpha in [0., 1., -0.75, f64::INFINITY] {
         for beta in [0., 0.5] {
             let old = if beta == 0. { f64::NAN } else { 1.75 };
@@ -80,9 +88,23 @@ where
             op.matvec_scaled_into(alpha, &x, beta, &mut out).unwrap();
             op.mat_transpose_vec_scaled_into(alpha, &u, beta, &mut out_t)
                 .unwrap();
+            let mut workspace_out = V::owned_from_fn(raw.len(), |_| old);
+            let mut workspace_out_t = V::owned_from_fn(ncols, |_| old);
+            op.matvec_scaled_with_workspace(alpha, &x, beta, &mut workspace_out, &mut scratch)
+                .unwrap();
+            op.mat_transpose_vec_scaled_with_workspace(
+                alpha,
+                &u,
+                beta,
+                &mut workspace_out_t,
+                &mut scratch_t,
+            )
+            .unwrap();
             for (actual, expected, rounded) in [
                 (&out, &expected, &product),
                 (&out_t, &expected_t, &transpose),
+                (&workspace_out, &expected, &product),
+                (&workspace_out_t, &expected_t, &transpose),
             ] {
                 for (i, &product) in expected.iter().enumerate() {
                     // Infinite coefficients act on the kernel's rounded sum.
