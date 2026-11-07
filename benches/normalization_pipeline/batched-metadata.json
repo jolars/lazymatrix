@@ -1,0 +1,51 @@
+{
+  "collected_at_utc": "2026-11-07T20:35:02.635182+00:00",
+  "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.42",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "git_revision": "4f3718a06f5641a2ace49c2d7bd17bad4cb79080",
+  "working_tree": true,
+  "features": [
+    "ndarray_v0_17",
+    "sprs_v0_11"
+  ],
+  "seed": 205,
+  "threads": 1,
+  "rows": 256,
+  "cols": 128,
+  "density": 0.01,
+  "responses": 17,
+  "warm_up_seconds": 0.1,
+  "measurement_seconds": 0.3,
+  "sample_size": 20,
+  "bootstrap_resamples": 10000,
+  "confidence_level": 0.95,
+  "estimator": "Criterion median",
+  "operation": "One forward and one transpose batch per iteration",
+  "baseline": "Reusable vector products on each borrowed response column",
+  "candidate": "One reusable batched product per direction",
+  "excluded": [
+    "fitting",
+    "source construction",
+    "response construction",
+    "output allocation"
+  ],
+  "included": [
+    "backend traversal workspace",
+    "allocation bookkeeping in both timing paths"
+  ],
+  "memory_measure": "Peak additional live requested Rust bytes during one product pair",
+  "correctness": "Compare every batched entry with the vector result before timing",
+  "source_sha256": {
+    "src/normalization/pipeline/batched.rs": "3029b74ea6693a5ae8ddf38dba7695e68c7ed4c6dcea16fd189e4a10a232c0a1",
+    "src/normalization/pipeline/products.rs": "9e5d2b37d64ca0884b30c3f032ce436817de5aa3721e3dc8af7abd707f492ed3",
+    "src/normalization/pipeline/dense.rs": "3ca14d337ee2a96c09521660f70c0bb46279dbdffc8f4b0bed6c32edacf4bbc6",
+    "src/normalization/row/traversal.rs": "5caf1371d3ea6f179a88022ddb46c30d797a6bf5678fe5a0e0fa3c22bc443d7e",
+    "src/row_normalization.rs": "1ad2d809badbc2fb52d7251152523374762a5a2a976017c83ad10060e59ab65a",
+    "benches/normalization_pipeline.rs": "a14640f2f3e63e73fc4ea5c56c3988c7e21478ee67eb12392e187e961cf65577",
+    "benches/common/allocations.rs": "146b4820548811afa3bfe91267ca14d6f7bf6084c9e807ec9a5b78a451928c24",
+    "benches/common/pipeline.rs": "6b3356d9ea12470ca8ce8a43255d98415fa351a46c0528807b00fed11dfa510f",
+    "benches/common/normalization.rs": "d134fe1f1ae0ba50dab16c4f03254753636f6986c39fdd434a03af90caca7e71"
+  },
+  "reservation": "All baseline and candidate timings in one compute bench window"
+}

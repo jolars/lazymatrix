@@ -69,6 +69,15 @@ fn column_pipeline_background_ranges_preserve_ieee_arithmetic() {
                 })
                 .sum();
             let op = params.view().apply_frozen(&matrix);
+            let rhs = lazymatrix::DenseBlock::new(&weights, weights.len(), 1);
+            let batch: common::MaterializeOutput =
+                lazymatrix::MatTransposeMat::mat_transpose_mat(&op, &rhs).unwrap();
+            let actual = batch.values[0];
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                approx::assert_relative_eq!(actual, expected, epsilon = 1e-12);
+            }
             let actual = op.mat_transpose_vec(&weights).unwrap()[0];
             if expected.is_nan() {
                 assert!(actual.is_nan());
@@ -258,6 +267,14 @@ fn row_background_ranges_preserve_ieee_arithmetic() {
                 .sum();
             let params =
                 RowNormalizationParams::from_parts(1, Some(vec![center]), Some(vec![scale]));
+            let rhs = lazymatrix::DenseBlock::new(&weights, weights.len(), 1);
+            let batch: common::MaterializeOutput =
+                lazymatrix::MatMat::matmat(&params.view().apply_frozen(&source), &rhs).unwrap();
+            if expected.is_nan() {
+                assert!(batch.values[0].is_nan());
+            } else {
+                approx::assert_relative_eq!(batch.values[0], expected, epsilon = 1e-12);
+            }
             let actual = params
                 .view()
                 .apply_frozen(&source)
@@ -563,6 +580,7 @@ fn sprs_sliced_and_transposed_views_use_local_dimensions() {
             })
             .collect();
         let v = common::random_vec(58, matrix.cols());
+        common::batched::check_normalized_batches(&matrix, &dense);
         common::check_row_normalization(&matrix, &dense, |v| v.to_vec());
         common::check_row_submatrices(&matrix, &dense, |v| v.to_vec());
         let u = common::random_vec(59, matrix.rows());

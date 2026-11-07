@@ -3,7 +3,7 @@
 use crate::{Centering, MatrixRead, RowNormalization, RowNormalizationStats, Scalar, Scaling};
 
 mod traversal;
-pub(crate) use traversal::rectangle_product;
+pub(crate) use traversal::{Transposed, rectangle_product};
 #[cfg(any(
     feature = "faer_all",
     feature = "nalgebra_all",

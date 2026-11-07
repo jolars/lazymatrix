@@ -107,6 +107,7 @@ fn row_scans_preserve_fill_and_exclude_nonfinite_padding() {
         store_chunk(&array, &[1, 1], &[3., f64::NAN, f64::INFINITY, f64::NAN]).unwrap();
         let matrix = ZarrMatrix::<_, f64>::try_new(array).unwrap();
         let raw = [vec![1., 3., 7.], vec![2., 4., 7.], vec![7., 7., 3.]];
+        common::batched::check_normalized_batches(&matrix, &raw);
         common::check_row_normalization(&matrix, &raw, |v| v.to_vec());
         let frozen = LazyMatrix::from_row_parts(&matrix, Some(vec![1., 2., 3.]), Some(vec![2.; 3]));
         common::check_row_normalized_products(
@@ -162,6 +163,7 @@ fn row_scans_use_outer_shards_and_preserve_missing_subchunks() {
         raw[0][0] = 1.;
         raw[0][1] = 3.;
         raw[4][4] = 3.;
+        common::batched::check_normalized_batches(&matrix, &raw);
         common::check_row_normalization(&matrix, &raw, |v| v.to_vec());
         store.reset();
         let lazy = LazyMatrix::new(&matrix, RowNormalization::standardize()).unwrap();
@@ -178,6 +180,15 @@ fn row_scans_use_outer_shards_and_preserve_missing_subchunks() {
         assert_eq!(*store.keys.lock().unwrap(), shard_keys);
         store.reset();
         lazy.mat_transpose_vec(&vec![1.; 5]).unwrap();
+        assert_eq!(*store.keys.lock().unwrap(), shard_keys);
+        let values = vec![1.; 5 * 33];
+        let rhs = lazymatrix::DenseBlock::new(&values, 5, 33);
+        store.reset();
+        let _: common::MaterializeOutput = lazymatrix::MatMat::matmat(&lazy, &rhs).unwrap();
+        assert_eq!(*store.keys.lock().unwrap(), shard_keys);
+        store.reset();
+        let _: common::MaterializeOutput =
+            lazymatrix::MatTransposeMat::mat_transpose_mat(&lazy, &rhs).unwrap();
         assert_eq!(*store.keys.lock().unwrap(), shard_keys);
     }
 }
@@ -311,5 +322,81 @@ fn empty_rows_and_columns_skip_failing_storage() {
             );
         }
         assert!(store.keys.lock().unwrap().is_empty());
+    }
+}
+
+#[test]
+fn row_and_column_chain_batches_scan_once_and_retry_after_errors() {
+    use lazymatrix::{MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatrixOwned};
+    fn check<M: MatMatInto<f64> + MatTransposeMatInto<f64>>(
+        op: &M,
+        matrix: &ZarrMatrix<Array<TrackedStore>>,
+        store: &TrackedStore,
+    ) {
+        for transpose in [false, true] {
+            let (input, output) = if transpose {
+                (op.nrows(), op.ncols())
+            } else {
+                (op.ncols(), op.nrows())
+            };
+            for k in [0, 1, 17, 33] {
+                let values = vec![1.; input * k];
+                let rhs = lazymatrix::DenseBlock::new(&values, input, k);
+                store.reset();
+                let expected: common::MaterializeOutput = if transpose {
+                    op.mat_transpose_mat(&rhs).unwrap()
+                } else {
+                    op.matmat(&rhs).unwrap()
+                };
+                assert_scans(store, matrix, usize::from(k != 0));
+                let mut out = common::MaterializeOutput::zeros(output, k);
+                if k != 0 {
+                    for fail_after in [0, 2] {
+                        store.reset();
+                        store.fail_after.store(fail_after, Ordering::Relaxed);
+                        let result = if transpose {
+                            op.mat_transpose_mat_into(&rhs, &mut out)
+                        } else {
+                            op.matmat_into(&rhs, &mut out)
+                        };
+                        assert!(result.is_err());
+                        assert_eq!(store.keys.lock().unwrap().len(), fail_after + 1);
+                        store.reset();
+                        if transpose {
+                            op.mat_transpose_mat_into(&rhs, &mut out).unwrap();
+                        } else {
+                            op.matmat_into(&rhs, &mut out).unwrap();
+                        }
+                        assert_scans(store, matrix, 1);
+                        assert_eq!(out.values, expected.values);
+                    }
+                }
+                store.reset();
+                let mut wrong = common::MaterializeOutput::zeros(output + 1, k);
+                wrong.values.fill(99.);
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if transpose {
+                            op.mat_transpose_mat_into(&rhs, &mut wrong)
+                        } else {
+                            op.matmat_into(&rhs, &mut wrong)
+                        }
+                    }))
+                    .is_err()
+                );
+                assert!(wrong.values.iter().all(|&v| v == 99.));
+                assert_scans(store, matrix, 0);
+            }
+        }
+    }
+    for compressed in [false, true] {
+        let (matrix, store) = tracked(compressed);
+        let row = RowNormalization::standardize().fit_apply(&matrix).unwrap();
+        check(&row, &matrix, &store);
+        let chain = ColumnNormalization::robust()
+            .then(ColumnNormalization::standardize())
+            .fit_apply(&matrix)
+            .unwrap();
+        check(&chain, &matrix, &store);
     }
 }

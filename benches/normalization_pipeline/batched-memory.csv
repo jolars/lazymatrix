@@ -1,0 +1,7 @@
+rows,cols,density,responses,operator,vector_peak_bytes,batched_peak_bytes
+256,128,0.01,17,csc_columns,7488,69448
+256,128,0.01,17,csc_rows,8512,70472
+256,128,0.01,17,csr_columns,7328,69280
+256,128,0.01,17,csr_rows,8352,70304
+256,128,0.01,17,dense_mixed,0,0
+256,128,0.01,17,dense_rows,0,0

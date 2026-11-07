@@ -58,6 +58,7 @@ macro_rules! backend_suite {
                 use lazymatrix::{RawColumn, WeightedColumnSumsInto, WeightedGramInto};
                 let reference = Mat::from_fn(matrix.nrows(), matrix.ncols(), |i, j| dense[i][j]);
                 common::check_column_stats_against(matrix, &reference);
+                common::batched::check_normalized_batches(matrix, dense);
                 common::check_row_normalization(matrix, dense, to_col);
                 common::check_row_submatrices(matrix, dense, to_col);
                 common::check_transpose_products(matrix, dense, &to_col, &from_col);
@@ -408,6 +409,9 @@ macro_rules! backend_suite {
                 let mut matrix =
                     SparseRowMat::new(symbolic, vec![2.0, 0.0, -3.0, 99.0, 99.0, 4.0, 99.0]);
                 let raw = [vec![0., -1.], vec![0., 0.], vec![4., 0.]];
+                common::batched::check_normalized_batches(&matrix, &raw);
+                common::batched::check_normalized_batches(&matrix.as_ref(), &raw);
+                common::batched::check_normalized_batches(&matrix.rb_mut(), &raw);
                 common::check_row_normalization(&matrix, &raw, to_col);
                 common::check_row_normalization(&matrix.as_ref(), &raw, to_col);
                 common::check_row_normalization(&matrix.rb_mut(), &raw, to_col);

@@ -10,6 +10,7 @@ use num_traits::Zero;
 use private::Params as _;
 use std::marker::PhantomData;
 
+mod batched;
 mod dense;
 mod products;
 pub(crate) use products::product_rectangle;
@@ -187,6 +188,9 @@ impl<F: Scalar, S: AsRef<[F]>> FittedRowNormalization<RowNormalizationParams<F, 
 /// Column stages contain ColumnNormalizationParams. Row stages contain
 /// FittedRowNormalization, retaining the recipe needed to prepare new samples.
 /// Application consumes owned stages or explicit borrowed views.
+/// Forward and transpose batched products preserve every stage in order.
+/// Column-only batches use native traversal; mixed batches require dense
+/// indexed storage. Neither path materializes the normalized design.
 ///
 /// Chains deliberately require explicit application names:
 ///
@@ -202,9 +206,9 @@ impl<F: Scalar, S: AsRef<[F]>> FittedRowNormalization<RowNormalizationParams<F, 
 /// }
 /// ```
 ///
-/// Mixed chains do not acquire batched products:
+/// Mixed chains support batched products on dense indexed storage:
 ///
-/// ```compile_fail
+/// ```
 /// use lazymatrix::{ColumnNormalization, MatMatInto, MatrixErrorType,
 ///     MatrixRead, MatrixWrite, RowNormalization};
 /// fn batched<M: MatrixRead<f64> + MatrixErrorType,

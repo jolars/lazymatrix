@@ -110,6 +110,29 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn row_and_chain_batches_support_strided_inputs_and_outputs() {
+                use lazymatrix::{MatMat, MatMatInto, MatTransposeMat, MatTransposeMatInto, MatrixShape, RowNormalization};
+                fn check<O: MatrixShape + MatMatInto<f64> + MatTransposeMatInto<f64>>(op: &O) {
+                    for transpose in [false, true] {
+                        let (input, output) = if transpose { (op.nrows(), op.ncols()) } else { (op.ncols(), op.nrows()) };
+                        let storage = Array2::from_shape_fn((2 * input, 34), |(i, j)| (i + j) as f64);
+                        let rhs = storage.slice(s![..;-2, ..;2]);
+                        let expected: Array2<f64> = if transpose { op.mat_transpose_mat(&rhs).unwrap() } else { op.matmat(&rhs).unwrap() };
+                        let mut out = Array2::from_elem((2 * output, 34), 99.);
+                        if transpose { op.mat_transpose_mat_into(&rhs, &mut out.slice_mut(s![..;-2, ..;2])).unwrap(); }
+                        else { op.matmat_into(&rhs, &mut out.slice_mut(s![..;-2, ..;2])).unwrap(); }
+                        for i in 0..2 * output { for j in 0..34 {
+                            assert_eq!(out[(i, j)], if i % 2 == 1 && j % 2 == 0 { expected[((2 * output - 1 - i) / 2, j / 2)] } else { 99. });
+                        } }
+                    }
+                }
+                let source = Array2::from_shape_fn((6, 6), |(i, j)| 1e12 + (i * i + i * j + j) as f64);
+                let view = source.slice(s![..;-2, ..;3]);
+                check(&RowNormalization::standardize().fit_apply(view).unwrap());
+                check(&RowNormalization::standardize().then(ColumnNormalization::standardize()).fit_apply(view).unwrap());
+            }
+
+            #[test]
             fn eager_conversion_supports_strided_outputs_and_fortran_allocation_reuse() {
                 use lazymatrix::{WeightedGramInto, WeightedColumnSumsInto, WithIntercept};
                 let dense = array![[1.0, 2.0], [3.0, 4.0]];

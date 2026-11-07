@@ -226,7 +226,11 @@ with single-axis fitting and reuse before introducing fitted pipelines.
     - Row and chain fused calls reuse a product vector of length `nrows` for
       forward products or `ncols` for transpose products. Sparse traversal and
       chunk decoding retain their internal bounded workspace.
-  - [ ] Add batched products.
+  - [x] Add batched products.
+    - Row normalization and column-only chains traverse dense, sparse, and
+      chunked storage. Mixed chains require dense indexed access. Sparse batches
+      scan once per panel of up to 16 responses with bounded workspace; dense
+      and chunked batches scan once for all responses.
   - [ ] Add borrowed logical rows.
   - [ ] Add borrowed logical columns.
   - [ ] Add weighted operations.

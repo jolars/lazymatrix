@@ -50,9 +50,12 @@ fn check<M, A, B, V>(
         + MatTransposeVecInto<V>
         + lazymatrix::RectangularProducts<Scalar = f64>
         + MatVecScaledInto<V, V, f64>
-        + MatTransposeVecScaledInto<V, V, f64>,
+        + MatTransposeVecScaledInto<V, V, f64>
+        + lazymatrix::MatMatInto<f64>
+        + lazymatrix::MatTransposeMatInto<f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
+    super::batched::check_batched(op, raw);
     let x: Vec<_> = (0..ncols).map(|j| 0.5 - j as f64 / 3.).collect();
     let u: Vec<_> = (0..raw.len()).map(|i| i as f64 / 4. - 0.75).collect();
     let expected: Vec<f64> = raw
@@ -197,6 +200,18 @@ where
             let prepared = op.into_parts().1.for_new_samples(build(&tm)).unwrap();
             check(&prepared, &expected, tm.ncols, &to_v);
         }
+        let row = RowNormalization::robust();
+        let repeated = row
+            .then(RowNormalization::standardize())
+            .fit_apply(build(&tm))
+            .unwrap();
+        let expected = apply(
+            &apply(&tm.dense, tm.ncols, true, row),
+            tm.ncols,
+            true,
+            RowNormalization::standardize(),
+        );
+        check(&repeated, &expected, tm.ncols, &to_v);
         let row = RowNormalization::new(Centering::Mean, Scaling::L2);
         let col = ColumnNormalization::standardize();
         let op = LazyMatrix::new(build(&tm), row.then(col).then(row)).unwrap();
@@ -239,6 +254,7 @@ where
         })
         .collect();
     let op = params.apply_frozen(build(&tm));
+    super::batched::check_batched(&op, &expected);
     super::check_frozen_submatrices(&op, &expected, &to_v);
 }
 
@@ -294,7 +310,9 @@ where
         + MatTransposeVecInto<V>
         + lazymatrix::RectangularProducts<Scalar = f64>
         + MatVecScaledInto<V, V, f64>
-        + MatTransposeVecScaledInto<V, V, f64>,
+        + MatTransposeVecScaledInto<V, V, f64>
+        + lazymatrix::MatMatInto<f64>
+        + lazymatrix::MatTransposeMatInto<f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     let specs = [
@@ -347,5 +365,6 @@ where
         })
         .collect();
     let op = params.apply_frozen(build(&tm));
+    super::batched::check_batched(&op, &expected);
     super::check_frozen_submatrices(&op, &expected, &to_v);
 }

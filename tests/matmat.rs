@@ -275,3 +275,106 @@ fn validation_precedes_writes_and_empty_batches_skip_backend_calls() {
     }
     assert_eq!(source.calls.get(), 0);
 }
+
+impl lazymatrix::MatrixTraversal<f64> for Source {
+    fn traversal_layout(&self) -> lazymatrix::TraversalLayout {
+        lazymatrix::TraversalLayout::SparseRows
+    }
+
+    fn for_each_entry(
+        &self,
+        rows: std::ops::Range<usize>,
+        columns: std::ops::Range<usize>,
+        mut visit: impl FnMut(usize, usize, f64),
+    ) -> Result<(), ReadError> {
+        self.calls.set(self.calls.get() + 1);
+        for i in rows {
+            for j in columns.clone() {
+                visit(i, j, self.data.get(i, j));
+                if self.fail.get() {
+                    return Err(ReadError);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn check_normalized_batch_validation<M>(op: &M, source: &Source, first: f64)
+where
+    M: MatMatInto<f64> + MatTransposeMatInto<f64>,
+{
+    for transpose in [false, true] {
+        let (input, output) = if transpose {
+            (op.nrows(), op.ncols())
+        } else {
+            (op.ncols(), op.nrows())
+        };
+        for k in [0, 1, 17, 33] {
+            for (rows, out_rows, out_cols) in [
+                (input + 1, output, k),
+                (input, output + 1, k),
+                (input, output, k + 1),
+            ] {
+                let rhs = Dense::zeros(rows, k);
+                let mut out = Dense::new(out_rows, out_cols, &vec![99.; out_rows * out_cols]);
+                let previous = out.clone();
+                source.calls.set(0);
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if transpose {
+                            op.mat_transpose_mat_into(&rhs, &mut out)
+                        } else {
+                            op.matmat_into(&rhs, &mut out)
+                        }
+                    }))
+                    .is_err()
+                );
+                assert_eq!(out, previous);
+                assert_eq!(source.calls.get(), 0);
+            }
+        }
+        let empty = Dense::zeros(input, 0);
+        let mut out = Dense::zeros(output, 0);
+        source.calls.set(0);
+        if transpose {
+            op.mat_transpose_mat_into(&empty, &mut out).unwrap();
+        } else {
+            op.matmat_into(&empty, &mut out).unwrap();
+        }
+        assert_eq!(source.calls.get(), 0);
+
+        let rhs = Dense::new(input, 33, &vec![1.; input * 33]);
+        let mut out = Dense::new(output, 33, &vec![f64::NAN; output * 33]);
+        source.calls.set(0);
+        source.fail.set(true);
+        let result = if transpose {
+            op.mat_transpose_mat_into(&rhs, &mut out)
+        } else {
+            op.matmat_into(&rhs, &mut out)
+        };
+        assert!(result.is_err());
+        assert_eq!(source.calls.get(), 1);
+        // A failed first panel receives no trailing implicit background, and
+        // later panels retain the overwrite's initial zeros.
+        for (index, &value) in out.values.iter().enumerate() {
+            approx::assert_abs_diff_eq!(value, if index < 16 { first } else { 0. });
+        }
+        source.fail.set(false);
+    }
+}
+
+#[test]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+fn row_and_chain_batches_validate_before_reads_and_propagate_errors() {
+    use lazymatrix::{ColumnNormalizationParams, NormalizationChainParams};
+    let source = source();
+    let row = LazyMatrix::from_row_parts(&source, Some(vec![0.5; 3]), Some(vec![-2.; 3]));
+    check_normalized_batch_validation(&row, &source, -0.25);
+    let params = NormalizationChainParams::from_parts(
+        ColumnNormalizationParams::from_parts(2, Some(vec![0.5; 2]), Some(vec![-2.; 2])),
+        ColumnNormalizationParams::from_parts(2, Some(vec![0.25; 2]), Some(vec![1.5; 2])),
+    );
+    let chain = params.view().apply_frozen(&source);
+    check_normalized_batch_validation(&chain, &source, -1. / 3.);
+}

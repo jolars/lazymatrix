@@ -97,10 +97,10 @@
 //! Mixed and row-only chains support dense indexed access; column-only chains
 //! also support native sparse CSC/CSR and Zarr scans. Chains currently expose
 //! allocating, reusable, and fused forward and transpose vector products, including
-//! caller-owned product workspace. They use bounded workspace without an
-//! intermediate normalized design matrix. Sparse products use transformed implicit
-//! backgrounds and missing index ranges; exceptional IEEE
-//! cases can evaluate individual missing contributions.
+//! caller-owned product workspace. They also support batched products. All these
+//! products use bounded workspace without an intermediate normalized design matrix.
+//! Sparse products use transformed implicit backgrounds and missing index ranges;
+//! exceptional IEEE cases can evaluate individual missing contributions.
 //!
 //! The fitted parameter type selects the axis and scalar:
 //! `LazyMatrix<M, ColumnNormalizationParams<F>>` or
@@ -123,6 +123,12 @@
 //! entries without cloning; [`MatrixWrite`] and [`MatrixOwned`] describe output.
 //! Every supported backend release provides these products. Sparse kernels
 //! retain their storage, and Zarr scans chunks once for the entire batch.
+//! Row normalization and column-only chains use [`MatrixTraversal`]; mixed chains
+//! require [`MatrixRead`]. Stages transform entries in fitted order before
+//! accumulation. Sparse row and chain products scan once per panel of up to 16
+//! responses, with O(nrows + ncols) scratch independent of the batch width.
+//! Dense and chunked traversal scans once for the entire batch. Decoding and
+//! sparse coalescing retain their backend workspace.
 //! [`LazyMatrix`], [`EagerMatrix`], and [`WithIntercept`] preserve their vector
 //! normalization semantics. Internal scratch is permitted. Batched submatrix,
 //! fused coefficient, and explicit workspace APIs remain future work.

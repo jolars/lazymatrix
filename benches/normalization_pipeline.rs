@@ -88,7 +88,13 @@ fn benchmark(c: &mut Criterion) {
         group.finish();
     }
 }
-criterion_group!(benches, benchmark, fused_products, workspace_products);
+criterion_group!(
+    benches,
+    benchmark,
+    fused_products,
+    workspace_products,
+    batched_products
+);
 criterion_main!(benches);
 
 fn fused_products(c: &mut Criterion) {
@@ -283,6 +289,100 @@ fn workspace_products(c: &mut Criterion) {
             compare!(
                 &format!("{orientation}_columns"),
                 pipeline::columns().fit_apply(&source).unwrap()
+            );
+        }
+        group.finish();
+    }
+}
+
+fn batched_products(c: &mut Criterion) {
+    use backend_aliases::ndarray::{Array2, ArrayView1, ArrayViewMut1};
+    use lazymatrix::{MatMatInto, MatTransposeMatInto, MatrixShape, RowNormalization};
+
+    fn compare<M>(
+        group: &mut criterion::BenchmarkGroup<'_, criterion::measurement::WallTime>,
+        label: &str,
+        name: &str,
+        op: &M,
+    ) where
+        M: MatrixShape + MatMatInto<f64> + MatTransposeMatInto<f64>,
+        for<'a, 'b> M: MatVecInto<ArrayView1<'a, f64>, ArrayViewMut1<'b, f64>>
+            + MatTransposeVecInto<ArrayView1<'a, f64>, ArrayViewMut1<'b, f64>>,
+    {
+        let k = 17;
+        let rhs = Array2::from_shape_fn((op.ncols(), k), |(j, r)| (j % 7) as f64 - r as f64 / 4.);
+        let u = Array2::from_shape_fn((op.nrows(), k), |(i, r)| (i % 5) as f64 / 3. - r as f64);
+        let mut y = Array2::zeros((op.nrows(), k));
+        let mut t = Array2::zeros((op.ncols(), k));
+        let mut expected = y.clone();
+        let mut expected_t = t.clone();
+        let vectors = |y: &mut Array2<f64>, t: &mut Array2<f64>| {
+            for r in 0..k {
+                op.matvec_into(&rhs.column(r), &mut y.column_mut(r))
+                    .unwrap();
+                op.mat_transpose_vec_into(&u.column(r), &mut t.column_mut(r))
+                    .unwrap();
+            }
+        };
+        let batched = |y: &mut Array2<f64>, t: &mut Array2<f64>| {
+            op.matmat_into(&rhs, y).unwrap();
+            op.mat_transpose_mat_into(&u, t).unwrap();
+        };
+        vectors(&mut expected, &mut expected_t);
+        batched(&mut y, &mut t);
+        for (&actual, &expected) in y.iter().chain(&t).zip(expected.iter().chain(&expected_t)) {
+            approx::assert_relative_eq!(actual, expected, epsilon = 1e-8, max_relative = 1e-8);
+        }
+        let baseline = allocations::measure(|| vectors(&mut y, &mut t));
+        let candidate = allocations::measure(|| batched(&mut y, &mut t));
+        eprintln!("batched_peak_bytes,{label}/{name},{baseline},{candidate}");
+        group.bench_function(BenchmarkId::new(name, "vector_pair"), |b| {
+            b.iter(|| {
+                vectors(&mut y, &mut t);
+                black_box((&y, &t));
+            })
+        });
+        group.bench_function(BenchmarkId::new(name, "batched_pair"), |b| {
+            b.iter(|| {
+                batched(&mut y, &mut t);
+                black_box((&y, &t));
+            })
+        });
+    }
+    for fixture in pipeline::fixtures() {
+        let label = format!(
+            "batched_pipeline/{}x{}/{}/17",
+            fixture.rows, fixture.cols, fixture.density
+        );
+        let mut group = c.benchmark_group(&label);
+        let source = pipeline::dense(&fixture.sparse);
+        compare(
+            &mut group,
+            &label,
+            "dense_rows",
+            &RowNormalization::standardize().fit_apply(&source).unwrap(),
+        );
+        compare(
+            &mut group,
+            &label,
+            "dense_mixed",
+            &pipeline::mixed().fit_apply(&source).unwrap(),
+        );
+        for (orientation, source) in [
+            ("csc", fixture.sparse.clone()),
+            ("csr", fixture.sparse.to_csr()),
+        ] {
+            compare(
+                &mut group,
+                &label,
+                &format!("{orientation}_rows"),
+                &RowNormalization::standardize().fit_apply(&source).unwrap(),
+            );
+            compare(
+                &mut group,
+                &label,
+                &format!("{orientation}_columns"),
+                &pipeline::columns().fit_apply(&source).unwrap(),
             );
         }
         group.finish();

@@ -43,6 +43,17 @@ impl<F: lazymatrix::Scalar> MatrixRead<F> for Dense<F> {
     }
 }
 
+impl<F: lazymatrix::Scalar> lazymatrix::MatrixWrite<F> for Dense<F> {
+    fn set(&mut self, row: usize, column: usize, value: F) {
+        self.values[row * self.ncols + column] = value;
+    }
+}
+impl<F: lazymatrix::Scalar> lazymatrix::MatrixOwned<F> for Dense<F> {
+    fn zeros(rows: usize, columns: usize) -> Self {
+        Self::new(rows, columns, vec![F::zero(); rows * columns])
+    }
+}
+
 fn fit_chain<M, P, A, B>(recipe: NormalizationChain<A, B>, data: &M) -> Result<P, M::Error>
 where
     M: MatrixShape + MatrixErrorType,
@@ -178,6 +189,21 @@ fn f32_preparation_owns_new_rows_and_borrows_training_columns() {
     let transpose = valid.mat_transpose_vec(&u).unwrap();
     let adjoint: f32 = x.iter().zip(transpose).map(|(a, b)| a * b).sum();
     approx::assert_relative_eq!(forward[0] * u[0], adjoint, epsilon = 1e-6);
+    let rhs = Dense::new(3, 17, (0..51).map(|i| (i % 7) as f32 - 2.).collect());
+    let u = Dense::new(1, 17, (0..17).map(|i| i as f32 / 4.).collect());
+    let batch: Dense<f32> = lazymatrix::MatMat::matmat(&valid, &rhs).unwrap();
+    let transposed: Dense<f32> =
+        lazymatrix::MatTransposeMat::mat_transpose_mat(&valid, &u).unwrap();
+    for k in 0..17 {
+        let expected = valid
+            .matvec(&(0..3).map(|i| rhs.get(i, k)).collect::<Vec<_>>())
+            .unwrap();
+        let expected_t = valid.mat_transpose_vec(&vec![u.get(0, k)]).unwrap();
+        approx::assert_relative_eq!(batch.get(0, k), expected[0], epsilon = 1e-6);
+        for (j, value) in expected_t.into_iter().enumerate() {
+            approx::assert_relative_eq!(transposed.get(j, k), value, epsilon = 1e-6);
+        }
+    }
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]

@@ -1,10 +1,23 @@
 use super::{
-    MaterializeOutput, TestMatrix, assert_close, dense_transpose, materialize, random_matrix,
+    MaterializeOutput, TestMatrix, dense_transpose, materialize, materialize_rows, random_matrix,
 };
 use lazymatrix::{
     Centering, ColumnNormalization, ColumnStats, LazyMatrix, MatMat, MatMatInto, MatTransposeMat,
     MatTransposeMatInto, MatrixOwned, MatrixRead, MatrixShape, Scaling, Transpose, WithIntercept,
 };
+
+fn assert_close(actual: &[f64], expected: &[f64], epsilon: f64) {
+    assert_eq!(actual.len(), expected.len());
+    for (&actual, &expected) in actual.iter().zip(expected) {
+        if expected.is_nan() {
+            assert!(actual.is_nan(), "{actual} should be NaN");
+        } else if expected.is_infinite() {
+            assert_eq!(actual, expected);
+        } else {
+            approx::assert_abs_diff_eq!(actual, expected, epsilon = epsilon);
+        }
+    }
+}
 
 impl<F: lazymatrix::Scalar> MatrixRead<F> for MaterializeOutput<F> {
     fn get(&self, row: usize, column: usize) -> F {
@@ -72,7 +85,14 @@ where
             .zip(&transpose.values)
             .map(|(a, b)| a * b)
             .sum();
-        approx::assert_relative_eq!(left, right, epsilon = 1e-8, max_relative = 1e-10);
+        if forward
+            .values
+            .iter()
+            .chain(&transpose.values)
+            .all(|v| v.is_finite())
+        {
+            approx::assert_relative_eq!(left, right, epsilon = 1e-8, max_relative = 1e-10);
+        }
         let mut reusable = forward;
         let address = reusable.values.as_ptr();
         for old in [f64::NAN, f64::INFINITY, -99.] {
@@ -89,14 +109,81 @@ where
     }
 }
 
+pub fn check_normalized_batches<M: lazymatrix::MatrixTraversal<f64>>(matrix: &M, raw: &[Vec<f64>]) {
+    let row = LazyMatrix::from_row_parts(
+        matrix,
+        Some(vec![0.75; matrix.nrows()]),
+        Some(vec![-2.; matrix.nrows()]),
+    );
+    check_batched(
+        &row,
+        &materialize_rows(
+            raw,
+            row.normalization().centers(),
+            row.normalization().scales(),
+        ),
+    );
+    let params = lazymatrix::NormalizationChainParams::from_parts(
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            matrix.ncols(),
+            Some(vec![0.5; matrix.ncols()]),
+            None,
+        ),
+        lazymatrix::ColumnNormalizationParams::from_parts(
+            matrix.ncols(),
+            Some(vec![0.25; matrix.ncols()]),
+            Some(vec![-2.; matrix.ncols()]),
+        ),
+    );
+    let expected = materialize(
+        &materialize(raw, params.first().centers(), None),
+        params.next().centers(),
+        params.next().scales(),
+    );
+    check_batched(&params.view().apply_frozen(matrix), &expected);
+}
+
 pub fn run_batched_suite<M>(build: impl Fn(&TestMatrix) -> M)
 where
-    M: MatMatInto<f64> + MatTransposeMatInto<f64> + ColumnStats<f64>,
+    M: MatMatInto<f64>
+        + MatTransposeMatInto<f64>
+        + ColumnStats<f64>
+        + lazymatrix::MatrixTraversal<f64>
+        + lazymatrix::RowStats<f64>,
 {
     for (n, p, density) in [(7, 3, 0.4), (4, 2, 1.), (3, 2, 0.), (0, 3, 0.), (3, 0, 0.)] {
         let tm = random_matrix(0xBA7C, n, p, density);
         let matrix = build(&tm);
         check_batched(&matrix, &tm.dense);
+        for spec in [
+            lazymatrix::RowNormalization::default(),
+            lazymatrix::RowNormalization::standardize(),
+            lazymatrix::RowNormalization::robust(),
+            lazymatrix::RowNormalization::new(Centering::Min, Scaling::L2),
+        ] {
+            let params = spec.fit(&matrix).unwrap();
+            let normalized = materialize_rows(&tm.dense, params.centers(), params.scales());
+            check_batched(&params.view().apply_frozen(&matrix), &normalized);
+            check_batched(&params.apply_frozen(build(&tm)), &normalized);
+        }
+        for (center, scale) in [
+            (0.75, -2.),
+            (f64::INFINITY, 1.),
+            (1., f64::INFINITY),
+            (f64::NAN, 2.),
+        ] {
+            let lazy =
+                LazyMatrix::from_row_parts(&matrix, Some(vec![center; n]), Some(vec![scale; n]));
+            check_batched(
+                &lazy,
+                &materialize_rows(
+                    &tm.dense,
+                    lazy.normalization().centers(),
+                    lazy.normalization().scales(),
+                ),
+            );
+        }
+
         if n > 0 {
             for centering in [Centering::None, Centering::Mean, Centering::Min] {
                 for scaling in [
@@ -158,7 +245,8 @@ where
     M: MatMatInto<f32>
         + MatTransposeMatInto<f32>
         + lazymatrix::MatVec<V>
-        + lazymatrix::MatTransposeVec<V>,
+        + lazymatrix::MatTransposeVec<V>
+        + lazymatrix::MatrixTraversal<f32>,
     V: Clone
         + lazymatrix::VectorView<f32>
         + lazymatrix::ElemDivAssign<f32>
@@ -175,6 +263,43 @@ where
             assert_eq!(actual, expected);
         } else {
             approx::assert_relative_eq!(actual, expected, epsilon = 1e-5, max_relative = 1e-5);
+        }
+    }
+    let mut raw = vec![vec![0_f32; matrix.ncols()]; matrix.nrows()];
+    matrix
+        .for_each_entry(0..matrix.nrows(), 0..matrix.ncols(), |i, j, value| {
+            raw[i][j] = value
+        })
+        .unwrap();
+    for center in [0_f32, 1e38, f32::INFINITY, f32::NAN] {
+        for scale in [-2_f32, 1e-38, f32::INFINITY, f32::NAN] {
+            let row = LazyMatrix::from_row_parts(
+                matrix,
+                Some(vec![center; matrix.nrows()]),
+                Some(vec![scale; matrix.nrows()]),
+            );
+            let expected: Vec<Vec<_>> = raw
+                .iter()
+                .map(|r| r.iter().map(|&v| (v - center) / scale).collect())
+                .collect();
+            check_f32_oracle(&row, &expected);
+            let params = lazymatrix::NormalizationChainParams::from_parts(
+                lazymatrix::ColumnNormalizationParams::from_parts(
+                    matrix.ncols(),
+                    Some(vec![center; matrix.ncols()]),
+                    Some(vec![scale; matrix.ncols()]),
+                ),
+                lazymatrix::ColumnNormalizationParams::from_parts(
+                    matrix.ncols(),
+                    Some(vec![0.25_f32; matrix.ncols()]),
+                    Some(vec![-2_f32; matrix.ncols()]),
+                ),
+            );
+            let expected: Vec<Vec<_>> = expected
+                .iter()
+                .map(|r| r.iter().map(|&v| (v - 0.25) / -2.).collect())
+                .collect();
+            check_f32_oracle(&params.view().apply_frozen(matrix), &expected);
         }
     }
     for centers in [None, Some(vec![1e38_f32; matrix.ncols()])] {
@@ -237,6 +362,54 @@ where
                 for j in 0..matrix.ncols() {
                     equal(transpose.get(j, k), VectorView::get(&expected_t, j));
                     equal(view_forward.get(j, k), VectorView::get(&expected_t, j));
+                }
+            }
+        }
+    }
+}
+
+fn check_f32_oracle<M: MatMatInto<f32> + MatTransposeMatInto<f32>>(op: &M, dense: &[Vec<f32>]) {
+    let coefficients = [f32::NAN, 0., 1., 1e-38, f32::INFINITY, -1., 1e38];
+    for transpose in [false, true] {
+        let (input, output) = if transpose {
+            (op.nrows(), op.ncols())
+        } else {
+            (op.ncols(), op.nrows())
+        };
+        let mut rhs = MaterializeOutput::<f32>::zeros(input, 17);
+        for i in 0..input {
+            for k in 0..17 {
+                rhs.values[i * 17 + k] = coefficients[(i + k) % coefficients.len()];
+            }
+        }
+        let actual: MaterializeOutput<f32> = if transpose {
+            op.mat_transpose_mat(&rhs).unwrap()
+        } else {
+            op.matmat(&rhs).unwrap()
+        };
+        assert_eq!(actual.nrows(), output);
+        for (to, row) in actual.values.chunks(17).enumerate() {
+            for (k, &value) in row.iter().enumerate() {
+                let expected: f32 = (0..input)
+                    .map(|from| {
+                        (if transpose {
+                            dense[from][to]
+                        } else {
+                            dense[to][from]
+                        }) * rhs.get(from, k)
+                    })
+                    .sum();
+                if expected.is_nan() {
+                    assert!(value.is_nan());
+                } else if expected.is_infinite() {
+                    assert_eq!(value, expected);
+                } else {
+                    approx::assert_relative_eq!(
+                        value,
+                        expected,
+                        epsilon = 1e-5,
+                        max_relative = 1e-5
+                    );
                 }
             }
         }

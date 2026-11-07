@@ -338,9 +338,13 @@ impl ColumnNormalization {
 /// normalize entries before accumulation and scan each storage chunk once,
 /// retaining only chunk and codec buffers beyond the output and fitted vectors.
 /// Fused products retain one temporary output vector and merge it only after
-/// the fitted kernel succeeds. Batched products, borrowed logical views,
-/// weighted operations, and eager conversion are not yet supported. New samples require independently
-/// fitted row parameters. [`crate::Transpose`] transposes the fitted operator
+/// the fitted kernel succeeds. Batched forward and transpose products use
+/// [`crate::MatrixTraversal`], normalizing entries before accumulation. Dense
+/// and Zarr batches scan once for all responses. Sparse batches scan once per
+/// panel of up to 16 responses, with O(nrows + ncols) workspace independent of
+/// the response count. Borrowed logical views, weighted operations, and eager
+/// conversion are not yet supported. New samples require independently fitted
+/// row parameters. [`crate::Transpose`] transposes the fitted operator
 /// without refitting.
 ///
 /// ```
@@ -378,11 +382,12 @@ impl ColumnNormalization {
 /// }
 /// ```
 ///
-/// Batched products remain unavailable:
+/// Batched products require native traversal:
 ///
-/// ```compile_fail
-/// use lazymatrix::{LazyMatrix, MatMatInto, MatrixRead, MatrixWrite, RowNormalizationParams};
-/// fn batched<M: MatrixRead<f64> + MatMatInto<f64>, D: MatrixRead<f64> + MatrixWrite<f64>>(
+/// ```
+/// use lazymatrix::{LazyMatrix, MatMatInto, MatrixRead, MatrixTraversal, MatrixWrite,
+///     RowNormalizationParams};
+/// fn batched<M: MatrixTraversal<f64>, D: MatrixRead<f64> + MatrixWrite<f64>>(
 ///     rows: &LazyMatrix<M, RowNormalizationParams>, rhs: &D, out: &mut D,
 /// ) {
 ///     rows.matmat_into(rhs, out).unwrap();
@@ -714,11 +719,11 @@ impl<F: crate::Scalar, S: AsRef<[F]>> RowNormalizationParams<F, S> {
 
     /// Borrow these rows' fitted values without allocating or copying them.
     ///
-    /// Borrowed row parameters retain the same capability limits as owned ones:
+    /// Borrowed row parameters support the same batched products as owned ones:
     ///
-    /// ```compile_fail
-    /// use lazymatrix::{MatMatInto, MatrixRead, MatrixWrite, RowNormalizationParams};
-    /// fn batched<M: MatMatInto<f64> + MatrixRead<f64>, D: MatrixRead<f64> + MatrixWrite<f64>>(
+    /// ```
+    /// use lazymatrix::{MatMatInto, MatrixRead, MatrixTraversal, MatrixWrite, RowNormalizationParams};
+    /// fn batched<M: MatrixTraversal<f64>, D: MatrixRead<f64> + MatrixWrite<f64>>(
     ///     params: &RowNormalizationParams, data: M, rhs: &D, out: &mut D,
     /// ) {
     ///     params.view().apply_frozen(data).matmat_into(rhs, out).unwrap();

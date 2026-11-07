@@ -20,7 +20,7 @@ use crate::{Centering, Scaling};
 ))]
 use crate::{ColumnNormalization, RowNormalization, RowNormalizationStats};
 
-struct Transposed<'a, M>(&'a M);
+pub(crate) struct Transposed<'a, M>(pub(crate) &'a M);
 
 impl<M: MatrixShape> MatrixShape for Transposed<'_, M> {
     fn nrows(&self) -> usize {

@@ -145,3 +145,59 @@ sparse peak workspace. It provides no consistent timing improvement on this
 fixture. Both methods execute the same fitted kernels, and sparse traversal
 retains its own buffers. These timings come from a separate run from the earlier
 manual/fused comparison and should be compared within this table.
+
+## Batched row and chain products
+
+Compare reusable vector products with batched products in one exclusive
+reservation:
+
+```sh
+compute bench --reason "Compare vector and batched row and chain products" -- \
+  env CARGO_INCREMENTAL=0 LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked \
+  --no-default-features --features ndarray,sprs --bench normalization_pipeline -- \
+  batched_pipeline/256x128/0.01/17 --noplot --warm-up-time 0.1 \
+  --measurement-time 0.3 --sample-size 20 --nresamples 10000
+```
+
+The seed-205 fixture has 256 rows, 128 columns, 1% stored density, and 17
+responses. Each iteration computes one forward and one transpose batch. The
+baseline calls the reusable vector methods on each borrowed response column;
+the candidate calls the batched methods once per direction. Both paths reuse
+their outputs. Fitting, source construction, response construction, and output
+allocation happen before measurement. The benchmark checks every batched entry
+against the vector result and measures peak additional live Rust bytes for one
+pair. Allocation bookkeeping is included in both timing paths.
+
+The comparison covers dense row normalization, a dense row-then-column chain,
+and row normalization and column chains in both CSC and CSR storage. Dense
+batches traverse the design once for the entire batch with no extra workspace.
+Sparse batches use panels of up to 16 responses, scanning twice per direction
+for this batch width. Missing-range trees use O(nrows + ncols) storage with a
+constant factor bounded by the panel width. This avoids a normalized design
+matrix and keeps scratch independent of the total response count. Zarr uses
+full traversal and scans storage chunks once per direction for any batch width;
+the correctness suites verify this separately, including outer shards, fill
+values, edge padding, and read failures.
+
+The [timings](batched.csv), [memory measurements](batched-memory.csv), and
+[metadata](batched-metadata.json) were collected November 7, 2026, on an AMD
+Ryzen 9 7900 with Rust 1.98.1. Timing uses 20 samples, 0.1 seconds of warmup,
+0.3 seconds of measurement, and 10,000 bootstrap resamples. The CSV reports
+medians with 95% confidence intervals. Memory excludes the response and output
+buffers allocated before each call.
+
+| Operator              | Vector loop | Batched pair | Vector peak | Batched peak |
+| --------------------- | ----------: | -----------: | ----------: | -----------: |
+| Dense rows            | 1,454.10 µs |  1,455.44 µs |         0 B |          0 B |
+| Dense row then column | 2,181.54 µs |  1,585.84 µs |         0 B |          0 B |
+| CSC rows              |   599.51 µs |    550.33 µs |     8,512 B |     70,472 B |
+| CSR rows              |   603.62 µs |    541.92 µs |     8,352 B |     70,304 B |
+| CSC column chain      |   638.12 µs |    546.96 µs |     7,488 B |     69,448 B |
+| CSR column chain      |   644.62 µs |    550.91 µs |     7,328 B |     69,280 B |
+
+On this fixture, batching leaves dense row timings essentially unchanged and
+makes the dense mixed chain about 1.38 times faster. Sparse batches are about
+1.09 to 1.17 times faster, with higher peak workspace because a panel retains
+missing-range trees for several responses at once. That workspace remains
+bounded independently of the total response count. These measurements describe
+this fixture and batch width; they do not establish a universal speedup.

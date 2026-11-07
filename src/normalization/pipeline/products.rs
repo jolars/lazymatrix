@@ -228,12 +228,12 @@ where
 
 // Summing missing ranges directly avoids subtracting almost equal background
 // totals when most entries of a row or column are stored.
-struct RangeSums<F> {
+pub(super) struct RangeSums<F> {
     values: Vec<F>,
     size: usize,
 }
 impl<F: crate::Scalar> RangeSums<F> {
-    fn new(values: Vec<F>) -> Self {
+    pub(super) fn new(values: Vec<F>) -> Self {
         let size = values.len().next_power_of_two();
         let mut tree = vec![F::zero(); 2 * size];
         tree[size..size + values.len()].copy_from_slice(&values);
@@ -243,7 +243,7 @@ impl<F: crate::Scalar> RangeSums<F> {
         Self { values: tree, size }
     }
 
-    fn sum(&self, start: usize, end: usize, factor: F) -> F {
+    pub(super) fn sum(&self, start: usize, end: usize, factor: F) -> F {
         self.range(1, 0, self.size, start, end, factor)
     }
 
