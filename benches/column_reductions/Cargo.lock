@@ -18,7 +18,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 name = "column-reduction-probe"
 version = "0.0.0"
 dependencies = [
- "lazymatrix 0.10.0",
+ "lazymatrix 0.11.0",
  "lazymatrix 0.9.0",
  "ndarray",
  "rand",
@@ -48,7 +48,7 @@ dependencies = [
 
 [[package]]
 name = "lazymatrix"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "ndarray",
  "num-traits",

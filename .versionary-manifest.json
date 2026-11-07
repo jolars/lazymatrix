@@ -1,16 +1,16 @@
 {
   "manifest-version": 1,
-  "baseline-sha": "12c1285183a06479fa729c6b6d0ab84a975e61af",
+  "baseline-sha": "4f3718a06f5641a2ace49c2d7bd17bad4cb79080",
   "release-targets": [
     {
       "path": ".",
-      "version": "0.10.0",
-      "tag": "v0.10.0"
+      "version": "0.11.0",
+      "tag": "v0.11.0"
     },
     {
       "path": "python",
-      "version": "0.3.0",
-      "tag": "python-v0.3.0",
+      "version": "0.4.0",
+      "tag": "python-v0.4.0",
       "dependencies": [
         "."
       ]
@@ -19,13 +19,13 @@
   "pending-release-targets": [
     {
       "path": ".",
-      "version": "0.10.0",
-      "tag": "v0.10.0"
+      "version": "0.11.0",
+      "tag": "v0.11.0"
     },
     {
       "path": "python",
-      "version": "0.3.0",
-      "tag": "python-v0.3.0",
+      "version": "0.4.0",
+      "tag": "python-v0.4.0",
       "dependencies": [
         "."
       ]

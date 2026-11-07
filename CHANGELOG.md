@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/jolars/lazymatrix/compare/v0.10.0...v0.11.0) (2026-11-06)
+
+### Features
+
+- add row and chain product workspace (#28) ([`4f3718a`](https://github.com/jolars/lazymatrix/commit/4f3718a06f5641a2ace49c2d7bd17bad4cb79080))
+- add fused row and pipeline products ([`df88d1b`](https://github.com/jolars/lazymatrix/commit/df88d1b14b7bc250b62be355bf7b65b7d593a042))
+
+### Performance Improvements
+
+- vectorize contiguous ndarray column updates ([`94e7c1c`](https://github.com/jolars/lazymatrix/commit/94e7c1c941f3b8be8069ffbefb0b2597937196f7))
+- reduce reversed columns in memory order ([`d551db8`](https://github.com/jolars/lazymatrix/commit/d551db8fe11dada374505e252fafffa58336b3d2))
+- reuse contiguous kernels for vector reductions ([`fe41613`](https://github.com/jolars/lazymatrix/commit/fe416135c879b9112fb8a774a238978e3ae9937a))
+
 ## [0.10.0](https://github.com/jolars/lazymatrix/compare/v0.9.0...v0.10.0) (2026-11-04)
 
 This version introduces row normalization for dense and sparse matrices, along
