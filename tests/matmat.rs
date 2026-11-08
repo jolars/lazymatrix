@@ -310,6 +310,8 @@ where
         } else {
             (op.ncols(), op.nrows())
         };
+        // WASM aborts on panic, so catch_unwind cannot test dimension errors.
+        #[cfg(not(target_arch = "wasm32"))]
         for k in [0, 1, 17, 33] {
             for (rows, out_rows, out_cols) in [
                 (input + 1, output, k),
