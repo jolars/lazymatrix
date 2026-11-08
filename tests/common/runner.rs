@@ -2033,6 +2033,7 @@ pub fn run_sparse_columns_suite<M>(build: impl Fn(&TestMatrix) -> M)
 where
     M: SparseColumns<f64>,
 {
+    row_and_chain_sparse_columns_match_dense(&build);
     submatrix_sparse_columns_match_storage(&build);
     sparse_columns_expose_raw_storage(&build);
     lazy_columns_match_dense_oracle(&build);
@@ -2675,11 +2676,279 @@ impl<F: lazymatrix::Scalar> VectorView<F> for IndexedColumnVector<'_, F> {
     }
 }
 
+pub fn check_normalized_column<C: lazymatrix::LogicalColumn<f64>>(column: &C, expected: &[f64]) {
+    assert_eq!(column.len(), expected.len());
+    assert_eq!(column.is_empty(), expected.is_empty());
+    let vector: Vec<_> = (0..expected.len()).map(|i| 0.75 - i as f64 / 3.).collect();
+    let weights: Vec<_> = (0..expected.len()).map(|i| (i % 5) as f64 - 2.).collect();
+    let check = |actual, expected| {
+        approx::assert_relative_eq!(actual, expected, epsilon = EPS, max_relative = EPS);
+    };
+    for (i, &value) in expected.iter().enumerate() {
+        check(column.get(i), value);
+    }
+    check(column.sum(), expected.iter().sum());
+    check(column.norm_squared(), expected.iter().map(|v| v * v).sum());
+    let dot = expected.iter().zip(&vector).map(|(v, x)| v * x).sum();
+    check(column.dot(&vector), dot);
+    check(
+        column.dot_with_sum(vector.as_slice(), vector.iter().sum()),
+        dot,
+    );
+    let weighted_dot = expected
+        .iter()
+        .zip(&weights)
+        .zip(&vector)
+        .map(|((v, w), x)| v * w * x)
+        .sum();
+    check(column.weighted_dot(&vector, &weights), weighted_dot);
+    check(
+        column.weighted_dot_with_sum(
+            vector.as_slice(),
+            weights.as_slice(),
+            vector.iter().zip(&weights).map(|(x, w)| x * w).sum(),
+        ),
+        weighted_dot,
+    );
+    let squared = expected.iter().zip(&weights).map(|(v, w)| w * v * v).sum();
+    check(column.weighted_norm_squared(&weights), squared);
+    check(
+        column.weighted_norm_squared_with_sum(weights.as_slice(), weights.iter().sum()),
+        squared,
+    );
+    for alpha in [0., -1.5, 2.] {
+        let mut out = vector.clone();
+        column.scaled_add_to(alpha, out.as_mut_slice());
+        for ((actual, old), value) in out.into_iter().zip(&vector).zip(expected) {
+            check(actual, old + alpha * value);
+        }
+    }
+}
+
+fn normalized_column_cases() -> Vec<TestMatrix> {
+    vec![
+        column_view_matrix(),
+        random_matrix(178, 7, 3, 0.35),
+        random_matrix(179, 3, 7, 1.),
+        random_matrix(180, 0, 3, 0.),
+        random_matrix(181, 3, 0, 0.),
+        random_matrix(182, 4, 3, 0.),
+    ]
+}
+
+/// Check row-dependent stages on borrowed, potentially strided matrix storage.
+pub fn check_normalized_column_view<M: RawColumns<f64> + lazymatrix::MatrixRead<f64>>(matrix: &M) {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+    let raw: Vec<Vec<_>> = (0..matrix.nrows())
+        .map(|i| (0..matrix.ncols()).map(|j| matrix.get(i, j)).collect())
+        .collect();
+    let rows = RowNormalizationParams::from_parts(
+        matrix.nrows(),
+        Some((0..matrix.nrows()).map(|i| i as f64 + 0.5).collect()),
+        Some(
+            (0..matrix.nrows())
+                .map(|i| if i % 2 == 0 { -2. } else { 0.5 })
+                .collect(),
+        ),
+    );
+    let columns = ColumnNormalizationParams::from_parts(
+        matrix.ncols(),
+        Some((0..matrix.ncols()).map(|j| j as f64 - 0.25).collect()),
+        Some(vec![-4.; matrix.ncols()]),
+    );
+    let row_expected = materialize_rows(&raw, rows.centers(), rows.scales());
+    let expected = materialize(&row_expected, columns.centers(), columns.scales());
+    let row_op = rows.view().apply_frozen(matrix);
+    let op = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+        columns.view(),
+    )
+    .apply_frozen(matrix);
+    for j in 0..matrix.ncols() {
+        check_normalized_column(
+            &row_op.column(j),
+            &row_expected.iter().map(|row| row[j]).collect::<Vec<_>>(),
+        );
+        check_normalized_column(
+            &op.column(j),
+            &expected.iter().map(|row| row[j]).collect::<Vec<_>>(),
+        );
+    }
+}
+
+fn row_and_chain_columns_match_dense<M: RawColumns<f64>>(build: &impl Fn(&TestMatrix) -> M) {
+    use lazymatrix::{
+        ColumnNormalizationParams, Columns, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+
+    for tm in normalized_column_cases() {
+        let matrix = build(&tm);
+        for center in [false, true] {
+            for scale in [false, true] {
+                let rows = RowNormalizationParams::from_parts(
+                    tm.nrows,
+                    center.then(|| (0..tm.nrows).map(|i| 0.25 + i as f64).collect()),
+                    scale.then(|| {
+                        (0..tm.nrows)
+                            .map(|i| if i % 2 == 0 { -0.5 } else { 4. })
+                            .collect()
+                    }),
+                );
+                let columns = ColumnNormalizationParams::from_parts(
+                    tm.ncols,
+                    center.then(|| (0..tm.ncols).map(|j| -0.75 + j as f64).collect()),
+                    scale.then(|| {
+                        (0..tm.ncols)
+                            .map(|j| if j % 2 == 0 { 2. } else { -4. })
+                            .collect()
+                    }),
+                );
+                let fitted_rows = FittedRowNormalization::from_parts(
+                    RowNormalization::standardize(),
+                    rows.view(),
+                );
+                let rc = NormalizationChainParams::from_parts(fitted_rows, columns.view());
+                let cr = NormalizationChainParams::from_parts(columns.view(), fitted_rows);
+                let row_expected = materialize_rows(&tm.dense, rows.centers(), rows.scales());
+                let rc_expected = materialize(&row_expected, columns.centers(), columns.scales());
+                let cr_expected = materialize_rows(
+                    &materialize(&tm.dense, columns.centers(), columns.scales()),
+                    rows.centers(),
+                    rows.scales(),
+                );
+                macro_rules! check {
+                    ($params:expr, $expected:expr) => {{
+                        let op = LazyMatrix::from_parts(&matrix, $params);
+                        let expected = $expected;
+                        for j in 0..tm.ncols {
+                            let column = op.column(j);
+                            assert!(std::ptr::eq(column.normalization(), op.normalization()));
+                            let values: Vec<_> = expected.iter().map(|r| r[j]).collect();
+                            check_normalized_column(&column, &values);
+                            check_normalized_column(&Columns::column(&op, j), &values);
+                            for (i, &value) in values.iter().enumerate() {
+                                approx::assert_relative_eq!(
+                                    column.normalize_value(i, tm.dense[i][j]),
+                                    value,
+                                    epsilon = EPS
+                                );
+                            }
+                        }
+                        for j in [tm.ncols, usize::MAX] {
+                            assert!(
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                                    || op.column(j)
+                                ))
+                                .is_err()
+                            );
+                        }
+                    }};
+                }
+                check!(rows.view(), &row_expected);
+                check!(fitted_rows, &row_expected);
+                check!(rc.view(), &rc_expected);
+                check!(cr.view(), &cr_expected);
+                check!(
+                    NormalizationChainParams::from_parts(rc.view(), cr.view()),
+                    &materialize_rows(
+                        &materialize(&rc_expected, columns.centers(), columns.scales()),
+                        rows.centers(),
+                        rows.scales()
+                    )
+                );
+                check!(
+                    NormalizationChainParams::from_parts(columns.view(), columns.view()),
+                    &materialize(
+                        &materialize(&tm.dense, columns.centers(), columns.scales()),
+                        columns.centers(),
+                        columns.scales()
+                    )
+                );
+                check!(
+                    NormalizationChainParams::from_parts(fitted_rows, fitted_rows),
+                    &materialize_rows(&row_expected, rows.centers(), rows.scales())
+                );
+                check!(rows, &row_expected);
+            }
+        }
+    }
+}
+
+fn row_and_chain_sparse_columns_match_dense<M: SparseColumns<f64>>(
+    build: &impl Fn(&TestMatrix) -> M,
+) {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+
+    for tm in normalized_column_cases() {
+        let matrix = build(&tm);
+        let rows = RowNormalizationParams::from_parts(
+            tm.nrows,
+            Some((0..tm.nrows).map(|i| i as f64 - 0.5).collect()),
+            Some(
+                (0..tm.nrows)
+                    .map(|i| if i % 2 == 0 { -2. } else { 0.5 })
+                    .collect(),
+            ),
+        );
+        let columns = ColumnNormalizationParams::from_parts(
+            tm.ncols,
+            Some((0..tm.ncols).map(|j| j as f64 + 0.25).collect()),
+            Some(vec![-4.; tm.ncols]),
+        );
+        let expected_rows = materialize_rows(&tm.dense, rows.centers(), rows.scales());
+        macro_rules! check {
+            ($params:expr, $expected:expr) => {{
+                let op = LazyMatrix::from_parts(&matrix, $params);
+                let expected = $expected;
+                for j in 0..tm.ncols {
+                    let column = op.sparse_column(j);
+                    let (indices, values) = matrix.sparse_column(j);
+                    assert_eq!(column.row_indices().as_ptr(), indices.as_ptr());
+                    assert_eq!(column.values().as_ptr(), values.as_ptr());
+                    assert!(std::ptr::eq(column.normalization(), op.normalization()));
+                    let logical: Vec<_> = expected.iter().map(|r| r[j]).collect();
+                    check_normalized_column(&column, &logical);
+                    let mut affine: Vec<_> =
+                        (0..tm.nrows).map(|i| column.implicit_value(i)).collect();
+                    for (i, correction) in column.stored_corrections() {
+                        affine[i] += correction;
+                    }
+                    assert_close(&affine, &logical, EPS);
+                }
+                for j in [tm.ncols, usize::MAX] {
+                    assert!(
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                            || op.sparse_column(j)
+                        ))
+                        .is_err()
+                    );
+                }
+            }};
+        }
+        check!(rows.view(), &expected_rows);
+        check!(
+            NormalizationChainParams::from_parts(
+                FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+                columns.view()
+            ),
+            &materialize(&expected_rows, columns.centers(), columns.scales())
+        );
+    }
+}
+
 /// Run logical-column checks shared by dense and sparse storage backends.
 pub fn run_logical_columns_suite<M>(build: impl Fn(&TestMatrix) -> M)
 where
     M: RawColumns<f64> + ColumnStats<f64>,
 {
+    row_and_chain_columns_match_dense(&build);
     submatrix_columns_match_dense(&build);
     weighted_norms_preserve_implicit_contributions(&build);
     weighted_norms_ignore_rounded_total_weights(&build);
@@ -2710,6 +2979,9 @@ where
             for j in 0..tm.ncols {
                 let column = shared.column(j);
                 let expected: Vec<f64> = dense.iter().map(|row| row[j]).collect();
+                for (i, &value) in expected.iter().enumerate() {
+                    approx::assert_relative_eq!(column.get(i), value, epsilon = EPS);
+                }
                 let expected_dot = dot(&expected, &vector);
                 let expected_weighted_dot = expected
                     .iter()

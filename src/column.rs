@@ -1,5 +1,8 @@
 use crate::traits::{LogicalColumn, RawColumn, Scalar, VectorView, VectorViewMut};
 
+mod normalized;
+pub use normalized::NormalizedColumn;
+
 /// A borrowed raw sparse column.
 ///
 /// The view exposes the underlying matrix's stored row indices and raw values
@@ -119,6 +122,29 @@ impl<C: RawColumn<F>, F: Scalar> LazyColumn<C, F> {
     /// Whether the logical column has no rows.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Read a logical entry, summing raw duplicates in storage order first.
+    ///
+    /// This takes O(1) time for a dense slice and O(nnz) otherwise, without
+    /// allocating. Stored signed zeros are preserved before normalization.
+    ///
+    /// # Panics
+    /// Panics if `row >= self.len()`.
+    pub fn get(&self, row: usize) -> F {
+        assert!(row < self.len(), "row index out of bounds");
+        let raw = if let Some(values) = self.raw.dense_values() {
+            values[row]
+        } else {
+            let mut raw = None;
+            self.raw.for_each_stored(|i, value| {
+                if i == row {
+                    raw = Some(raw.map_or(value, |sum| sum + value));
+                }
+            });
+            raw.unwrap_or_else(F::zero)
+        };
+        (raw - self.center) / self.scale
     }
 
     /// Effective column center.
@@ -396,11 +422,8 @@ impl<C: RawColumn<F>, F: Scalar> LogicalColumn<F> for LazyColumn<C, F> {
     fn len(&self) -> usize {
         self.len()
     }
-    fn center(&self) -> F {
-        self.center()
-    }
-    fn scale(&self) -> F {
-        self.scale()
+    fn get(&self, row: usize) -> F {
+        self.get(row)
     }
     fn sum(&self) -> F {
         self.sum()

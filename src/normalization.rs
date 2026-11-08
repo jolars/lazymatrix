@@ -347,7 +347,9 @@ impl ColumnNormalization {
 /// [`crate::MatrixTraversal`], normalizing entries before accumulation. Dense
 /// and Zarr batches scan once for all responses. Sparse batches scan once per
 /// panel of up to 16 responses, with O(nrows + ncols) workspace independent of
-/// the response count. Borrowed logical views, weighted operations, and eager
+/// the response count. Borrowed logical columns require [`crate::RawColumns`],
+/// and sparse column representations require [`crate::SparseColumns`]. Borrowed
+/// rows require [`crate::SparseRows`]. Weighted matrix operations and eager
 /// conversion are not yet supported. New samples require independently fitted
 /// row parameters. [`crate::Transpose`] transposes the fitted operator
 /// without refitting.
@@ -408,12 +410,30 @@ impl ColumnNormalization {
 /// }
 /// ```
 ///
-/// Natural raw columns do not grant logical column borrowing:
+/// Borrowed logical columns require natural raw columns, without dense indexing:
+///
+/// ```
+/// use lazymatrix::{LazyMatrix, RawColumns, RowNormalizationParams};
+/// fn columns<M: RawColumns<f64>>(rows: &LazyMatrix<M, RowNormalizationParams>) -> f64 {
+///     rows.column(0).get(0)
+/// }
+/// ```
+///
+/// Dense indexing alone does not grant column borrowing:
 ///
 /// ```compile_fail
-/// use lazymatrix::{LazyMatrix, MatrixRead, RawColumns, RowNormalizationParams};
-/// fn columns<M: MatrixRead<f64> + RawColumns<f64>>(rows: &LazyMatrix<M, RowNormalizationParams>) {
+/// use lazymatrix::{LazyMatrix, MatrixRead, RowNormalizationParams};
+/// fn no_columns<M: MatrixRead<f64>>(rows: &LazyMatrix<M, RowNormalizationParams>) {
 ///     let _ = rows.column(0);
+/// }
+/// ```
+///
+/// Raw columns do not grant access to contiguous sparse slices:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, RawColumns, RowNormalizationParams};
+/// fn no_sparse_columns<M: RawColumns<f64>>(rows: &LazyMatrix<M, RowNormalizationParams>) {
+///     let _ = rows.sparse_column(0);
 /// }
 /// ```
 ///

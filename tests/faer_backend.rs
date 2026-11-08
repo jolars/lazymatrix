@@ -678,6 +678,9 @@ macro_rules! backend_suite {
                 );
                 common::check_row_normalization_view(&storage.as_ref().transpose(), to_col);
                 common::check_row_normalization_view(&storage.as_mut().transpose_mut(), to_col);
+                common::check_normalized_column_view(&storage.as_ref().submatrix(1, 1, 3, 4));
+                common::check_normalized_column_view(&storage.as_ref().transpose());
+                common::check_normalized_column_view(&storage.as_mut().transpose_mut());
                 let normalized = lazymatrix::LazyMatrix::new(
                     storage.as_ref().submatrix(1, 1, 3, 2),
                     lazymatrix::RowNormalization::standardize(),

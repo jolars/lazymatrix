@@ -230,6 +230,9 @@ macro_rules! backend_suite {
                 common::check_row_normalization_view(&storage.t(), |values| Array1::from_vec(values.to_vec()));
                 common::check_row_normalization_view(&storage.slice(s![..;-2, ..;3]), |values| Array1::from_vec(values.to_vec()));
                 common::check_row_normalization_view(&storage.view_mut(), |values| Array1::from_vec(values.to_vec()));
+                common::check_normalized_column_view(&storage.t());
+                common::check_normalized_column_view(&storage.slice(s![..;-2, ..;3]));
+                common::check_normalized_column_view(&storage.view_mut());
                 let lazy = LazyMatrix::new(storage.slice(s![..;-2, ..;3]), RowNormalization::standardize()).unwrap();
                 let coefficients = array![1.0, 99.0, -2.0, 99.0];
                 let mut out = Array1::from_elem(6, 99.0);

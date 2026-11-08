@@ -45,8 +45,8 @@ preserve stage order and retain row recipes for
 `.for_new_samples()`, which refits row stages while reusing training column
 parameters. `.apply_frozen()` reuses every stage unchanged. Fitting and products
 for mixed chains require dense storage; column-only chains also support sparse
-and chunked storage. Borrowed logical rows require only `SparseRows`, including for
-explicit mixed chains.
+and chunked storage. Borrowed logical rows require only `SparseRows`; columns
+require `RawColumns` or `SparseColumns`, including for explicit mixed chains.
 Select the axis through `ColumnNormalizationParams`
 or `RowNormalizationParams`, and inspect centers and scales through
 `normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`
@@ -104,6 +104,9 @@ transformation, including row parameters fitted outside the selection. Keep
 column-only advanced capabilities separate from general vector products.
 
 Keep logical column operations on borrowed views and document their complexity.
+Row and composed column views apply stages in order after coalescing raw cells,
+including transformed implicit zeros. Borrowing requires no fitting or product
+capabilities; scalar center and scale access belongs to column-normalized views.
 Sparse row views must preserve storage order and duplicates, have logical length
 `ncols`, and expose the column-dependent background without allocating a dense
 row. Respect backend slice ranges so spare capacity and sliced-view offsets do

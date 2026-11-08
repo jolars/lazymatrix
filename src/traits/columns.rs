@@ -89,18 +89,26 @@ pub trait RawColumns<F: Scalar>: MatrixShape {
 ///
 /// Floating-point reduction order can depend on storage. Rounding and
 /// intermediate overflow can differ from sequential accumulation.
+/// Fitted metadata belongs to the concrete view or its normalization parameters:
+/// row and composed normalization need not have one center or scale per column.
 pub trait LogicalColumn<F: Scalar> {
     fn len(&self) -> usize;
-    fn center(&self) -> F;
-    fn scale(&self) -> F;
+    /// Read a logical entry, combining raw duplicates before normalization.
+    ///
+    /// Panics if `row >= self.len()`.
+    fn get(&self, row: usize) -> F;
     fn sum(&self) -> F;
     fn norm_squared(&self) -> F;
     fn dot<V: VectorView<F> + ?Sized>(&self, vector: &V) -> F;
+    /// Accept a cached vector sum, which implementations may ignore to apply
+    /// row-dependent or composed normalization directly.
     fn dot_with_sum<V: VectorView<F> + ?Sized>(&self, vector: &V, vector_sum: F) -> F;
     fn weighted_dot<V, W>(&self, vector: &V, weights: &W) -> F
     where
         V: VectorView<F> + ?Sized,
         W: VectorView<F> + ?Sized;
+    /// Accept a cached weighted vector sum, which implementations may ignore
+    /// to apply row-dependent or composed normalization directly.
     fn weighted_dot_with_sum<V, W>(&self, vector: &V, weights: &W, weighted_vector_sum: F) -> F
     where
         V: VectorView<F> + ?Sized,
