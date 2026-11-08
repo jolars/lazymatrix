@@ -16,6 +16,7 @@ mod products;
 pub(crate) use products::product_rectangle;
 pub(crate) mod source;
 mod stats;
+mod weighted;
 
 #[cfg(any(
     feature = "faer_all",
@@ -191,6 +192,8 @@ impl<F: Scalar, S: AsRef<[F]>> FittedRowNormalization<RowNormalizationParams<F, 
 /// Forward and transpose batched products preserve every stage in order.
 /// Column-only batches use native traversal; mixed batches require dense
 /// indexed storage. Neither path materializes the normalized design.
+/// Weighted column sums and Gram products use the same storage bounds and
+/// apply each saved stage before accumulation, including to implicit zeros.
 /// Borrowed logical columns require only [`crate::RawColumns`], and sparse
 /// representations require only [`crate::SparseColumns`], even for explicit
 /// mixed chains. These views borrow all stages without copying or refitting.
@@ -254,6 +257,22 @@ impl<F: Scalar, S: AsRef<[F]>> FittedRowNormalization<RowNormalizationParams<F, 
 ///     let op = RowNormalization::standardize()
 ///         .then(ColumnNormalization::standardize()).fit_apply(data).unwrap();
 ///     op.matmat_into(rhs, out).unwrap();
+/// }
+/// ```
+///
+/// The same dense bounds support weighted products, including borrowed parameters:
+///
+/// ```
+/// use lazymatrix::{ColumnNormalization, MatrixErrorType, MatrixRead, MatrixWrite,
+///     RowNormalization, WeightedColumnSumsInto, WeightedGramInto};
+/// fn weighted<M: MatrixRead<f64> + MatrixErrorType, D: MatrixWrite<f64>>(
+///     data: M, weights: &[f64], out: &mut D,
+/// ) {
+///     let params = RowNormalization::standardize()
+///         .then(ColumnNormalization::standardize()).fit(&data).unwrap();
+///     let op = params.view().apply_frozen(data);
+///     op.weighted_gram_into(weights, out).unwrap();
+///     op.weighted_column_sums_into(weights, &mut vec![0.; op.ncols()]).unwrap();
 /// }
 /// ```
 ///

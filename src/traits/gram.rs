@@ -28,6 +28,14 @@ pub trait MatrixWrite<F: Scalar>: MatrixShape {
 /// CSR kernels scan borrowed rows into fixed-size panels. Workspace is bounded,
 /// and arithmetic costs O(nrows × ncols²). They do not convert storage.
 ///
+/// Row normalization and column-only chains require [`super::MatrixTraversal`];
+/// mixed and row-only chains require [`super::MatrixRead`] and
+/// [`MatrixErrorType`]. They apply every stage before multiplication, including
+/// on implicit zeros, using two logical panels and one accumulator, each at
+/// most 32 by 32. Arithmetic costs O(nrows × ncols²), with source panels read
+/// again for each column-panel pair. Sparse coalescing and chunk decoding add
+/// their own bounded workspace; chunk buffers may include outer shards.
+///
 /// Gram kernels run serially; an externally enabled BLAS library may use its
 /// own threads.
 ///

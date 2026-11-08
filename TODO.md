@@ -242,7 +242,12 @@ with single-axis fitting and reuse before introducing fitted pipelines.
       Logical operations coalesce duplicates before applying stages in order
       and include transformed implicit zeros. Sparse backgrounds vary by row;
       borrowing, individual reads, and correction helpers allocate nothing.
-  - [ ] Add weighted operations.
+  - [x] Add weighted operations.
+    - Weighted column sums and Gram products preserve fitted stage order and
+      include transformed implicit zeros. Row normalization and column-only
+      chains support dense, sparse, and chunked storage; mixed chains require
+      dense indexed access. Full-storage sums scan once. Sparse sums and Gram
+      products use bounded logical panels without materializing the design.
   - [ ] Add eager conversion.
 
 - [ ] Expose row normalization in Python, including independent fitting for new

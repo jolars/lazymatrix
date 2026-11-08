@@ -133,6 +133,35 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn row_and_chain_weighted_products_support_strided_views() {
+                use lazymatrix::{RowNormalization, WeightedGramInto, WeightedColumnSumsInto};
+                fn check<O: WeightedGramInto<f64> + WeightedColumnSumsInto<f64>>(op: &O) {
+                    let weights = Array1::from_shape_fn(2 * op.nrows(), |i| i as f64 / 4. - 1.);
+                    let weights = weights.slice(s![..;-2]);
+                    let p = op.ncols();
+                    let mut expected = Array2::zeros((p, p));
+                    let mut expected_sums = Array1::zeros(p);
+                    op.weighted_gram_into(&weights.to_owned(), &mut expected).unwrap();
+                    op.weighted_column_sums_into(&weights.to_owned(), &mut expected_sums).unwrap();
+                    let mut out = Array2::from_elem((2 * p, 2 * p), 99.);
+                    let mut sums = Array1::from_elem(2 * p, 99.);
+                    op.weighted_gram_into(&weights, &mut out.slice_mut(s![..;-2, ..;2])).unwrap();
+                    op.weighted_column_sums_into(&weights, &mut sums.slice_mut(s![..;-2])).unwrap();
+                    for i in 0..2 * p {
+                        assert_eq!(sums[i], if i % 2 == 1 { expected_sums[(2 * p - 1 - i) / 2] } else { 99. });
+                        for j in 0..2 * p {
+                            assert_eq!(out[(i, j)], if i % 2 == 1 && j % 2 == 0 { expected[((2 * p - 1 - i) / 2, j / 2)] } else { 99. });
+                        }
+                    }
+                }
+                let source = Array2::from_shape_fn((6, 6), |(i, j)| 1e12 + (i * i + i * j + j) as f64);
+                let view = source.slice(s![..;-2, ..;3]);
+                check(&RowNormalization::standardize().fit_apply(view).unwrap());
+                check(&RowNormalization::standardize().then(ColumnNormalization::standardize()).fit_apply(view).unwrap());
+                check(&ColumnNormalization::standardize().then(ColumnNormalization::min_max()).fit_apply(view).unwrap());
+            }
+
+            #[test]
             fn eager_conversion_supports_strided_outputs_and_fortran_allocation_reuse() {
                 use lazymatrix::{WeightedGramInto, WeightedColumnSumsInto, WithIntercept};
                 let dense = array![[1.0, 2.0], [3.0, 4.0]];

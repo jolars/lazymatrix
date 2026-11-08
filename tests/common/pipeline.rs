@@ -52,10 +52,13 @@ fn check<M, A, B, V>(
         + MatVecScaledInto<V, V, f64>
         + MatTransposeVecScaledInto<V, V, f64>
         + lazymatrix::MatMatInto<f64>
-        + lazymatrix::MatTransposeMatInto<f64>,
+        + lazymatrix::MatTransposeMatInto<f64>
+        + lazymatrix::WeightedGramInto<f64>
+        + lazymatrix::WeightedColumnSumsInto<f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     super::batched::check_batched(op, raw);
+    super::check_normalized_weighted(op, raw);
     let x: Vec<_> = (0..ncols).map(|j| 0.5 - j as f64 / 3.).collect();
     let u: Vec<_> = (0..raw.len()).map(|i| i as f64 / 4. - 0.75).collect();
     let expected: Vec<f64> = raw
@@ -255,6 +258,7 @@ where
         .collect();
     let op = params.apply_frozen(build(&tm));
     super::batched::check_batched(&op, &expected);
+    super::check_normalized_weighted(&op, &expected);
     super::check_frozen_submatrices(&op, &expected, &to_v);
 }
 
@@ -312,7 +316,9 @@ where
         + MatVecScaledInto<V, V, f64>
         + MatTransposeVecScaledInto<V, V, f64>
         + lazymatrix::MatMatInto<f64>
-        + lazymatrix::MatTransposeMatInto<f64>,
+        + lazymatrix::MatTransposeMatInto<f64>
+        + lazymatrix::WeightedGramInto<f64>
+        + lazymatrix::WeightedColumnSumsInto<f64>,
     V: VectorOwned<f64, Owned = V> + VectorViewMut<f64>,
 {
     let specs = [
@@ -366,5 +372,6 @@ where
         .collect();
     let op = params.apply_frozen(build(&tm));
     super::batched::check_batched(&op, &expected);
+    super::check_normalized_weighted(&op, &expected);
     super::check_frozen_submatrices(&op, &expected, &to_v);
 }

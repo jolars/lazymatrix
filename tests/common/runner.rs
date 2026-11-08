@@ -99,6 +99,46 @@ pub fn assert_gram(actual: &GramOutput, normalized: &[Vec<f64>], weights: &[f64]
     }
 }
 
+/// Check weighted sums and both Gram triangles against logical dense entries.
+pub fn check_normalized_weighted<M>(matrix: &M, normalized: &[Vec<f64>])
+where
+    M: lazymatrix::WeightedGramInto<f64> + lazymatrix::WeightedColumnSumsInto<f64>,
+{
+    let n = matrix.nrows();
+    let p = matrix.ncols();
+    for kind in 0..5 {
+        let weights: Vec<_> = (0..n)
+            .map(|i| match kind {
+                0 => 1.,
+                1 => [0., -0.5, 2.][i % 3],
+                2 => [1e16, 1., -1e16, 2.][i % 4],
+                3 => [f64::INFINITY, 0., f64::NEG_INFINITY][i % 3],
+                _ => [1., f64::NAN][i % 2],
+            })
+            .collect();
+        let mut out = GramOutput(vec![vec![f64::NAN; p]; p]);
+        let mut sums = vec![f64::NAN; p];
+        // Slice inputs and outputs exercise the unsized vector contracts.
+        matrix
+            .weighted_gram_into(weights.as_slice(), &mut out)
+            .unwrap();
+        matrix
+            .weighted_column_sums_into(weights.as_slice(), sums.as_mut_slice())
+            .unwrap();
+        assert_gram(&out, normalized, &weights);
+        for (j, &value) in sums.iter().enumerate() {
+            let expected: f64 = normalized.iter().zip(&weights).map(|(r, w)| r[j] * w).sum();
+            if expected.is_nan() {
+                assert!(value.is_nan(), "column {j}: {value} should be NaN");
+            } else if expected.is_infinite() {
+                assert_eq!(value, expected);
+            } else {
+                approx::assert_relative_eq!(value, expected, epsilon = 1e-10, max_relative = 1e-10);
+            }
+        }
+    }
+}
+
 pub fn run_gram_suite<M>(build: impl Fn(&TestMatrix) -> M)
 where
     M: lazymatrix::WeightedGramInto<f64>
@@ -490,6 +530,10 @@ pub fn run_row_normalization_suite<M, V>(
     ]);
     let data = build(&tm);
     let explicit = LazyMatrix::from_row_parts(&data, Some(vec![0.5; 3]), Some(vec![-2.0; 3]));
+    check_normalized_weighted(
+        &explicit,
+        &materialize_rows(&tm.dense, Some(&[0.5; 3]), Some(&[-2.0; 3])),
+    );
     check_frozen_submatrices(
         &explicit,
         &materialize_rows(&tm.dense, Some(&[0.5; 3]), Some(&[-2.0; 3])),
@@ -527,8 +571,10 @@ where
         let normalized = materialize_rows(raw, centers.as_deref(), scales.as_deref());
         let fitted = spec.fit(matrix).unwrap();
         let parent = fitted.view().apply_frozen(matrix);
+        check_normalized_weighted(&parent, &normalized);
         check_frozen_submatrices(&parent, &normalized, &to_v);
         let parent = fitted.apply_frozen(matrix);
+        check_normalized_weighted(&parent, &normalized);
         check_frozen_submatrices(&parent, &normalized, &to_v);
     }
 }
@@ -817,7 +863,7 @@ fn row_normalization_oracle(
     (centers, scales)
 }
 
-fn materialize_rows<F: lazymatrix::Scalar>(
+pub fn materialize_rows<F: lazymatrix::Scalar>(
     raw: &[Vec<F>],
     centers: Option<&[F]>,
     scales: Option<&[F]>,
@@ -994,7 +1040,9 @@ pub fn run_row_normalization_f32_suite<M, V>(
     build: impl Fn(&[Vec<f32>]) -> M,
     to_v: impl Fn(&[f32]) -> V,
 ) where
-    M: lazymatrix::RowStats<f32> + lazymatrix::RowNormalizationKernel<f32>,
+    M: lazymatrix::RowStats<f32>
+        + lazymatrix::RowNormalizationKernel<f32>
+        + lazymatrix::MatrixTraversal<f32>,
     V: lazymatrix::VectorOwned<f32, Owned = V> + lazymatrix::VectorViewMut<f32>,
 {
     use lazymatrix::RowNormalization;
@@ -1017,11 +1065,46 @@ pub fn run_row_normalization_f32_suite<M, V>(
     let raw = vec![vec![1e38_f32, 1e38], vec![0.0, 0.0]];
     let lazy = LazyMatrix::from_row_parts(build(&raw), None, Some(vec![1e38, 1.0]));
     check_row_normalized_products(&lazy, &[vec![1.0, 1.0], vec![0.0, 0.0]], &to_v);
+    check_normalized_weighted_f32(&lazy, &[vec![1.0, 1.0], vec![0.0, 0.0]]);
     let raw = vec![vec![100_001.0, 100_003.0], vec![3.0, 3.0]];
     let lazy = LazyMatrix::new(build(&raw), RowNormalization::standardize()).unwrap();
     assert_eq!(lazy.normalization().centers().unwrap(), &[100_002.0, 3.0]);
     assert_eq!(lazy.normalization().scales().unwrap(), &[1.0, 1.0]);
     check_row_normalized_products(&lazy, &[vec![-1.0, 1.0], vec![0.0, 0.0]], &to_v);
+    check_normalized_weighted_f32(&lazy, &[vec![-1.0, 1.0], vec![0.0, 0.0]]);
+}
+
+fn check_normalized_weighted_f32<M>(matrix: &M, normalized: &[Vec<f32>])
+where
+    M: lazymatrix::WeightedGramInto<f32> + lazymatrix::WeightedColumnSumsInto<f32>,
+{
+    use lazymatrix::MatrixOwned;
+    let weights: Vec<_> = (0..matrix.nrows())
+        .map(|i| if i % 2 == 0 { 0.5_f32 } else { -2. })
+        .collect();
+    let p = matrix.ncols();
+    let mut gram = MaterializeOutput::<f32>::zeros(p, p);
+    let mut sums = vec![f32::NAN; p];
+    matrix.weighted_gram_into(&weights, &mut gram).unwrap();
+    matrix
+        .weighted_column_sums_into(&weights, &mut sums)
+        .unwrap();
+    for j in 0..p {
+        let sum: f32 = normalized
+            .iter()
+            .zip(&weights)
+            .map(|(row, w)| row[j] * w)
+            .sum();
+        approx::assert_abs_diff_eq!(sums[j], sum, epsilon = 1e-6);
+        for k in 0..p {
+            let product: f32 = normalized
+                .iter()
+                .zip(&weights)
+                .map(|(row, w)| (row[j] * w) * row[k])
+                .sum();
+            approx::assert_abs_diff_eq!(gram.values[j * p + k], product, epsilon = 1e-6);
+        }
+    }
 }
 
 /// Compare every dense product interface with entries normalized before summation.

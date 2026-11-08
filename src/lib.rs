@@ -47,7 +47,9 @@
 //! workspace; sparse traversal and chunk decoding retain their backend buffers.
 //! Borrowed logical rows require [`SparseRows`]; columns require [`RawColumns`]
 //! or [`SparseColumns`]. Views preserve fitted row or composed normalization
-//! without copying or refitting. Additional capabilities remain future work.
+//! without copying or refitting. Weighted column sums and Gram products use
+//! [`MatrixTraversal`], applying fitted parameters before accumulation with
+//! bounded workspace. Eager conversion remains future work for row normalization.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -99,7 +101,8 @@
 //! Mixed and row-only chains support dense indexed access; column-only chains
 //! also support native sparse CSC/CSR and Zarr scans. Chains currently expose
 //! allocating, reusable, and fused forward and transpose vector products, including
-//! caller-owned product workspace. They also support batched products. All these
+//! caller-owned product workspace. They also support batched products, weighted
+//! column sums, and weighted Gram products. All these
 //! products use bounded workspace without an intermediate normalized design matrix.
 //! Sparse products use transformed implicit backgrounds and missing index ranges;
 //! exceptional IEEE cases can evaluate individual missing contributions.
@@ -455,6 +458,14 @@
 //! Dense faer Gram kernels use native multiplication and require
 //! `Scalar + faer_traits::ComplexField`. Dense faer weighted-column sums require
 //! only [`Scalar`] and center entries directly before accumulation.
+//! Row normalization and column-only chains support weighted sums and Gram
+//! products through [`MatrixTraversal`], including dense nalgebra, sparse CSC/CSR,
+//! and Zarr storage. Mixed and row-only chains require [`MatrixRead`] and
+//! [`MatrixErrorType`]. Each stage transforms coalesced raw entries and implicit
+//! zeros before multiplication. Full-storage sums use one scan; sparse sums and
+//! all these Gram products use logical panels of at most 32 by 32. Gram products
+//! read panels again for each column-panel pair, so chunks may be decoded more
+//! than once. Backend coalescing and codec workspace is additional.
 //! See `examples/weighted_gram.rs` for a borrowed-input demonstration.
 //!
 //! Products, [`ColumnStats`] methods, and [`LazyMatrix::new`] return `Result`.
@@ -655,6 +666,7 @@ mod submatrix_kernels;
 mod submatrix_weighted;
 pub mod traits;
 mod transpose;
+mod weighted_panels;
 mod weighted_sums;
 
 #[cfg(feature = "sprs_all")]

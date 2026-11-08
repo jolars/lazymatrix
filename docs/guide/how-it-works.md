@@ -78,6 +78,17 @@ traversal and codec workspace is additional for both fused and workspace calls.
 Dimensions are checked even when `alpha` is zero. After a backend error, scratch
 may be partial, and the final output remains unchanged.
 
+Weighted column sums and Gram products apply every saved stage to each logical
+entry before multiplication. This includes implicit zeros and avoids subtracting
+large raw moments after accumulation. Row normalization and column-only chains
+use native traversal on dense, sparse CSC/CSR, and Zarr storage. Mixed and
+row-only chains require dense indexed access. Full-storage sums need one scan;
+sparse sums use logical panels of at most 32 rows and 32 columns. Gram products
+use two such panels and a 32-by-32 accumulator, revisiting source panels for each
+column-panel pair. Sparse coalescing and chunk decoding use additional backend
+workspace, including outer shards. These operations preserve sparse storage and
+never materialize the full logical design matrix.
+
 ## Fit once, apply many times
 
 Fitting computes column centers and scales. When both are enabled, scaling
