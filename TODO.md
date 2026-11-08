@@ -231,7 +231,11 @@ with single-axis fitting and reuse before introducing fitted pipelines.
       chunked storage. Mixed chains require dense indexed access. Sparse batches
       scan once per panel of up to 16 responses with bounded workspace; dense
       and chunked batches scan once for all responses.
-  - [ ] Add borrowed logical rows.
+  - [x] Add borrowed logical rows.
+    - `SparseRows` views borrow raw storage and fitted row or chain parameters.
+      Logical reads coalesce duplicates before applying stages in order; sparse
+      background and correction helpers allocate nothing. Explicit mixed chains
+      can borrow CSR rows independently of fitting and product capabilities.
   - [ ] Add borrowed logical columns.
   - [ ] Add weighted operations.
   - [ ] Add eager conversion.

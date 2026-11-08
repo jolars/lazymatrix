@@ -45,7 +45,8 @@
 //! product vector in addition to backend workspace. Workspace methods reuse
 //! a caller-provided product vector instead. Dense kernels need no additional
 //! workspace; sparse traversal and chunk decoding retain their backend buffers.
-//! Additional capabilities remain future work.
+//! Borrowed logical rows require [`SparseRows`] and preserve the fitted row or
+//! composed normalization without allocating. Additional capabilities remain future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -381,11 +382,17 @@
 //! matrix, before normalization.
 //!
 //! [`LazyMatrix::row`] requires [`SparseRows`] and returns a borrowed [`LazyRow`]
-//! in O(1) time without allocation. The view exposes raw storage and the full
+//! in O(1) time without allocation for column, row, and composed normalization.
+//! The view exposes raw storage and borrows all fitted parameters through
+//! [`LazyRow::normalization`]. Column-normalized views also expose their full
 //! optional center and scale slices. Its logical length is the number of columns,
 //! even for an empty raw row. Centering generally makes the logical row dense:
 //! [`LazyRow::implicit_value`] exposes the background at a column, and
 //! [`LazyRow::stored_corrections`] iterates over the scaled raw entries.
+//! [`LazyRow::get`] sums duplicate raw entries before applying each stage, and
+//! [`LazyRow::normalize_value`] applies the stages to an already coalesced value.
+//! Borrowing explicit mixed chains does not require dense storage, although
+//! fitting and products for mixed chains still do.
 //! The `least_squares_sgd` example uses these parts for sparse single-observation
 //! and minibatch updates, keeping deferred coefficient state in the consumer.
 

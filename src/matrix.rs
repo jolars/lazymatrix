@@ -23,8 +23,9 @@ mod row;
 /// [`crate::RowStats`], and vector products use [`crate::RowNormalizationKernel`]
 /// over dense, sparse, and chunked Zarr storage. See [`crate::RowNormalization`] for the row
 /// capability limits. Ordered recipes use [`crate::NormalizationChainParams`].
-/// Mixed and row-only chains require dense storage; column-only chains also
-/// support sparse and chunked storage. Every stage remains visible through
+/// Fitting and products for mixed and row-only chains require dense storage;
+/// column-only chains also support sparse and chunked storage. Borrowed rows
+/// require only [`SparseRows`], including with explicit mixed chains. Every stage remains visible through
 /// [`Self::normalization`].
 ///
 /// Access centers and scales through [`Self::normalization`]. Each component is
@@ -183,11 +184,16 @@ impl<M: MatrixShape, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalization
             self.normalization.scales().map_or_else(F::one, |s| s[j]),
         )
     }
+}
 
+impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
     /// Borrow one lazily normalized sparse row without copying.
     ///
     /// This takes O(1) time and allocates nothing. The view borrows the raw
-    /// stored column indices and values and the full normalization slices.
+    /// stored column indices and values and the saved normalization parameters.
+    /// Row and composed normalization apply every stage in its saved order.
+    /// This also supports explicit chains on sparse storage without requiring
+    /// the backend capabilities used to fit or multiply that chain.
     /// Centering generally makes the logical row dense; [`LazyRow`] exposes
     /// its sparse-plus-affine representation explicitly.
     ///
@@ -211,6 +217,17 @@ impl<M: MatrixShape, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalization
     /// # }
     /// ```
     ///
+    /// Generic consumers need only public metadata and storage bounds:
+    ///
+    /// ```
+    /// use lazymatrix::{LazyMatrix, NormalizationParams, SparseRows};
+    /// fn value<P: NormalizationParams, M: SparseRows<P::Scalar>>(
+    ///     matrix: &LazyMatrix<M, P>, i: usize, j: usize,
+    /// ) -> P::Scalar {
+    ///     matrix.row(i).get(j)
+    /// }
+    /// ```
+    ///
     /// Row access requires contiguous sparse-row storage:
     ///
     /// ```compile_fail
@@ -221,22 +238,25 @@ impl<M: MatrixShape, F: Scalar, S: AsRef<[F]>> LazyMatrix<M, ColumnNormalization
     /// }
     /// ```
     ///
+    /// The same storage capability is required with row parameters:
+    ///
+    /// ```compile_fail
+    /// use lazymatrix::{LazyMatrix, MatrixRead, RowNormalizationParams};
+    /// fn no_sparse_rows<M: MatrixRead<f64>>(matrix: &LazyMatrix<M, RowNormalizationParams>) {
+    ///     let _ = matrix.row(0);
+    /// }
+    /// ```
+    ///
     /// # Panics
     ///
     /// Panics if `i >= self.nrows()`.
-    pub fn row(&self, i: usize) -> LazyRow<'_, F>
+    pub fn row(&self, i: usize) -> LazyRow<'_, P::Scalar, P>
     where
-        M: SparseRows<F>,
+        M: SparseRows<P::Scalar>,
     {
         assert!(i < self.nrows(), "row index out of bounds");
         let (column_indices, values) = self.data.sparse_row(i);
-        LazyRow::new(
-            column_indices,
-            values,
-            self.ncols(),
-            self.normalization.centers(),
-            self.normalization.scales(),
-        )
+        LazyRow::new(column_indices, values, self.ncols(), &self.normalization, i)
     }
 }
 

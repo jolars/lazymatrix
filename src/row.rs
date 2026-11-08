@@ -1,42 +1,60 @@
-use crate::Scalar;
+use crate::{ColumnNormalizationParams, NormalizationParams, Scalar};
 
-/// A borrowed sparse row with lazy column normalization.
+/// A borrowed sparse row with lazy row, column, or composed normalization.
 ///
-/// The raw column indices and values, and the optional centers and scales, are
-/// borrowed without copying. Each logical entry is `(raw[j] - center[j]) /
-/// scale[j]`, with effective centers of zero and scales of one when inactive.
-/// If storage contains duplicate column indices, sum their raw values before
-/// applying normalization.
+/// Raw indices and values preserve storage order, duplicates, and explicit zeros.
+/// The view borrows fitted parameters without copying or refitting them. Logical
+/// entries apply every saved stage in order after summing duplicate raw values.
 ///
 /// The sparse-plus-affine representation consists of a generally dense
-/// background `-center[j] / scale[j]` and stored corrections `value / scale[j]`.
-/// A centered logical row can therefore be dense even when its raw row is empty.
-/// [`Self::implicit_value`] and [`Self::stored_corrections`] expose these parts
-/// without allocating a dense row. Adding the parts can differ from direct
-/// normalization because of floating-point rounding or nonfinite arithmetic.
-#[derive(Clone, Copy, Debug)]
-pub struct LazyRow<'a, F> {
+/// background, exposed by [`Self::implicit_value`], and stored corrections,
+/// exposed by [`Self::stored_corrections`]. Adding these parts can differ from
+/// direct normalization because of rounding or nonfinite arithmetic. Use
+/// [`Self::get`] or [`Self::normalize_value`] for direct stage-by-stage evaluation.
+///
+/// A view cannot outlive the operator and its borrowed parameters:
+///
+/// ```compile_fail
+/// use lazymatrix::{LazyMatrix, SparseRows};
+/// fn escaped<M: SparseRows<f64>>(data: M) -> f64 {
+///     let row = {
+///         let op = LazyMatrix::from_row_parts(data, None, Some(vec![2.0]));
+///         op.row(0)
+///     };
+///     row.get(0)
+/// }
+/// ```
+#[derive(Debug)]
+pub struct LazyRow<'a, F, P = ColumnNormalizationParams<F>> {
     column_indices: &'a [usize],
     values: &'a [F],
     len: usize,
-    centers: Option<&'a [F]>,
-    scales: Option<&'a [F]>,
+    normalization: &'a P,
+    row: usize,
 }
 
-impl<'a, F> LazyRow<'a, F> {
+impl<F, P> Copy for LazyRow<'_, F, P> {}
+
+impl<F, P> Clone for LazyRow<'_, F, P> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, F, P> LazyRow<'a, F, P> {
     pub(crate) fn new(
         column_indices: &'a [usize],
         values: &'a [F],
         len: usize,
-        centers: Option<&'a [F]>,
-        scales: Option<&'a [F]>,
+        normalization: &'a P,
+        row: usize,
     ) -> Self {
         Self {
             column_indices,
             values,
             len,
-            centers,
-            scales,
+            normalization,
+            row,
         }
     }
 
@@ -66,18 +84,23 @@ impl<'a, F> LazyRow<'a, F> {
         self.len == 0
     }
 
+    /// Borrow the saved parameters for the complete matrix.
+    pub fn normalization(&self) -> &'a P {
+        self.normalization
+    }
+}
+
+impl<'a, F: Scalar, S: AsRef<[F]>> LazyRow<'a, F, ColumnNormalizationParams<F, S>> {
     /// Borrow the full column-center slice, or `None` when centering is inactive.
     pub fn centers(&self) -> Option<&'a [F]> {
-        self.centers
+        self.normalization.centers()
     }
 
     /// Borrow the full column-scale slice, or `None` when scaling is inactive.
     pub fn scales(&self) -> Option<&'a [F]> {
-        self.scales
+        self.normalization.scales()
     }
-}
 
-impl<F: Scalar> LazyRow<'_, F> {
     /// Effective center of column `j`, or zero when centering is inactive.
     ///
     /// This takes O(1) time.
@@ -87,7 +110,7 @@ impl<F: Scalar> LazyRow<'_, F> {
     /// Panics if `j >= self.len()`.
     pub fn center(&self, j: usize) -> F {
         assert!(j < self.len, "column index out of bounds");
-        self.centers.map_or_else(F::zero, |centers| centers[j])
+        self.centers().map_or_else(F::zero, |centers| centers[j])
     }
 
     /// Effective scale of column `j`, or one when scaling is inactive.
@@ -99,31 +122,65 @@ impl<F: Scalar> LazyRow<'_, F> {
     /// Panics if `j >= self.len()`.
     pub fn scale(&self, j: usize) -> F {
         assert!(j < self.len, "column index out of bounds");
-        self.scales.map_or_else(F::one, |scales| scales[j])
+        self.scales().map_or_else(F::one, |scales| scales[j])
     }
+}
 
-    /// Logical value at a structurally absent column, `-center(j) / scale(j)`.
+impl<F: Scalar, P: NormalizationParams<Scalar = F>> LazyRow<'_, F, P> {
+    /// Apply the saved stages to a coalesced raw value in column `j`.
     ///
-    /// This takes O(1) time.
+    /// This takes O(number of stages) time and allocates nothing. Sum raw
+    /// duplicates before calling this method.
     ///
     /// # Panics
-    ///
     /// Panics if `j >= self.len()`.
-    pub fn implicit_value(&self, j: usize) -> F {
-        -self.center(j) / self.scale(j)
+    pub fn normalize_value(&self, j: usize, raw: F) -> F {
+        assert!(j < self.len, "column index out of bounds");
+        self.normalization.logical_entry(raw, self.row, j)
     }
 
-    /// Stored corrections to the background as `(column, raw_value / scale)`.
+    /// Read a logical entry, summing raw duplicates in storage order first.
+    ///
+    /// This scans O(stored entries), then applies O(number of stages)
+    /// normalization work, without allocating. Structurally absent entries
+    /// start at zero; stored signed zeros are preserved before normalization.
+    ///
+    /// # Panics
+    /// Panics if `j >= self.len()`.
+    pub fn get(&self, j: usize) -> F {
+        assert!(j < self.len, "column index out of bounds");
+        let raw = self
+            .column_indices
+            .iter()
+            .zip(self.values)
+            .filter(|(column, _)| **column == j)
+            .map(|(_, &value)| value)
+            .reduce(|sum, value| sum + value)
+            .unwrap_or_else(F::zero);
+        self.normalize_value(j, raw)
+    }
+
+    /// Logical value at a structurally absent column.
+    ///
+    /// This applies every stage to zero in O(number of stages) time.
+    ///
+    /// # Panics
+    /// Panics if `j >= self.len()`.
+    pub fn implicit_value(&self, j: usize) -> F {
+        self.normalize_value(j, F::zero())
+    }
+
+    /// Stored corrections to the background as `(column, scaled raw value)`.
     ///
     /// The iterator preserves storage order, duplicates, and explicit zeros.
-    /// Consuming it takes O(stored entries) time and allocates nothing. These
-    /// corrections exclude centering; see the [type documentation](Self) for
-    /// the relationship to direct logical normalization.
+    /// Each correction applies only the scales, in stage order. Consuming it
+    /// takes O(stored entries * number of stages) time and allocates nothing.
+    /// See the [type documentation](Self) for numerical limitations.
     pub fn stored_corrections(&self) -> impl Iterator<Item = (usize, F)> + '_ {
         self.column_indices
             .iter()
             .copied()
             .zip(self.values)
-            .map(|(j, &value)| (j, value / self.scale(j)))
+            .map(|(j, &value)| (j, self.normalization.scaled_correction(value, self.row, j)))
     }
 }

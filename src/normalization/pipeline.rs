@@ -429,9 +429,16 @@ impl<F: Scalar, S: AsRef<[F]>> NormalizationParams
         FittedRowNormalization::view(self)
     }
 }
-impl<F: Scalar, S: AsRef<[F]>> private::Params
+impl<F: Scalar, S: AsRef<[F]>> private::Params<F>
     for FittedRowNormalization<RowNormalizationParams<F, S>>
 {
+    fn logical_entry(&self, value: F, row: usize, column: usize) -> F {
+        self.parameters.logical_entry(value, row, column)
+    }
+    fn scaled_correction(&self, value: F, row: usize, column: usize) -> F {
+        self.parameters.scaled_correction(value, row, column)
+    }
+
     fn assert_shape(&self, nrows: usize, ncols: usize) {
         self.parameters.assert_shape(nrows, ncols);
     }
@@ -488,12 +495,23 @@ where
         }
     }
 }
-impl<A, B> private::Params for NormalizationChainParams<A, B>
+impl<A, B> private::Params<A::Scalar> for NormalizationChainParams<A, B>
 where
     A: Stage,
     B: Stage<Scalar = A::Scalar>,
     A::Kind: Combine<B::Kind>,
 {
+    fn logical_entry(&self, value: A::Scalar, row: usize, column: usize) -> A::Scalar {
+        self.entry(value, row, column)
+    }
+    fn scaled_correction(&self, value: A::Scalar, row: usize, column: usize) -> A::Scalar {
+        self.next.scaled_correction(
+            self.first.scaled_correction(value, row, column),
+            row,
+            column,
+        )
+    }
+
     fn assert_shape(&self, nrows: usize, ncols: usize) {
         self.first.assert_shape(nrows, ncols);
         self.next.assert_shape(nrows, ncols);
@@ -547,7 +565,14 @@ impl<F: Scalar> NormalizationParams for Identity<F> {
         Self(PhantomData)
     }
 }
-impl<F: Scalar> private::Params for Identity<F> {
+impl<F: Scalar> private::Params<F> for Identity<F> {
+    fn logical_entry(&self, value: F, _row: usize, _column: usize) -> F {
+        value
+    }
+    fn scaled_correction(&self, value: F, _row: usize, _column: usize) -> F {
+        value
+    }
+
     fn assert_shape(&self, _nrows: usize, _ncols: usize) {}
 }
 impl<F: Scalar> Stage for Identity<F> {
@@ -578,7 +603,15 @@ impl<F: Scalar> Stage for Identity<F> {
 
 // A fitting prefix need not expose a new public parameter tree.
 struct Prefix<'a, A, B>(&'a A, &'a B);
-impl<A: Stage, B: Stage<Scalar = A::Scalar>> private::Params for Prefix<'_, A, B> {
+impl<A: Stage, B: Stage<Scalar = A::Scalar>> private::Params<A::Scalar> for Prefix<'_, A, B> {
+    fn logical_entry(&self, value: A::Scalar, row: usize, column: usize) -> A::Scalar {
+        self.entry(value, row, column)
+    }
+    fn scaled_correction(&self, value: A::Scalar, row: usize, column: usize) -> A::Scalar {
+        self.1
+            .scaled_correction(self.0.scaled_correction(value, row, column), row, column)
+    }
+
     fn assert_shape(&self, nrows: usize, ncols: usize) {
         self.0.assert_shape(nrows, ncols);
         self.1.assert_shape(nrows, ncols);
