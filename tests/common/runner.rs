@@ -2103,6 +2103,7 @@ pub fn run_sparse_rows_suite<M: SparseRows<f64>>(build: impl Fn(&TestMatrix) -> 
         }
         submatrix_sparse_rows_match_storage(&matrix);
         lazy_rows_match_dense_oracle(&matrix, &tm);
+        row_and_chain_rows_match_dense_oracle(&matrix, &tm);
     }
 }
 
@@ -2160,6 +2161,152 @@ fn lazy_rows_match_dense_oracle<M: SparseRows<f64>>(matrix: &M, tm: &TestMatrix)
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| lazy.row(i))).is_err()
                 );
             }
+        }
+    }
+}
+
+fn row_and_chain_rows_match_dense_oracle<M: SparseRows<f64>>(matrix: &M, tm: &TestMatrix) {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+
+    let row_centers: Vec<_> = (0..tm.nrows).map(|i| 0.25 + i as f64).collect();
+    let row_scales: Vec<_> = (0..tm.nrows)
+        .map(|i| if i % 2 == 0 { -0.5 } else { 4.0 })
+        .collect();
+    let column_centers: Vec<_> = (0..tm.ncols).map(|j| -0.75 + j as f64).collect();
+    let column_scales: Vec<_> = (0..tm.ncols)
+        .map(|j| if j % 2 == 0 { 2.0 } else { -4.0 })
+        .collect();
+    for center in [false, true] {
+        for scale in [false, true] {
+            let rows = RowNormalizationParams::from_parts(
+                tm.nrows,
+                center.then(|| row_centers.clone()),
+                scale.then(|| row_scales.clone()),
+            );
+            let columns = ColumnNormalizationParams::from_parts(
+                tm.ncols,
+                center.then(|| column_centers.clone()),
+                scale.then(|| column_scales.clone()),
+            );
+            let row_op = rows.view().apply_frozen(matrix);
+            let row_first = NormalizationChainParams::from_parts(
+                FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+                columns.view(),
+            );
+            let column_first = NormalizationChainParams::from_parts(
+                columns.view(),
+                FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+            );
+            let repeated =
+                NormalizationChainParams::from_parts(row_first.view(), column_first.view());
+            let rc_op = row_first.view().apply_frozen(matrix);
+            let cr_op = column_first.view().apply_frozen(matrix);
+            let repeated_op = repeated.view().apply_frozen(matrix);
+            let cc_op = NormalizationChainParams::from_parts(columns.view(), columns.view())
+                .apply_frozen(matrix);
+            let rr_op = NormalizationChainParams::from_parts(
+                FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+                FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+            )
+            .apply_frozen(matrix);
+            let row_expected = materialize_rows(&tm.dense, rows.centers(), rows.scales());
+            let rc_expected = materialize(&row_expected, columns.centers(), columns.scales());
+            let cr_expected = materialize_rows(
+                &materialize(&tm.dense, columns.centers(), columns.scales()),
+                rows.centers(),
+                rows.scales(),
+            );
+            let repeated_expected = materialize_rows(
+                &materialize(&rc_expected, columns.centers(), columns.scales()),
+                rows.centers(),
+                rows.scales(),
+            );
+
+            macro_rules! check {
+                ($op:expr, $expected:expr) => {
+                    for (i, expected) in $expected.iter().enumerate() {
+                        let row = $op.row(i);
+                        let (indices, values) = matrix.sparse_row(i);
+                        assert!(std::ptr::eq(row.normalization(), $op.normalization()));
+                        assert_eq!(row.column_indices().as_ptr(), indices.as_ptr());
+                        assert_eq!(row.values().as_ptr(), values.as_ptr());
+                        assert_eq!(row.len(), tm.ncols);
+                        assert_eq!(row.is_empty(), tm.ncols == 0);
+                        let mut affine: Vec<_> =
+                            (0..row.len()).map(|j| row.implicit_value(j)).collect();
+                        let corrections: Vec<_> = row.stored_corrections().collect();
+                        assert_eq!(
+                            corrections.iter().map(|(j, _)| *j).collect::<Vec<_>>(),
+                            indices
+                        );
+                        for (j, correction) in corrections {
+                            affine[j] += correction;
+                        }
+                        assert_close(&affine, expected, EPS);
+                        for (j, &value) in expected.iter().enumerate() {
+                            approx::assert_relative_eq!(row.get(j), value, epsilon = EPS);
+                            approx::assert_relative_eq!(
+                                row.normalize_value(j, tm.dense[i][j]),
+                                value,
+                                epsilon = EPS
+                            );
+                        }
+                        for j in [tm.ncols, usize::MAX] {
+                            assert!(
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                                    || row.get(j)
+                                ))
+                                .is_err()
+                            );
+                            assert!(
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                                    || row.normalize_value(j, 0.)
+                                ))
+                                .is_err()
+                            );
+                            assert!(
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+                                    || row.implicit_value(j)
+                                ))
+                                .is_err()
+                            );
+                        }
+                    }
+                    for i in [tm.nrows, usize::MAX] {
+                        assert!(
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| $op.row(i)))
+                                .is_err()
+                        );
+                    }
+                };
+            }
+            check!(row_op, row_expected);
+            check!(rc_op, rc_expected);
+            check!(cr_op, cr_expected);
+            check!(repeated_op, repeated_expected);
+            check!(
+                cc_op,
+                materialize(
+                    &materialize(&tm.dense, columns.centers(), columns.scales()),
+                    columns.centers(),
+                    columns.scales()
+                )
+            );
+            check!(
+                rr_op,
+                materialize_rows(&row_expected, rows.centers(), rows.scales())
+            );
+            assert_eq!(
+                row_op.normalization().centers().map(<[f64]>::as_ptr),
+                rows.centers().map(<[f64]>::as_ptr)
+            );
+            assert_eq!(
+                row_op.normalization().scales().map(<[f64]>::as_ptr),
+                rows.scales().map(<[f64]>::as_ptr)
+            );
         }
     }
 }

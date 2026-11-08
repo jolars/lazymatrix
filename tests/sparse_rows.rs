@@ -193,3 +193,152 @@ fn affine_row_parts_can_overflow_when_direct_normalization_is_finite() {
     assert_eq!(correction, f32::INFINITY);
     assert!((row.implicit_value(0) + correction).is_nan());
 }
+
+#[test]
+fn row_and_chain_reads_coalesce_before_applying_saved_stages() {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+
+    let matrix = Csr {
+        ncols: 4,
+        offsets: &[0, 5, 5],
+        columns: &[2, 0, 2, 1, 2],
+        values: &[1e16, 0., -1e16, -0., 1.],
+    };
+    let erased: &dyn SparseRows<f64> = &matrix;
+    let rows = RowNormalizationParams::from_parts(2, Some(vec![2., -3.]), Some(vec![-0.5, 4.]));
+    let columns = ColumnNormalizationParams::from_parts(
+        4,
+        Some(vec![1., -2., 3., 4.]),
+        Some(vec![2., -4., 0.5, 8.]),
+    );
+    let params = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+        columns.view(),
+    );
+    let op = params.view().apply_frozen(erased);
+    let row = op.row(0);
+    // Copying a row view does not require owned parameters to implement Copy.
+    fn copyable<T: Copy>(_: T) {}
+    copyable(row);
+    assert_eq!(row.column_indices(), &[2, 0, 2, 1, 2]);
+    assert_eq!(row.values().as_ptr(), matrix.values.as_ptr());
+    assert!(std::ptr::eq(row.normalization(), op.normalization()));
+    assert_eq!(
+        row.stored_corrections().map(|(j, _)| j).collect::<Vec<_>>(),
+        matrix.columns
+    );
+    for i in 0..2 {
+        let row = op.row(i);
+        for j in 0..4 {
+            let raw = if i == 0 && j == 2 { 1. } else { 0. };
+            let expected = ((raw - rows.centers().unwrap()[i]) / rows.scales().unwrap()[i]
+                - columns.centers().unwrap()[j])
+                / columns.scales().unwrap()[j];
+            assert_eq!(row.get(j), expected);
+            assert_eq!(row.normalize_value(j, raw), expected);
+            let background = ((0. - rows.centers().unwrap()[i]) / rows.scales().unwrap()[i]
+                - columns.centers().unwrap()[j])
+                / columns.scales().unwrap()[j];
+            assert_eq!(row.implicit_value(j), background);
+        }
+    }
+    let expected = op.row(0).get(2);
+    let owned = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(RowNormalization::standardize(), rows),
+        columns,
+    )
+    .apply_frozen(erased);
+    copyable(owned.row(0));
+    assert_eq!(owned.row(0).get(2), expected);
+}
+
+#[test]
+fn direct_row_reads_preserve_nonfinite_and_signed_zero_semantics() {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+
+    let matrix = Csr {
+        ncols: 4,
+        offsets: &[0, 4],
+        columns: &[0, 1, 2, 3],
+        values: &[f32::MAX, f32::INFINITY, f32::NAN, -0.],
+    };
+    let op = LazyMatrix::from_row_parts(&matrix, Some(vec![f32::MAX]), Some(vec![0.5]));
+    let row = op.row(0);
+    assert_eq!(row.get(0), 0.);
+    assert_eq!(row.get(1), f32::INFINITY);
+    assert!(row.get(2).is_nan());
+    assert_eq!(row.implicit_value(0), f32::NEG_INFINITY);
+    assert_eq!(row.stored_corrections().next().unwrap().1, f32::INFINITY);
+
+    let params = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(
+            RowNormalization::standardize(),
+            RowNormalizationParams::from_parts(1, None, Some(vec![2.])),
+        ),
+        ColumnNormalizationParams::from_parts(
+            4,
+            Some(vec![0., f32::INFINITY, f32::NAN, -0.]),
+            Some(vec![f32::INFINITY, 1., -2., -2.]),
+        ),
+    );
+    let chain = params.apply_frozen(&matrix);
+    let row = chain.row(0);
+    assert_eq!(row.get(0), 0.);
+    assert!(row.get(1).is_nan());
+    assert!(row.get(2).is_nan());
+    assert_eq!(row.get(3).to_bits(), (-0.0_f32).to_bits());
+    assert_eq!(row.stored_corrections().nth(1).unwrap().1, f32::INFINITY);
+
+    let identity = LazyMatrix::from_row_parts(&matrix, None, None);
+    assert_eq!(identity.row(0).get(3).to_bits(), (-0.0_f32).to_bits());
+    let negative = LazyMatrix::from_row_parts(&matrix, None, Some(vec![-2.]));
+    assert_eq!(negative.row(0).get(3).to_bits(), 0.0_f32.to_bits());
+}
+
+#[test]
+fn row_views_preserve_stage_arithmetic_with_extreme_parameters() {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+
+    let matrix = Csr {
+        ncols: 1,
+        offsets: &[0, 1],
+        columns: &[0],
+        values: &[f32::MAX],
+    };
+    let params = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(
+            RowNormalization::standardize(),
+            RowNormalizationParams::from_parts(1, None, Some(vec![1e-30])),
+        ),
+        ColumnNormalizationParams::from_parts(1, None, Some(vec![1e30])),
+    );
+    let op = params.apply_frozen(&matrix);
+    // Combining reciprocal scales would erase the overflow in the first stage.
+    assert_eq!(op.row(0).get(0), f32::INFINITY);
+    assert_eq!(
+        op.row(0).stored_corrections().next().unwrap().1,
+        f32::INFINITY
+    );
+    assert_eq!(op.row(0).implicit_value(0), 0.);
+
+    let op = LazyMatrix::from_row_parts(
+        &matrix,
+        Some(vec![f32::INFINITY]),
+        Some(vec![f32::NEG_INFINITY]),
+    );
+    assert!(op.row(0).get(0).is_nan());
+    assert!(op.row(0).implicit_value(0).is_nan());
+    assert_eq!(
+        op.row(0).stored_corrections().next().unwrap().1.to_bits(),
+        (-0.0_f32).to_bits()
+    );
+}

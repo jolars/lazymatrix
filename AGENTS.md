@@ -43,8 +43,10 @@ coalesced row; CSC fitting streams columns, using repeated scans for exact quant
 Ordered recipes compose with `.then()`. Fitted `NormalizationChainParams`
 preserve stage order and retain row recipes for
 `.for_new_samples()`, which refits row stages while reusing training column
-parameters. `.apply_frozen()` reuses every stage unchanged. Mixed chains require
-dense storage; column-only chains also support sparse and chunked storage.
+parameters. `.apply_frozen()` reuses every stage unchanged. Fitting and products
+for mixed chains require dense storage; column-only chains also support sparse
+and chunked storage. Borrowed logical rows require only `SparseRows`, including for
+explicit mixed chains.
 Select the axis through `ColumnNormalizationParams`
 or `RowNormalizationParams`, and inspect centers and scales through
 `normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`

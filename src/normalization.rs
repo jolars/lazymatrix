@@ -8,8 +8,13 @@ pub use pipeline::{
 use std::marker::PhantomData;
 
 mod private {
-    pub trait Params {
+    pub trait Params<F: crate::Scalar> {
         fn assert_shape(&self, nrows: usize, ncols: usize);
+        fn logical_entry(&self, value: F, row: usize, column: usize) -> F;
+
+        // Corrections apply scales directly, avoiding cancellation and
+        // nonfinite centers in differences of normalized values.
+        fn scaled_correction(&self, value: F, row: usize, column: usize) -> F;
     }
 
     pub trait Recipe<M: crate::MatrixErrorType, P> {
@@ -24,7 +29,7 @@ mod private {
 /// The parameter type identifies the axis and scalar. This trait is sealed;
 /// use [`ColumnNormalizationParams`] or [`RowNormalizationParams`] to supply
 /// custom fitted values, or [`NormalizationChainParams`] for ordered stages.
-pub trait NormalizationParams: private::Params {
+pub trait NormalizationParams: private::Params<Self::Scalar> {
     /// Scalar used by the fitted centers and scales.
     type Scalar: crate::Scalar;
 
@@ -391,6 +396,15 @@ impl ColumnNormalization {
 ///     rows: &LazyMatrix<M, RowNormalizationParams>, rhs: &D, out: &mut D,
 /// ) {
 ///     rows.matmat_into(rhs, out).unwrap();
+/// }
+/// ```
+///
+/// Borrowed logical rows require contiguous raw sparse rows:
+///
+/// ```
+/// use lazymatrix::{LazyMatrix, RowNormalizationParams, SparseRows};
+/// fn row<M: SparseRows<f64>>(rows: &LazyMatrix<M, RowNormalizationParams>) -> f64 {
+///     rows.row(0).get(0)
 /// }
 /// ```
 ///
@@ -780,7 +794,14 @@ impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for ColumnNormalizatio
     }
 }
 
-impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for ColumnNormalizationParams<F, S> {
+impl<F: crate::Scalar, S: AsRef<[F]>> private::Params<F> for ColumnNormalizationParams<F, S> {
+    fn logical_entry(&self, value: F, _row: usize, column: usize) -> F {
+        crate::materialize::normalized(value, column, self.centers(), self.scales())
+    }
+    fn scaled_correction(&self, value: F, _row: usize, column: usize) -> F {
+        self.scales().map_or(value, |scales| value / scales[column])
+    }
+
     fn assert_shape(&self, _nrows: usize, ncols: usize) {
         assert_eq!(
             ncols, self.ncols,
@@ -801,7 +822,14 @@ impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for RowNormalizationPa
     }
 }
 
-impl<F: crate::Scalar, S: AsRef<[F]>> private::Params for RowNormalizationParams<F, S> {
+impl<F: crate::Scalar, S: AsRef<[F]>> private::Params<F> for RowNormalizationParams<F, S> {
+    fn logical_entry(&self, value: F, row: usize, _column: usize) -> F {
+        crate::materialize::normalized(value, row, self.centers(), self.scales())
+    }
+    fn scaled_correction(&self, value: F, row: usize, _column: usize) -> F {
+        self.scales().map_or(value, |scales| value / scales[row])
+    }
+
     fn assert_shape(&self, nrows: usize, _ncols: usize) {
         assert_eq!(
             nrows, self.nrows,
