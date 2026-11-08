@@ -10,6 +10,7 @@ use crate::traits::{
     VectorView, VectorViewMut,
 };
 
+mod columns;
 mod row;
 
 /// A matrix presented with lazy row, column, or ordered normalization.
@@ -25,8 +26,9 @@ mod row;
 /// capability limits. Ordered recipes use [`crate::NormalizationChainParams`].
 /// Fitting and products for mixed and row-only chains require dense storage;
 /// column-only chains also support sparse and chunked storage. Borrowed rows
-/// require only [`SparseRows`], including with explicit mixed chains. Every stage remains visible through
-/// [`Self::normalization`].
+/// require only [`SparseRows`], and columns require [`RawColumns`] or
+/// [`SparseColumns`], including with explicit mixed chains. Every stage remains
+/// visible through [`Self::normalization`].
 ///
 /// Access centers and scales through [`Self::normalization`]. Each component is
 /// independently optional. Negative scales and nonfinite values are preserved.
@@ -284,7 +286,7 @@ where
         Self: 'a;
 
     fn column(&self, j: usize) -> Self::Column<'_> {
-        LazyMatrix::column(self, j)
+        LazyMatrix::<M, ColumnNormalizationParams<F, S>>::column(self, j)
     }
 }
 

@@ -236,7 +236,12 @@ with single-axis fitting and reuse before introducing fitted pipelines.
       Logical reads coalesce duplicates before applying stages in order; sparse
       background and correction helpers allocate nothing. Explicit mixed chains
       can borrow CSR rows independently of fitting and product capabilities.
-  - [ ] Add borrowed logical columns.
+  - [x] Add borrowed logical columns.
+    - `RawColumns` and `SparseColumns` views borrow storage and fitted row or
+      chain parameters, including explicit mixed chains on sparse storage.
+      Logical operations coalesce duplicates before applying stages in order
+      and include transformed implicit zeros. Sparse backgrounds vary by row;
+      borrowing, individual reads, and correction helpers allocate nothing.
   - [ ] Add weighted operations.
   - [ ] Add eager conversion.
 

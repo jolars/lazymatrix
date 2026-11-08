@@ -191,6 +191,43 @@ impl<F: Scalar, S: AsRef<[F]>> FittedRowNormalization<RowNormalizationParams<F, 
 /// Forward and transpose batched products preserve every stage in order.
 /// Column-only batches use native traversal; mixed batches require dense
 /// indexed storage. Neither path materializes the normalized design.
+/// Borrowed logical columns require only [`crate::RawColumns`], and sparse
+/// representations require only [`crate::SparseColumns`], even for explicit
+/// mixed chains. These views borrow all stages without copying or refitting.
+///
+/// Generic consumers can use the public column capabilities:
+///
+/// ```
+/// use lazymatrix::{Columns, LogicalColumn};
+/// fn column_sum<M: Columns<f64>>(matrix: &M, j: usize) -> f64 {
+///     matrix.column(j).sum()
+/// }
+/// ```
+///
+/// Explicit chains can borrow columns independently of fitting and products:
+///
+/// ```
+/// use lazymatrix::{ColumnNormalizationParams, FittedRowNormalization, LazyMatrix,
+///     NormalizationChainParams, RawColumns, RowNormalizationParams};
+/// fn entry<M: RawColumns<f64>>(op: &LazyMatrix<M, NormalizationChainParams<
+///     FittedRowNormalization<RowNormalizationParams>, ColumnNormalizationParams>>,
+///     i: usize, j: usize,
+/// ) -> f64 {
+///     op.column(j).get(i)
+/// }
+/// ```
+///
+/// Mixed-chain column borrowing still requires natural raw columns:
+///
+/// ```compile_fail
+/// use lazymatrix::{ColumnNormalizationParams, FittedRowNormalization, LazyMatrix,
+///     MatrixRead, NormalizationChainParams, RowNormalizationParams};
+/// fn no_columns<M: MatrixRead<f64>>(op: &LazyMatrix<M, NormalizationChainParams<
+///     FittedRowNormalization<RowNormalizationParams>, ColumnNormalizationParams>>,
+/// ) {
+///     let _ = op.column(0);
+/// }
+/// ```
 ///
 /// Chains deliberately require explicit application names:
 ///

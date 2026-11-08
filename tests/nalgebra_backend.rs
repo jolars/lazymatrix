@@ -278,6 +278,16 @@ macro_rules! backend_suite {
                     &storage.view_with_steps_mut((0, 0), (7, 3), (1, 1)),
                     to_dvec,
                 );
+                common::check_normalized_column_view(&storage.view_with_steps(
+                    (1, 1),
+                    (6, 2),
+                    (1, 1),
+                ));
+                common::check_normalized_column_view(&storage.view_with_steps_mut(
+                    (1, 1),
+                    (6, 2),
+                    (1, 1),
+                ));
                 let normalized = lazymatrix::LazyMatrix::new(
                     storage.view_with_steps((0, 0), (3, 2), (1, 1)),
                     lazymatrix::RowNormalization::standardize(),

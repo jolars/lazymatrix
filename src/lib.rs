@@ -45,8 +45,9 @@
 //! product vector in addition to backend workspace. Workspace methods reuse
 //! a caller-provided product vector instead. Dense kernels need no additional
 //! workspace; sparse traversal and chunk decoding retain their backend buffers.
-//! Borrowed logical rows require [`SparseRows`] and preserve the fitted row or
-//! composed normalization without allocating. Additional capabilities remain future work.
+//! Borrowed logical rows require [`SparseRows`]; columns require [`RawColumns`]
+//! or [`SparseColumns`]. Views preserve fitted row or composed normalization
+//! without copying or refitting. Additional capabilities remain future work.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -102,6 +103,9 @@
 //! products use bounded workspace without an intermediate normalized design matrix.
 //! Sparse products use transformed implicit backgrounds and missing index ranges;
 //! exceptional IEEE cases can evaluate individual missing contributions.
+//! Borrowed columns use [`NormalizedColumn`] and require only raw column access,
+//! even for explicit mixed chains on sparse storage. Their reductions apply
+//! each stage directly to coalesced entries and visit transformed implicit zeros.
 //!
 //! The fitted parameter type selects the axis and scalar:
 //! `LazyMatrix<M, ColumnNormalizationParams<F>>` or
@@ -363,8 +367,15 @@
 //! constructing a `LazyMatrix`. The wrapper checks orientation in O(1) time
 //! without copying, and returns CSR inputs unchanged as `Err`. Logical columns
 //! accept any sprs index type; `SparseColumns` requires `usize` row indices.
-//! Raw columns borrow in O(1) time. A centered column dot takes
-//! O(nrows + nnz_column), or O(nnz_column) with `dot_with_sum`.
+//! Raw columns borrow in O(1) time. With column normalization, a centered dot
+//! takes O(nrows + nnz_column), or O(nnz_column) with `dot_with_sum`.
+//! Row and composed normalization return [`NormalizedColumn`]. Logical reads
+//! apply every saved stage after coalescing raw duplicates. Reductions and
+//! dense updates visit every logical row, including transformed implicit zeros.
+//! Sorted, unique sparse columns need constant workspace; other storage orders
+//! and duplicates use one O(nrows) working column. Sparse views expose borrowed
+//! indices and values, a background through `implicit_value(row)`, and scaled
+//! raw entries through `stored_corrections()`. The background can vary by row.
 //!
 //! [`SparseRows`] borrows raw column-index and value slices from CSR storage in
 //! O(1) time, preserving explicitly stored zeros. It is available for faer's
@@ -650,7 +661,7 @@ mod weighted_sums;
 pub use backends::sprs::{SprsCsc, SprsCsr};
 #[cfg(feature = "zarrs_all")]
 pub use backends::zarrs::{ZarrArray, ZarrMatrix, ZarrMatrixError};
-pub use column::{LazyColumn, LazySparseColumn, SparseColumnRef};
+pub use column::{LazyColumn, LazySparseColumn, NormalizedColumn, SparseColumnRef};
 pub use eager::EagerMatrix;
 pub use indexed_rows::{IndexedRawColumn, IndexedRows};
 pub use intercept::WithIntercept;
