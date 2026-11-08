@@ -15,6 +15,14 @@ use super::{MatrixErrorType, MatrixShape, Scalar, VectorView, VectorViewMut};
 /// arithmetic may require O(nrows * ncols + nnz) work and one working column.
 /// No full design matrix is materialized.
 ///
+/// Row normalization and column-only chains use [`super::MatrixTraversal`];
+/// mixed and row-only chains use [`super::MatrixRead`] and [`MatrixErrorType`].
+/// They apply stages in order before multiplying by weights. Full storage
+/// takes one scan with constant scratch space. Sparse storage reads logical
+/// panels of at most 32 rows and 32 columns, including transformed implicit
+/// zeros. Arithmetic costs O(nrows × ncols), plus source traversal. Sparse
+/// coalescing and chunk decoding retain their backend workspace.
+///
 /// # Errors
 ///
 /// Returns the matrix's operational error. Output may be partial on failure.

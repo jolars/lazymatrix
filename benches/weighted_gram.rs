@@ -2,8 +2,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lazymatrix::{
-    ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto, SprsCsc, WeightedColumnSumsInto,
-    WeightedGramInto, WithIntercept,
+    ColumnNormalization, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto,
+    RowNormalization, SprsCsc, SprsCsr, WeightedColumnSumsInto, WeightedGramInto, WithIntercept,
 };
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -213,5 +213,104 @@ fn benchmark_gram(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, benchmark_gram);
+fn benchmark_normalized_weighted(c: &mut Criterion) {
+    let mut group = c.benchmark_group("normalized_weighted");
+    for p in [32, 65] {
+        let n = 1_024;
+        let mut rng = ChaCha8Rng::seed_from_u64(517);
+        let matrix = Array2::from_shape_fn((n, p), |_| {
+            if rng.random::<f64>() < 0.1 {
+                rng.random_range(-2.0..2.0)
+            } else {
+                0.0
+            }
+        });
+        let mut triplets = sprs::TriMat::new((n, p));
+        for ((i, j), &value) in matrix.indexed_iter() {
+            if value != 0. {
+                triplets.add_triplet(i, j, value);
+            }
+        }
+        let csc = SprsCsc::try_new(triplets.to_csc::<usize>()).unwrap();
+        let csr = SprsCsr::try_new(triplets.to_csr::<usize>()).unwrap();
+        let weights = Array1::from_shape_fn(n, |i| (i % 11) as f64 / 11. - 0.5);
+        let rows = RowNormalization::standardize().fit(&matrix).unwrap();
+        let row_logical = Array2::from_shape_fn((n, p), |(i, j)| {
+            (matrix[(i, j)] - rows.centers().unwrap()[i]) / rows.scales().unwrap()[i]
+        });
+        let columns = ColumnNormalization::standardize()
+            .then(ColumnNormalization::min_max())
+            .fit(&matrix)
+            .unwrap();
+        let column_logical = Array2::from_shape_fn((n, p), |(i, j)| {
+            let value = (matrix[(i, j)] - columns.first().centers().unwrap()[j])
+                / columns.first().scales().unwrap()[j];
+            (value - columns.next().centers().unwrap()[j]) / columns.next().scales().unwrap()[j]
+        });
+        let mixed = RowNormalization::standardize()
+            .then(ColumnNormalization::standardize())
+            .fit(&matrix)
+            .unwrap();
+        let mixed_logical = Array2::from_shape_fn((n, p), |(i, j)| {
+            (row_logical[(i, j)] - mixed.next().centers().unwrap()[j])
+                / mixed.next().scales().unwrap()[j]
+        });
+        macro_rules! measure {
+            ($name:literal, $op:expr, $logical:expr) => {{
+                let op = $op;
+                let logical = &$logical;
+                let mut out = Array2::zeros((p, p));
+                let mut sums = Array1::zeros(p);
+                let mut expected = Array2::zeros((p, p));
+                let mut expected_sums = Array1::zeros(p);
+                logical.weighted_gram_into(&weights, &mut expected).unwrap();
+                logical
+                    .weighted_column_sums_into(&weights, &mut expected_sums)
+                    .unwrap();
+                op.weighted_gram_into(&weights, &mut out).unwrap();
+                op.weighted_column_sums_into(&weights, &mut sums).unwrap();
+                for (actual, expected) in out
+                    .iter()
+                    .zip(&expected)
+                    .chain(sums.iter().zip(&expected_sums))
+                {
+                    assert!((actual - expected).abs() < 1e-8);
+                }
+                group.bench_function(BenchmarkId::new(concat!($name, "_gram"), p), |b| {
+                    b.iter(|| {
+                        op.weighted_gram_into(black_box(&weights), black_box(&mut out))
+                            .unwrap()
+                    });
+                });
+                group.bench_function(BenchmarkId::new(concat!($name, "_sums"), p), |b| {
+                    b.iter(|| {
+                        op.weighted_column_sums_into(black_box(&weights), black_box(&mut sums))
+                            .unwrap()
+                    });
+                });
+            }};
+        }
+        measure!(
+            "row_dense",
+            rows.view().apply_frozen(matrix.view()),
+            row_logical
+        );
+        measure!("row_csc", rows.view().apply_frozen(&csc), row_logical);
+        measure!("row_csr", rows.view().apply_frozen(&csr), row_logical);
+        measure!("row_eager", &row_logical, row_logical);
+        measure!(
+            "column_chain_csc",
+            columns.view().apply_frozen(&csc),
+            column_logical
+        );
+        measure!(
+            "mixed_dense",
+            mixed.view().apply_frozen(matrix.view()),
+            mixed_logical
+        );
+    }
+    group.finish();
+}
+
+criterion_group!(benches, benchmark_gram, benchmark_normalized_weighted);
 criterion_main!(benches);

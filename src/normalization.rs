@@ -349,8 +349,10 @@ impl ColumnNormalization {
 /// panel of up to 16 responses, with O(nrows + ncols) workspace independent of
 /// the response count. Borrowed logical columns require [`crate::RawColumns`],
 /// and sparse column representations require [`crate::SparseColumns`]. Borrowed
-/// rows require [`crate::SparseRows`]. Weighted matrix operations and eager
-/// conversion are not yet supported. New samples require independently fitted
+/// rows require [`crate::SparseRows`]. Weighted column sums and Gram products
+/// use [`crate::MatrixTraversal`], applying fitted parameters before accumulation
+/// with bounded logical panels. Full-storage sums need only one scan. Eager
+/// conversion is not yet supported. New samples require independently fitted
 /// row parameters. [`crate::Transpose`] transposes the fitted operator
 /// without refitting.
 ///
@@ -437,15 +439,17 @@ impl ColumnNormalization {
 /// }
 /// ```
 ///
-/// Weighted operations remain unavailable:
+/// Weighted operations require native traversal, without fitting or vector kernels:
 ///
-/// ```compile_fail
-/// use lazymatrix::{LazyMatrix, MatrixRead, MatrixWrite, RowNormalizationParams,
-///                  WeightedGramInto, WeightedGramKernel};
-/// fn gram<M: MatrixRead<f64> + WeightedGramKernel<f64>, D: MatrixWrite<f64>>(
+/// ```
+/// use lazymatrix::{LazyMatrix, MatrixTraversal, MatrixWrite, RowNormalizationParams,
+///                  WeightedColumnSumsInto, WeightedGramInto};
+/// fn gram<M: MatrixTraversal<f64>, D: MatrixWrite<f64>>(
 ///     rows: &LazyMatrix<M, RowNormalizationParams>, weights: &Vec<f64>, out: &mut D,
 /// ) {
 ///     rows.weighted_gram_into(weights, out).unwrap();
+///     let mut sums = vec![0.; rows.ncols()];
+///     rows.weighted_column_sums_into(weights, &mut sums).unwrap();
 /// }
 /// ```
 ///

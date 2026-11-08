@@ -3,7 +3,7 @@
 use super::*;
 use lazymatrix::{
     MatTransposeVecScaledInto, MatVecScaledInto, MatrixShape, RowNormalization,
-    RowNormalizationKernel,
+    RowNormalizationKernel, WeightedColumnSumsInto, WeightedGramInto,
 };
 
 #[test]
@@ -54,6 +54,19 @@ fn row_fitting_and_products_stream_serial_scans() {
             assert_scans(&store, &matrix, 1);
             store.reset();
             frozen.mat_transpose_vec(&vec![1.0; 5]).unwrap();
+            assert_scans(&store, &matrix, 1);
+            store.reset();
+            frozen
+                .weighted_column_sums_into(&[1.; 5], &mut [f64::NAN; 3])
+                .unwrap();
+            assert_scans(&store, &matrix, 1);
+            store.reset();
+            frozen
+                .weighted_gram_into(
+                    &[1.; 5],
+                    &mut common::GramOutput(vec![vec![f64::NAN; 3]; 3]),
+                )
+                .unwrap();
             assert_scans(&store, &matrix, 1);
             store.reset();
             frozen
@@ -109,6 +122,7 @@ fn row_scans_preserve_fill_and_exclude_nonfinite_padding() {
         let raw = [vec![1., 3., 7.], vec![2., 4., 7.], vec![7., 7., 3.]];
         common::batched::check_normalized_batches(&matrix, &raw);
         common::check_row_normalization(&matrix, &raw, |v| v.to_vec());
+        common::check_row_submatrices(&matrix, &raw, |v| v.to_vec());
         let frozen = LazyMatrix::from_row_parts(&matrix, Some(vec![1., 2., 3.]), Some(vec![2.; 3]));
         common::check_row_normalized_products(
             &frozen,
@@ -165,6 +179,7 @@ fn row_scans_use_outer_shards_and_preserve_missing_subchunks() {
         raw[4][4] = 3.;
         common::batched::check_normalized_batches(&matrix, &raw);
         common::check_row_normalization(&matrix, &raw, |v| v.to_vec());
+        common::check_row_submatrices(&matrix, &raw, |v| v.to_vec());
         store.reset();
         let lazy = LazyMatrix::new(&matrix, RowNormalization::standardize()).unwrap();
         let shard_keys: Vec<_> = (0..2)
@@ -211,6 +226,35 @@ fn row_failures_stop_reads_and_allow_retry() {
             assert_scans(&store, &matrix, 2);
         }
         let lazy = LazyMatrix::from_row_parts(&matrix, Some(vec![1.; 5]), Some(vec![2.; 5]));
+        let mut gram = common::GramOutput(vec![vec![f64::NAN; 3]; 3]);
+        let mut sums = vec![f64::NAN; 3];
+        store.reset();
+        store.fail_after.store(1, Ordering::Relaxed);
+        let error = lazy.weighted_gram_into(&[1.; 5], &mut gram).unwrap_err();
+        assert!(std::error::Error::source(&error).is_some());
+        assert_eq!(store.keys.lock().unwrap().len(), 2);
+        store.reset();
+        lazy.weighted_gram_into(&[1.; 5], &mut gram).unwrap();
+        assert_scans(&store, &matrix, 1);
+        common::assert_gram(
+            &gram,
+            &[
+                vec![0., 0.5, 1.],
+                vec![1.5, 2., 2.5],
+                vec![3., 3.5, 4.],
+                vec![4.5, 5., 5.5],
+                vec![6., 6.5, 7.],
+            ],
+            &[1.; 5],
+        );
+        store.reset();
+        store.fail_after.store(1, Ordering::Relaxed);
+        assert!(lazy.weighted_column_sums_into(&[1.; 5], &mut sums).is_err());
+        assert_eq!(store.keys.lock().unwrap().len(), 2);
+        store.reset();
+        lazy.weighted_column_sums_into(&[1.; 5], &mut sums).unwrap();
+        assert_eq!(sums, [15., 17.5, 20.]);
+        assert_scans(&store, &matrix, 1);
         let mut forward = vec![f64::NAN; 5];
         store.reset();
         store.fail_after.store(1, Ordering::Relaxed);

@@ -208,6 +208,69 @@ fn f32_preparation_owns_new_rows_and_borrows_training_columns() {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 #[test]
+fn weighted_mixed_chains_need_only_dense_indexed_access() {
+    use lazymatrix::{WeightedColumnSumsInto, WeightedGramInto};
+    let data = Dense::new(
+        2,
+        3,
+        vec![
+            100_001_f32,
+            100_003.,
+            100_005.,
+            200_001.,
+            200_005.,
+            200_009.,
+        ],
+    );
+    let params = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(
+            RowNormalization::standardize(),
+            RowNormalizationParams::from_parts(
+                2,
+                Some(vec![100_000_f32, 200_000.]),
+                Some(vec![-2., 4.]),
+            ),
+        ),
+        NormalizationChainParams::from_parts(
+            ColumnNormalizationParams::from_parts(
+                3,
+                Some(vec![0.25_f32, -0.5, 0.75]),
+                Some(vec![2., 4., -2.]),
+            ),
+            FittedRowNormalization::from_parts(
+                RowNormalization::min_max(),
+                RowNormalizationParams::from_parts(2, Some(vec![1_f32, -0.5]), Some(vec![2., -4.])),
+            ),
+        ),
+    );
+    let weights = [0.5_f32, -2.];
+    let expected = [[-0.6875_f32, -0.625, 0.3125], [-0.125, -0.234375, 0.0625]];
+    let op = params.view().apply_frozen(&data);
+    let mut gram = Dense::new(3, 3, vec![f32::NAN; 9]);
+    let mut sums = vec![f32::NAN; 3];
+    op.weighted_gram_into(&weights, &mut gram).unwrap();
+    op.weighted_column_sums_into(&weights, &mut sums).unwrap();
+    for j in 0..3 {
+        let sum: f32 = (0..2).map(|i| expected[i][j] * weights[i]).sum();
+        approx::assert_abs_diff_eq!(sums[j], sum, epsilon = 1e-6);
+        for k in 0..3 {
+            let product: f32 = (0..2)
+                .map(|i| (expected[i][j] * weights[i]) * expected[i][k])
+                .sum();
+            approx::assert_abs_diff_eq!(gram.get(j, k), product, epsilon = 1e-6);
+        }
+    }
+    let owned = params.apply_frozen(&data);
+    owned
+        .weighted_column_sums_into(&weights, &mut sums)
+        .unwrap();
+    let mut borrowed = owned;
+    let reference = &mut borrowed;
+    reference.weighted_gram_into(&weights, &mut gram).unwrap();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
 fn new_samples_refit_later_rows_after_frozen_training_columns() {
     let training = Dense::new(3, 3, vec![1., 3., 8., -2., 5., 3., 6., 4., 0.]);
     let validation = Dense::new(2, 3, vec![10., 1., 5., -8., 20., 0.]);

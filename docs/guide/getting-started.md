@@ -260,6 +260,12 @@ Column-only chains also support sparse CSC/CSR storage and Zarr arrays. Products
 execute the saved stages without refitting. Chains support allocating, reusable,
 and fused forward and transpose vector products, including caller-owned product
 workspace. Chains use the same product scratch lengths as row normalization.
+Row normalization and chains also implement `WeightedColumnSumsInto` and
+`WeightedGramInto`, including with borrowed parameters. Weights may be signed,
+zero, or nonfinite, and the caller chooses the output backend. Each operation
+applies the saved stages before accumulating weighted entries. Full-storage sums
+scan once; sparse sums and Gram products use bounded logical panels. Gram
+products may read a source panel more than once.
 See [how it works](/guide/how-it-works#row-and-ordered-normalization) for storage
 and workspace costs.
 
