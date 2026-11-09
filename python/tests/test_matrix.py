@@ -24,8 +24,10 @@ def matrix(request):
     )
 
 
-def dense_reference(x, center=True, scale=True, df=0):
+def dense_reference(x, center=True, scale=True, df=0, axis=0):
     raw = np.asarray(x.toarray() if sparse.issparse(x) else x, dtype=np.float64)
+    if axis == 1:
+        return dense_reference(raw.T, center, scale, df).T
     scales = raw.std(axis=0, ddof=df) if scale else np.ones(raw.shape[1])
     scales[scales == 0] = 1
     centers = raw.mean(axis=0) if center else np.zeros(raw.shape[1])
@@ -35,9 +37,10 @@ def dense_reference(x, center=True, scale=True, df=0):
 @pytest.mark.parametrize("center", [False, True])
 @pytest.mark.parametrize("scale", [False, True])
 @pytest.mark.parametrize("df", [0, 1, 2])
-def test_normalization_and_products(matrix, center, scale, df):
-    z = standardize(matrix, center=center, scale=scale, df=df)
-    expected = dense_reference(matrix, center, scale, df)
+@pytest.mark.parametrize("axis", [0, 1])
+def test_normalization_and_products(matrix, center, scale, df, axis):
+    z = standardize(matrix, axis=axis, center=center, scale=scale, df=df)
+    expected = dense_reference(matrix, center, scale, df, axis)
     v = np.array([0.5, -2.0, 1.0])
     u = np.array([1.0, -0.25, 2.0, 0.0])
     b = np.column_stack([v, -v])
@@ -70,8 +73,9 @@ def test_normalization_and_products(matrix, center, scale, df):
     assert (z.scales is None) == (not scale)
 
 
-def test_owned_storage_and_parameter_copies(matrix):
-    z = standardize(matrix)
+@pytest.mark.parametrize("axis", [0, 1])
+def test_owned_storage_and_parameter_copies(matrix, axis):
+    z = standardize(matrix, axis=axis)
     expected = z.toarray()
     if sparse.issparse(matrix):
         matrix.data[:] = 100
@@ -102,12 +106,15 @@ def test_insufficient_degrees_of_freedom(matrix, nrows):
 
 
 @pytest.mark.parametrize("df", [0, 1, 2])
-def test_standard_deviations_preserve_small_variation(df):
+@pytest.mark.parametrize("axis", [0, 1])
+def test_standard_deviations_preserve_small_variation(df, axis):
     x = np.array([[1e12 + 1, 5.0], [1e12 + 2, 5.0], [1e12 + 3, 5.0]])
+    if axis == 1:
+        x = x.T
     for source in (x, sparse.csc_matrix(x), sparse.csr_matrix(x)):
-        z = standardize(source, df=df)
+        z = standardize(source, axis=axis, df=df)
         assert_allclose(z.scales, [np.sqrt(2.0 / (3 - df)), 1.0])
-        assert_allclose(z.toarray(), dense_reference(source, df=df))
+        assert_allclose(z.toarray(), dense_reference(source, df=df, axis=axis))
 
 
 @pytest.mark.parametrize("constructor", [LazyMatrix, standardize])
@@ -176,8 +183,9 @@ def test_sparse_products_do_not_materialize(monkeypatch):
     assert_allclose(z[:, 0], np.array([2.0, -0.5, -0.5, -0.5, -0.5]))
 
 
-def test_scipy_adapter_and_least_squares(matrix):
-    z = standardize(matrix)
+@pytest.mark.parametrize("axis", [0, 1])
+def test_scipy_adapter_and_least_squares(matrix, axis):
+    z = standardize(matrix, axis=axis)
     expected = z.toarray()
     operator = z.aslinearoperator()
     rhs = np.array([1.0, -2.0, 0.5, 3.0])

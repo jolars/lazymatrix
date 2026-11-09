@@ -1,7 +1,7 @@
 """Public matrix interface backed by owned Rust storage."""
 
 import operator
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -20,7 +20,8 @@ def _real_array(value: Any) -> NDArray[np.float64]:
 
 Centering = bool | Literal["none", "mean", "min", "median"]
 Scaling = bool | Literal["none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"]
-Specification = tuple[str, str, int, tuple[float, float]]
+NormalizationAxis = Literal[0, 1]
+Specification = tuple[int, str, str, int, tuple[float, float]]
 
 
 def _method(value: Any, name: str, default: str, choices: tuple[str, ...]) -> str:
@@ -33,7 +34,56 @@ def _method(value: Any, name: str, default: str, choices: tuple[str, ...]) -> st
     return value
 
 
-class NormalizationParams:
+def _specification(
+    axis: NormalizationAxis,
+    center: Centering,
+    scale: Scaling,
+    df: int,
+    quantile_range: tuple[float, float],
+) -> Specification:
+    if isinstance(axis, (bool, np.bool_)):
+        raise TypeError("axis must be the integer 0 or 1")
+    axis = operator.index(axis)
+    if axis not in (0, 1):
+        raise ValueError("axis must be 0 or 1")
+    center = _method(center, "centering", "mean", ("none", "mean", "min", "median"))
+    scale = _method(
+        scale,
+        "scaling",
+        "sd",
+        ("none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"),
+    )
+    df = operator.index(df)
+    if df < 0:
+        raise ValueError("df must be nonnegative")
+    bounds = _real_array(quantile_range)
+    if bounds.shape != (2,):
+        raise ValueError("quantile_range must contain two probabilities")
+    lower, upper = map(float, bounds)
+    if not (np.isfinite(bounds).all() and 0 <= lower < upper <= 1):
+        raise ValueError("quantile bounds must satisfy 0 <= lower < upper <= 1")
+    return axis, center, scale, df, (lower, upper)
+
+
+class _NormalizationParams:
+    __slots__ = ("_params",)
+    _axis: ClassVar[NormalizationAxis]
+
+    def _initialize(self, dimension: int, centers: Any, scales: Any) -> None:
+        dimension = operator.index(dimension)
+        name = "ncols" if self._axis == 0 else "nrows"
+        if dimension < 0:
+            raise ValueError(f"{name} must be nonnegative")
+        arrays = []
+        for name, value in (("centers", centers), ("scales", scales)):
+            array = None if value is None else _real_array(value)
+            if array is not None and array.ndim != 1:
+                raise ValueError(f"{name} must be one-dimensional")
+            arrays.append(array)
+        self._params = Params(self._axis, dimension, *arrays)
+
+
+class ColumnNormalizationParams(_NormalizationParams):
     """Reusable float64 column centers and scales, independent of raw storage.
 
     Parameters
@@ -50,7 +100,7 @@ class NormalizationParams:
     Notes
     -----
     Obtain fitted parameters with ``Z.normalization``. Reconstruct Rust's
-    ``NormalizationParams::from_parts(ncols, centers, scales)`` using the same
+    ``ColumnNormalizationParams::from_parts(ncols, centers, scales)`` using the same
     values and None components. Arrays returned by properties are independent
     copies. Parameters never update when transformed data changes.
 
@@ -62,24 +112,16 @@ class NormalizationParams:
     infinity without nonstandard JSON values.
     """
 
-    __slots__ = ("_params",)
+    __slots__ = ()
+    _axis = 0
 
     def __init__(self, ncols: int, *, centers: Any = None, scales: Any = None) -> None:
-        ncols = operator.index(ncols)
-        if ncols < 0:
-            raise ValueError("ncols must be nonnegative")
-        arrays = []
-        for name, value in (("centers", centers), ("scales", scales)):
-            array = None if value is None else _real_array(value)
-            if array is not None and array.ndim != 1:
-                raise ValueError(f"{name} must be one-dimensional")
-            arrays.append(array)
-        self._params = Params(ncols, *arrays)
+        self._initialize(ncols, centers, scales)
 
     @property
     def ncols(self) -> int:
         """The number of columns expected by these parameters."""
-        return self._params.ncols
+        return self._params.dimension
 
     @property
     def centers(self) -> NDArray[np.float64] | None:
@@ -100,29 +142,232 @@ class NormalizationParams:
         return LazyMatrix.from_normalization(X, self)
 
 
+class RowNormalizationParams(_NormalizationParams):
+    """Float64 centers and scales for particular rows, independent of storage.
+
+    Parameters
+    ----------
+    nrows : int
+        Nonnegative number of rows, retained when both components are None.
+    centers : array-like or None, default=None
+        One real value per row. Copied without changing nonfinite values.
+    scales : array-like or None, default=None
+        One real, nonzero value per row. Negative and nonfinite values are
+        preserved. Positive and negative zero raise ValueError with the row
+        index, including values that round to zero in float64.
+
+    Notes
+    -----
+    Obtain fitted values from an axis=1 matrix's ``normalization`` property or
+    ``RowNormalization.fit``. Arrays returned by properties are independent
+    copies. These parameters describe the fitted rows in their original order.
+    Fit new samples independently with ``RowNormalization.fit_apply`` or a new
+    axis=1 LazyMatrix, even when their row count matches the training data.
+
+    Save nrows and active centers and scales arrays with numpy.savez, then
+    reconstruct this class and use ``apply_frozen`` to restore the same rows.
+    Omitted arrays mean None, preserving inactive components' IEEE semantics.
+    """
+
+    __slots__ = ()
+    _axis = 1
+
+    def __init__(self, nrows: int, *, centers: Any = None, scales: Any = None) -> None:
+        self._initialize(nrows, centers, scales)
+
+    @property
+    def nrows(self) -> int:
+        """The number of rows described by these parameters."""
+        return self._params.dimension
+
+    @property
+    def centers(self) -> NDArray[np.float64] | None:
+        """An independent copy of row centers, or None when inactive."""
+        return self._params.centers
+
+    @property
+    def scales(self) -> NDArray[np.float64] | None:
+        """An independent copy of row scales, or None when inactive."""
+        return self._params.scales
+
+    def apply_frozen(self, X: Any) -> "LazyMatrix":
+        """Apply saved values unchanged to the same rows in the same order.
+
+        X must have nrows rows; its column count may differ. The input is
+        copied following LazyMatrix's storage rules. A row-count mismatch
+        raises ValueError. This method performs no fitting.
+        """
+        return LazyMatrix.from_normalization(X, self)
+
+
+class _Normalization:
+    __slots__ = ("_center", "_scale", "_specification")
+    _axis: ClassVar[NormalizationAxis]
+
+    def __init__(
+        self,
+        *,
+        center: Centering = True,
+        scale: Scaling = True,
+        df: int = 0,
+        quantile_range: tuple[float, float] = (0.25, 0.75),
+    ) -> None:
+        self._specification = _specification(
+            self._axis, center, scale, df, quantile_range
+        )
+        self._center = center
+        self._scale = scale
+
+    @property
+    def center(self) -> Centering:
+        """The fixed centering option supplied to this recipe."""
+        return self._center
+
+    @property
+    def scale(self) -> Scaling:
+        """The fixed scaling option supplied to this recipe."""
+        return self._scale
+
+    @property
+    def df(self) -> int:
+        """Degrees of freedom subtracted from the fitted axis length."""
+        return self._specification[3]
+
+    @property
+    def quantile_range(self) -> tuple[float, float]:
+        """The fixed lower and upper quantile probabilities."""
+        return self._specification[4]
+
+    def _fit_apply(self, X: Any) -> "LazyMatrix":
+        result = LazyMatrix.__new__(LazyMatrix)
+        result._initialize(X, self._specification, None)
+        return result
+
+
+class ColumnNormalization(_Normalization):
+    """An immutable recipe for fitting column centers and scales.
+
+    The keyword-only center, scale, df, and quantile_range options follow
+    LazyMatrix with axis=0. Defaults select means and population standard
+    deviations. ``fit`` returns ColumnNormalizationParams, and ``fit_apply``
+    returns a LazyMatrix. Reuse fitted column parameters on new samples with
+    ``params.transform(X_new)``. Options are available as read-only properties.
+    """
+
+    __slots__ = ()
+    _axis = 0
+
+    def __init__(
+        self,
+        *,
+        center: Centering = True,
+        scale: Scaling = True,
+        df: int = 0,
+        quantile_range: tuple[float, float] = (0.25, 0.75),
+    ) -> None:
+        super().__init__(
+            center=center, scale=scale, df=df, quantile_range=quantile_range
+        )
+
+    def fit(self, X: Any) -> ColumnNormalizationParams:
+        """Fit column parameters without retaining the input matrix.
+
+        Input is copied temporarily using LazyMatrix's storage rules. Only
+        fitted centers, scales, and ncols are retained. The recipe stays unchanged.
+        """
+        return cast(ColumnNormalizationParams, self.fit_apply(X).normalization)
+
+    def fit_apply(self, X: Any) -> "LazyMatrix":
+        """Fit column parameters and return a lazy matrix owning its input copy.
+
+        Every call fits independently. Input storage and lazy operations follow
+        LazyMatrix with axis=0. Reuse training column parameters on new samples
+        with ``matrix.normalization.transform(X_new)``.
+        """
+        return self._fit_apply(X)
+
+
+class RowNormalization(_Normalization):
+    """An immutable recipe for fitting each row independently.
+
+    The keyword-only center, scale, df, and quantile_range options follow
+    LazyMatrix with axis=1. Defaults select means and population standard
+    deviations. ``fit`` returns RowNormalizationParams, and ``fit_apply``
+    returns a LazyMatrix. Fit new samples with another call to ``fit_apply``;
+    saved row parameters apply only to the rows for which they were fitted.
+    Options are available as read-only properties.
+
+    Examples
+    --------
+    >>> recipe = RowNormalization(center=False, scale="l2")
+    >>> train = recipe.fit_apply(np.array([[3.0, 4.0], [0.0, 0.0]]))
+    >>> validation = recipe.fit_apply(np.array([[0.0, 2.0]]))
+    >>> validation.toarray()
+    array([[0., 1.]])
+    """
+
+    __slots__ = ()
+    _axis = 1
+
+    def __init__(
+        self,
+        *,
+        center: Centering = True,
+        scale: Scaling = True,
+        df: int = 0,
+        quantile_range: tuple[float, float] = (0.25, 0.75),
+    ) -> None:
+        super().__init__(
+            center=center, scale=scale, df=df, quantile_range=quantile_range
+        )
+
+    def fit(self, X: Any) -> RowNormalizationParams:
+        """Fit row parameters without retaining the input matrix.
+
+        Input is copied temporarily using LazyMatrix's storage rules. Only
+        fitted centers, scales, and nrows are retained. The recipe stays unchanged.
+        """
+        return cast(RowNormalizationParams, self.fit_apply(X).normalization)
+
+    def fit_apply(self, X: Any) -> "LazyMatrix":
+        """Fit each row independently and return a lazy matrix owning its input copy.
+
+        Every call fits fresh row parameters, including calls on new samples.
+        Products use the saved values without refitting. Input storage and
+        lazy operations follow LazyMatrix with axis=1.
+        """
+        return self._fit_apply(X)
+
+
 class LazyMatrix:
-    """An owned matrix with lazy column centering and scaling.
+    """An owned matrix with lazy column or row centering and scaling.
 
     Parameters
     ----------
     X : numpy.ndarray or scipy.sparse matrix or array
         Two-dimensional real numeric input. Sparse input must use CSR or CSC
         storage. Values are copied to float64 storage, and sparse copies are
-        converted to canonical CSC. Later changes to X do not affect this object.
+        canonicalized while retaining CSR or CSC orientation. Later changes to
+        X do not affect this object.
+    axis : {0, 1}, default=0
+        Axis over which to compute statistics. Zero fits one center and scale
+        per column; one fits each row independently. The fitted axis must have
+        at least one entry: rows for axis=0, or columns for axis=1.
     center : bool or {"none", "mean", "min", "median"}, default=True
-        Column center to subtract. True selects the mean; False disables centering.
+        Center to subtract. True selects the mean; False disables centering.
     scale : bool or {"none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"}, default=True
-        Column scale to divide by. True selects standard deviation; False disables
-        scaling. Norms and maximum absolute values use centered columns when
+        Scale to divide by. True selects standard deviation; False disables
+        scaling. Norms and maximum absolute values use centered values when
         centering is active. Exact zero scales become one.
     df : int, default=0
-        Nonnegative degrees of freedom subtracted from the number of rows in
-        the variance divisor. Use zero for population standard deviations or
-        one for sample standard deviations. Columns with at most df rows have
-        NaN scales. Used only for standard-deviation scaling.
+        Nonnegative degrees of freedom subtracted from the fitted axis length
+        in the variance divisor: nrows for axis=0, or ncols for axis=1. Use zero
+        for population standard deviations or one for sample standard deviations.
+        Scales are NaN when that length is at most df. Used only for sd scaling.
     quantile_range : tuple of float, default=(0.25, 0.75)
         Lower and upper probabilities satisfying 0 <= lower < upper <= 1.
-        Quantile-range scaling uses exact linear quantiles at (nrows - 1) * q,
+        Quantile-range scaling uses exact linear quantiles at (n - 1) * q,
+        where n is the fitted axis length,
         without standard-normal calibration. Bounds are validated for all methods.
 
     Notes
@@ -154,40 +399,33 @@ class LazyMatrix:
         self,
         X: Any,
         *,
+        axis: NormalizationAxis = 0,
         center: Centering = True,
         scale: Scaling = True,
         df: int = 0,
         quantile_range: tuple[float, float] = (0.25, 0.75),
     ) -> None:
-        center = _method(center, "centering", "mean", ("none", "mean", "min", "median"))
-        scale = _method(
-            scale,
-            "scaling",
-            "sd",
-            ("none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"),
+        self._initialize(
+            X, _specification(axis, center, scale, df, quantile_range), None
         )
-        df = operator.index(df)
-        if df < 0:
-            raise ValueError("df must be nonnegative")
-        bounds = _real_array(quantile_range)
-        if bounds.shape != (2,):
-            raise ValueError("quantile_range must contain two probabilities")
-        lower, upper = map(float, bounds)
-        if not (np.isfinite(bounds).all() and 0 <= lower < upper <= 1):
-            raise ValueError("quantile bounds must satisfy 0 <= lower < upper <= 1")
-        self._initialize(X, (center, scale, df, (lower, upper)), None)
 
     @classmethod
     def from_normalization(
-        cls, X: Any, parameters: NormalizationParams
+        cls, X: Any, parameters: ColumnNormalizationParams | RowNormalizationParams
     ) -> "LazyMatrix":
         """Copy raw input and apply fitted parameters without recomputing them.
 
-        The input must have parameters.ncols columns. Invalid parameter types
-        raise TypeError, and column-count mismatches raise ValueError.
+        Column parameters require parameters.ncols columns. Row parameters
+        require parameters.nrows rows in the original order. Invalid parameter
+        types raise TypeError, and dimension mismatches raise ValueError.
+        This method always applies saved values unchanged.
         """
-        if not isinstance(parameters, NormalizationParams):
-            raise TypeError("parameters must be NormalizationParams")
+        if not isinstance(
+            parameters, (ColumnNormalizationParams, RowNormalizationParams)
+        ):
+            raise TypeError(
+                "parameters must be ColumnNormalizationParams or RowNormalizationParams"
+            )
         result = cls.__new__(cls)
         result._initialize(X, None, parameters._params)
         return result
@@ -204,14 +442,17 @@ class LazyMatrix:
                 raise TypeError("expected real numeric values")
             raw = X.copy()
             raw.check_format(full_check=True)
-            raw = raw.astype(np.float64, copy=False).tocsc(copy=False)
+            raw = raw.astype(np.float64, copy=False)
             raw.sum_duplicates()
             raw.sort_indices()
-            self._matrix = Matrix.from_csc(
+            self._matrix = Matrix.from_sparse(
                 raw.shape,
-                raw.data,
-                np.asarray(raw.indices, dtype=np.int64),
-                np.asarray(raw.indptr, dtype=np.int64),
+                raw.format == "csc",
+                (
+                    raw.data,
+                    np.asarray(raw.indices, dtype=np.int64),
+                    np.asarray(raw.indptr, dtype=np.int64),
+                ),
                 specification,
                 parameters,
             )
@@ -226,10 +467,12 @@ class LazyMatrix:
         self._transpose: LazyMatrix | None = None
 
     @property
-    def normalization(self) -> NormalizationParams:
-        """A copy of the original columns' fitted parameters, including on T."""
-        result = object.__new__(NormalizationParams)
-        result._params = self._matrix.normalization
+    def normalization(self) -> ColumnNormalizationParams | RowNormalizationParams:
+        """A copy of fitted parameters for the original axis, including on T."""
+        params = self._matrix.normalization
+        cls = ColumnNormalizationParams if params.axis == 0 else RowNormalizationParams
+        result = object.__new__(cls)
+        result._params = params
         return result
 
     @property
@@ -250,17 +493,17 @@ class LazyMatrix:
 
     @property
     def centers(self) -> NDArray[np.float64] | None:
-        """A copy of the original columns' fitted centers, or None.
+        """A copy of the original axis's fitted centers, or None.
 
-        Transposing the matrix retains these original column parameters.
+        Transposing the matrix retains these original parameters.
         """
         return self._matrix.centers
 
     @property
     def scales(self) -> NDArray[np.float64] | None:
-        """A copy of the original columns' fitted scales, or None.
+        """A copy of the original axis's fitted scales, or None.
 
-        Transposing the matrix retains these original column parameters.
+        Transposing the matrix retains these original parameters.
         """
         return self._matrix.scales
 
@@ -361,30 +604,37 @@ class LazyMatrix:
 
 
 def standardize(
-    X: Any, *, center: bool = True, scale: bool = True, df: int = 0
+    X: Any,
+    *,
+    axis: NormalizationAxis = 0,
+    center: bool = True,
+    scale: bool = True,
+    df: int = 0,
 ) -> LazyMatrix:
-    """Fit column means and standard deviations and return a lazy matrix.
+    """Fit means and standard deviations and return a lazy matrix.
 
     Parameters
     ----------
     X : numpy.ndarray or scipy.sparse matrix or array
         Two-dimensional real numeric input. Sparse input must use CSR or CSC.
         The returned matrix owns a copy of the raw values in float64 storage.
+    axis : {0, 1}, default=0
+        Zero standardizes each column; one standardizes each row independently.
     center : bool, default=True
-        Subtract each column's mean during operations.
+        Subtract the fitted column or row mean during operations.
     scale : bool, default=True
-        Divide each column by its standard deviation, replacing
+        Divide by the fitted column or row standard deviation, replacing
         exact zero scales with one.
     df : int, default=0
-        Nonnegative degrees of freedom subtracted from the number of rows in
-        the variance divisor. Use zero for population standard deviations or
-        one for sample standard deviations. Columns with at most df rows have
-        NaN scales. Ignored when scale is False.
+        Nonnegative degrees of freedom subtracted from nrows for axis=0 or
+        ncols for axis=1 in the variance divisor. Use zero for population
+        standard deviations or one for sample standard deviations. Scales are
+        NaN when that dimension is at most df. Ignored when scale is False.
 
     Returns
     -------
     LazyMatrix
-        A matrix retaining fitted column parameters without constructing a
+        A matrix retaining fitted parameters without constructing a
         normalized copy. Statistics are fitted immediately.
 
     Raises
@@ -392,13 +642,16 @@ def standardize(
     TypeError
         If the input type, storage format, values, or options are unsupported.
     ValueError
-        If the input is not two-dimensional, has no rows, or df is negative.
+        If the input is not two-dimensional, the fitted axis is empty, axis
+        is invalid, or df is negative.
 
     Notes
     -----
     This function fits each input independently. Reuse training parameters with
-    ``Z.normalization.transform(new_X)``. For other centering and scaling methods,
-    construct LazyMatrix directly.
+    ``Z.normalization.transform(new_X)`` for column normalization. New samples
+    need independently fitted row parameters; call this function again with
+    axis=1 or reuse a RowNormalization recipe. For other centering and scaling
+    methods, construct LazyMatrix directly.
 
     Examples
     --------
@@ -411,4 +664,4 @@ def standardize(
     """
     if not isinstance(center, bool) or not isinstance(scale, bool):
         raise TypeError("center and scale must be booleans")
-    return LazyMatrix(X, center=center, scale=scale, df=df)
+    return LazyMatrix(X, axis=axis, center=center, scale=scale, df=df)

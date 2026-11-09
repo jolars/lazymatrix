@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 import pytest
-from lazymatrix import LazyMatrix, NormalizationParams, standardize
+from lazymatrix import ColumnNormalizationParams, LazyMatrix, standardize
 from scipy import sparse
 
 if os.environ.get("LAZYMATRIX_REQUIRE_TORCH") == "1":
@@ -149,7 +149,7 @@ def test_existing_fitted_parameters_are_reused_on_new_data(layout, method):
         else LazyMatrix(source, center="median", scale=method)
     )
     params = fitted.normalization
-    restored = NormalizationParams(
+    restored = ColumnNormalizationParams(
         params.ncols, centers=params.centers, scales=params.scales
     )
     layer = NormalizedLinear(

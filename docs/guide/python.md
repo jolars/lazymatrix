@@ -70,7 +70,7 @@ normalization alongside them for prediction.
 
 ## Reuse fitted parameters
 
-Apply the training centers and scales to validation or prediction data:
+Apply the training column centers and scales to validation or prediction data:
 
 ```python
 params = Z.normalization
@@ -79,7 +79,8 @@ validation = params.transform(X_validation)
 validation_prediction = intercept + validation @ coefficients
 ```
 
-`transform` creates a lazy operator using the saved parameters. It does not fit
+`Z.normalization` returns `ColumnNormalizationParams` for column normalization.
+Its `transform` method creates a lazy operator using the saved parameters. It does not fit
 statistics on the new data. The new input must have `params.ncols` columns in
 the same feature order as the training input, but it can have a different
 number of rows and use dense or sparse storage.
@@ -122,12 +123,76 @@ observations can fall outside that interval; reusing the parameters does not
 clip them. See the [API reference](/reference/python/) for all method names and
 constructor options.
 
+## Normalize rows
+
+The default `axis=0` fits one center and scale per column. Pass `axis=1` to
+`standardize` or `LazyMatrix` to fit each row independently:
+
+```python
+rows = standardize(X, axis=1)
+unit_rows = LazyMatrix(X, axis=1, center=False, scale="l2")
+robust_rows = LazyMatrix(X, axis=1, center="median", scale="quantile_range")
+```
+
+Row normalization supports the same methods, products, column access, SciPy
+adapter, and dense conversion as column normalization. Sparse input remains
+sparse, including when centering changes the logical values of implicit zeros.
+Row standard deviations use `ncols - df` as the variance divisor. Fitting
+requires at least one column, but permits zero rows.
+
+### Fit new samples independently
+
+Each new sample needs its own row statistics, even when the number of samples
+matches the training data. Use an immutable recipe to reuse the settings:
+
+```python
+from lazymatrix import RowNormalization
+
+recipe = RowNormalization(center=False, scale="l2")
+training = recipe.fit_apply(X)
+validation = recipe.fit_apply(X_validation)
+row_params = recipe.fit(X)
+```
+
+`fit_apply` fits fresh parameters on every call and returns a `LazyMatrix`.
+`fit` returns `RowNormalizationParams` without retaining the input matrix;
+it temporarily copies raw input following the same storage rules as `LazyMatrix`.
+Both methods leave the recipe unchanged. `ColumnNormalization` exposes the same
+recipe interface for columns, whose fitted parameters can then be reused with
+`transform`.
+
+### Reapply explicit or saved row parameters
+
+`RowNormalizationParams` describes particular rows in their original order.
+Use `apply_frozen` to reuse these values unchanged:
+
+```python
+from lazymatrix import RowNormalizationParams
+
+restored = row_params.apply_frozen(X)
+explicit = RowNormalizationParams(
+    nrows=X.shape[0], centers=None, scales=[1.0, 2.0, 4.0]
+)
+scaled = explicit.apply_frozen(X)
+```
+
+Frozen application requires the same row count and assumes the same row order.
+It permits a different column count, for example when selecting features from
+the same samples. `LazyMatrix.from_normalization(X, params)` also applies saved
+row or column parameters unchanged. A dimension mismatch raises `ValueError`.
+
+`rows.normalization` returns `RowNormalizationParams` with `nrows`, `centers`,
+and `scales`. The parameter type and values retain their original axis on
+`rows.T.normalization` as well. Inactive components remain `None`; explicit
+zero scales raise `ValueError` with the row index. Fit new samples with the
+recipe instead of applying the training rows' frozen parameters.
+
 ## Memory and conversion
 
 LazyMatrix owns a copy of the raw input, so later changes to `X` do not affect
 `Z`. Dense input requires a full raw-data copy. Sparse input remains sparse and
-is stored in canonical CSC form, with duplicate entries summed. Stored values
-and results use float64.
+retains its CSR or CSC orientation, with duplicate entries summed and indices
+sorted. Stored values and results use float64.
 
 Products and transposes do not create a full normalized matrix. To inspect one
 column or explicitly materialize the matrix:
@@ -153,7 +218,7 @@ keeps disabled components absent and preserves floating-point values without
 pickling:
 
 ```python
-from lazymatrix import NormalizationParams
+from lazymatrix import ColumnNormalizationParams
 
 checkpoint = {"ncols": params.ncols}
 for name in ("centers", "scales"):
@@ -163,7 +228,7 @@ for name in ("centers", "scales"):
 np.savez("normalization.npz", **checkpoint)
 
 with np.load("normalization.npz", allow_pickle=False) as saved:
-    restored = NormalizationParams(
+    restored = ColumnNormalizationParams(
         int(saved["ncols"]),
         centers=saved.get("centers"),
         scales=saved.get("scales"),
@@ -172,9 +237,13 @@ with np.load("normalization.npz", allow_pickle=False) as saved:
 
 Use `restored.transform` with new raw data. Keep feature names or other metadata
 alongside the archive so you can check feature order when loading it.
-`NormalizationParams` also accepts explicit centers and scales, with one entry
+`ColumnNormalizationParams` also accepts explicit centers and scales, with one entry
 per feature. An omitted vector disables that component; explicit zero scales
 raise `ValueError`.
+
+For row parameters, save `nrows` in place of `ncols`, restore with
+`RowNormalizationParams`, and use `apply_frozen` on the same rows. This saves
+fitted values, so retain the row recipe separately when preparing new samples.
 
 ## Use a PyTorch first layer
 
@@ -251,9 +320,10 @@ Computed scales become one only when they are exactly zero. With centering,
 a constant training feature therefore becomes zero. New observations still
 subtract the saved training center.
 
-Standard deviations use `nrows - df` as the variance divisor. Scales are `NaN`
-when `nrows <= df`. Missing values are not ignored or imputed, and nonfinite
-values follow IEEE arithmetic.
+Standard deviations use `nrows - df` as the variance divisor for columns or
+`ncols - df` for rows. Scales are `NaN` when that dimension is at most `df`.
+Missing values are not ignored or imputed, and nonfinite values follow IEEE
+arithmetic.
 
 The PyTorch layer factors normalization into the linear operation. This changes
 floating-point evaluation order, so large offsets, nonfinite values, and sparse

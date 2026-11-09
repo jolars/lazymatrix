@@ -4,18 +4,21 @@ from numpy.typing import NDArray
 class Params:
     def __init__(
         self,
-        ncols: int,
+        axis: int,
+        dimension: int,
         centers: NDArray[np.float64] | None,
         scales: NDArray[np.float64] | None,
     ) -> None: ...
     @property
-    def ncols(self) -> int: ...
+    def dimension(self) -> int: ...
+    @property
+    def axis(self) -> int: ...
     @property
     def centers(self) -> NDArray[np.float64] | None: ...
     @property
     def scales(self) -> NDArray[np.float64] | None: ...
 
-Specification = tuple[str, str, int, tuple[float, float]]
+Specification = tuple[int, str, str, int, tuple[float, float]]
 
 class Matrix:
     @staticmethod
@@ -25,11 +28,10 @@ class Matrix:
         parameters: Params | None,
     ) -> Matrix: ...
     @staticmethod
-    def from_csc(
+    def from_sparse(
         shape: tuple[int, int],
-        values: NDArray[np.float64],
-        indices: NDArray[np.int64],
-        indptr: NDArray[np.int64],
+        is_csc: bool,
+        buffers: tuple[NDArray[np.float64], NDArray[np.int64], NDArray[np.int64]],
         specification: Specification | None,
         parameters: Params | None,
     ) -> Matrix: ...

@@ -4,9 +4,10 @@
 [![PyPI](https://img.shields.io/pypi/v/lazymatrix.svg)](https://pypi.org/project/lazymatrix/)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23666450-blue)](https://doi.org/10.5281/zenodo.23666450)
 
-LazyMatrix centers and scales NumPy arrays and SciPy CSR and CSC matrices during
-matrix operations, without constructing a normalized copy. It supports matrix
-products, SciPy's iterative solvers, and an optional PyTorch first layer.
+LazyMatrix centers and scales columns or rows of NumPy arrays and SciPy CSR and
+CSC matrices during matrix operations, without constructing a normalized copy.
+It supports matrix products, SciPy's iterative solvers, and an optional PyTorch
+first layer.
 
 See the [Python guide](https://lazymatrix.org/guide/python) for supported
 operations and the [API reference](https://lazymatrix.org/reference/python/) for
@@ -39,8 +40,9 @@ column = Z[:, 0]
 ```
 
 The operator owns a copy of the raw input and stores fitted column means and
-scales. Sparse inputs remain sparse and are stored in canonical CSC form. Stored
-values and results use float64. Standardization uses population standard
+scales. Sparse inputs remain sparse and retain their CSR or CSC orientation,
+with duplicate entries summed. Stored values and results use float64.
+Standardization uses population standard
 deviations by default; pass `df=1` for sample standard deviations.
 
 `Z.aslinearoperator()` integrates with SciPy's iterative solvers. Call
@@ -62,6 +64,26 @@ guide](https://lazymatrix.org/guide/python#choose-normalization-methods) for all
 methods and [fitted
 parameters](https://lazymatrix.org/guide/python#reuse-fitted-parameters) for
 saving and restoring normalization.
+
+Pass `axis=1` to `standardize` or `LazyMatrix` to normalize each row independently:
+
+```python
+from lazymatrix import RowNormalization
+
+rows = standardize(X, axis=1)
+recipe = RowNormalization(center=False, scale="l2")
+training = recipe.fit_apply(X)
+validation = recipe.fit_apply(np.array([[3.0, 4.0]]))
+```
+
+Every call fits fresh row statistics. `recipe.fit(X)` returns
+`RowNormalizationParams` without retaining the input matrix. Use
+`params.apply_frozen(X)` to reapply saved values to the same rows in the same
+order. Explicit row parameters take `nrows`, `centers`, and `scales`.
+Column recipes and parameters are named `ColumnNormalization` and
+`ColumnNormalizationParams`; the latter replaces the former
+`NormalizationParams` name. See the [row normalization
+guide](https://lazymatrix.org/guide/python#normalize-rows) for details.
 
 ## PyTorch
 

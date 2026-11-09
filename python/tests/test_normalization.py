@@ -1,6 +1,13 @@
 import numpy as np
 import pytest
-from lazymatrix import LazyMatrix, NormalizationParams, standardize
+from lazymatrix import (
+    ColumnNormalization,
+    ColumnNormalizationParams,
+    LazyMatrix,
+    RowNormalization,
+    RowNormalizationParams,
+    standardize,
+)
 from numpy.testing import assert_allclose, assert_array_equal
 from scipy import sparse
 
@@ -15,7 +22,10 @@ STORAGE = [
 ]
 
 
-def reference(raw, center, scale, bounds=(0.25, 0.75)):
+def reference(raw, center, scale, bounds=(0.25, 0.75), axis=0):
+    if axis == 1:
+        values, centers, scales = reference(raw.T, center, scale, bounds)
+        return values.T, centers, scales
     centers = None
     if center is True or center == "mean":
         centers = raw.mean(axis=0)
@@ -54,7 +64,8 @@ def assert_optional(actual, expected):
 @pytest.mark.parametrize("storage", STORAGE)
 @pytest.mark.parametrize("center", CENTERS)
 @pytest.mark.parametrize("scale", SCALES)
-def test_methods_products_and_reuse(storage, center, scale):
+@pytest.mark.parametrize("axis", [0, 1])
+def test_methods_products_and_reuse(storage, center, scale, axis):
     raw = np.array(
         [
             [0.0, -6.0, 5.0, 0.0],
@@ -63,8 +74,8 @@ def test_methods_products_and_reuse(storage, center, scale):
             [9.0, 0.0, 5.0, 0.0],
         ]
     )
-    expected, centers, scales = reference(raw, center, scale)
-    z = LazyMatrix(storage(raw), center=center, scale=scale)
+    expected, centers, scales = reference(raw, center, scale, axis=axis)
+    z = LazyMatrix(storage(raw), axis=axis, center=center, scale=scale)
     assert_optional(z.centers, centers)
     assert_optional(z.scales, scales)
     assert_allclose(z.toarray(), expected, atol=1e-14)
@@ -87,34 +98,43 @@ def test_methods_products_and_reuse(storage, center, scale):
 
     # Export Rust-fitted parameters, reconstruct through Python, and import into Rust.
     fitted = z.T.normalization
-    assert fitted.ncols == raw.shape[1]
-    reconstructed = NormalizationParams(
-        fitted.ncols, centers=fitted.centers, scales=fitted.scales
-    )
+    cls = ColumnNormalizationParams if axis == 0 else RowNormalizationParams
+    assert isinstance(fitted, cls)
+    dimension = fitted.ncols if axis == 0 else fitted.nrows
+    assert dimension == raw.shape[1 - axis]
+    reconstructed = cls(dimension, centers=fitted.centers, scales=fitted.scales)
     new = np.array([[10.0, -8.0, 8.0, 1.0], [-1.0, 1.0, 4.0, 0.0]])
     prediction = new.copy()
     if centers is not None:
         prediction -= centers
     if scales is not None:
         prediction /= scales
-    reused = reconstructed.transform(storage(new))
+    if axis == 1:
+        new = new.T
+        prediction = prediction.T
+    reused = LazyMatrix.from_normalization(storage(new), reconstructed)
     assert_allclose(reused.toarray(), prediction, atol=1e-14)
+    v = v[: new.shape[1]]
+    u = np.arange(1.0, new.shape[0] + 1)
     assert_allclose(reused @ v, prediction @ v, atol=1e-14)
-    assert_allclose(
-        reused.T @ np.array([1.0, -2.0]), prediction.T @ [1.0, -2.0], atol=1e-14
-    )
+    assert_allclose(reused.T @ u, prediction.T @ u, atol=1e-14)
     assert_optional(reused.centers, centers)
     assert_optional(reused.scales, scales)
 
 
 @pytest.mark.parametrize("bounds", [(0.0, 1.0), (0.1, 0.8), (0.4, 0.6)])
 @pytest.mark.parametrize("storage", STORAGE)
-def test_custom_exact_quantile_ranges(storage, bounds):
+@pytest.mark.parametrize("axis", [0, 1])
+def test_custom_exact_quantile_ranges(storage, bounds, axis):
     raw = np.array([[0.0, 1.0], [0.0, 2.0], [0.0, 5.0], [4.0, 12.0], [10.0, 100.0]])
     z = LazyMatrix(
-        storage(raw), center="median", scale="quantile_range", quantile_range=bounds
+        storage(raw),
+        axis=axis,
+        center="median",
+        scale="quantile_range",
+        quantile_range=bounds,
     )
-    expected, centers, scales = reference(raw, "median", "quantile_range", bounds)
+    expected, centers, scales = reference(raw, "median", "quantile_range", bounds, axis)
     assert_allclose(z.centers, centers)
     assert_allclose(z.scales, scales)
     assert_allclose(z.toarray(), expected)
@@ -123,8 +143,9 @@ def test_custom_exact_quantile_ranges(storage, bounds):
 @pytest.mark.parametrize("center", ["min", "median"])
 @pytest.mark.parametrize("scale", SCALES)
 @pytest.mark.parametrize("orientation", ["csr", "csc"])
+@pytest.mark.parametrize("axis", [0, 1])
 def test_duplicates_are_combined_before_nonlinear_statistics(
-    center, scale, orientation
+    center, scale, orientation, axis
 ):
     x = sparse.csc_matrix(
         ([3.0, 1.0, -1.0, 0.0, 4.0, -7.0, 2.0], [2, 0, 0, 1, 0, 0, 2], [0, 4, 7]),
@@ -135,8 +156,8 @@ def test_duplicates_are_combined_before_nonlinear_statistics(
         x = x.T.tocsr()
     raw = x.toarray()
     before = (x.data.copy(), x.indices.copy(), x.indptr.copy())
-    expected, centers, scales = reference(raw, center, scale)
-    z = LazyMatrix(x, center=center, scale=scale)
+    expected, centers, scales = reference(raw, center, scale, axis=axis)
+    z = LazyMatrix(x, axis=axis, center=center, scale=scale)
     assert_allclose(z.toarray(), expected, atol=1e-14)
     assert_allclose(z.centers, centers)
     assert_optional(z.scales, scales)
@@ -145,30 +166,46 @@ def test_duplicates_are_combined_before_nonlinear_statistics(
 
 
 @pytest.mark.parametrize("scale", SCALES)
-def test_sparse_fitting_and_reuse_do_not_materialize(monkeypatch, scale):
-    x = sparse.csr_matrix(np.eye(5))
-    expected, _, _ = reference(np.eye(5), "median", scale)
+@pytest.mark.parametrize("storage", STORAGE[1:])
+@pytest.mark.parametrize("axis", [0, 1])
+def test_sparse_fitting_and_reuse_do_not_materialize(monkeypatch, scale, storage, axis):
+    raw = np.array(
+        [[0.0, 0.0, 3.0], [0.0, 2.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    )
+    x = storage(raw)
+    expected, _, _ = reference(raw, "median", scale, axis=axis)
 
     def fail(*args, **kwargs):
         raise AssertionError("unexpected dense materialization")
 
-    monkeypatch.setattr(sparse.csr_matrix, "toarray", fail)
-    monkeypatch.setattr(sparse.csc_matrix, "toarray", fail)
+    for cls in STORAGE[1:]:
+        for method in ("toarray", "tocsc", "tocsr"):
+            monkeypatch.setattr(cls, method, fail)
     monkeypatch.setattr(LazyMatrix, "toarray", fail)
-    z = LazyMatrix(x, center="median", scale=scale)
-    reused = z.normalization.transform(x)
+    recipe = (ColumnNormalization if axis == 0 else RowNormalization)(
+        center="median", scale=scale
+    )
+    z = recipe.fit_apply(x)
+    params = recipe.fit(x)
+    reused = LazyMatrix.from_normalization(x, params)
     for operator in (z, reused):
-        assert_allclose(operator @ np.ones(5), expected @ np.ones(5), atol=1e-14)
-        assert_allclose(operator.T @ np.ones(5), expected.T @ np.ones(5), atol=1e-14)
+        assert_allclose(operator @ np.ones(3), expected @ np.ones(3), atol=1e-14)
+        assert_allclose(operator.T @ np.ones(4), expected.T @ np.ones(4), atol=1e-14)
         assert_allclose(operator[:, 0], expected[:, 0])
+        assert_allclose(operator.T[:, 0], expected.T[:, 0])
 
 
 @pytest.mark.parametrize("center", [False, True])
 @pytest.mark.parametrize("scale", [False, True])
-def test_portable_checkpoint_round_trip(tmp_path, center, scale):
-    z = standardize(np.array([[1.0, 5.0], [3.0, 5.0]]), center=center, scale=scale)
+@pytest.mark.parametrize("axis", [0, 1])
+def test_portable_checkpoint_round_trip(tmp_path, center, scale, axis):
+    z = standardize(
+        np.array([[1.0, 5.0], [3.0, 5.0]]), axis=axis, center=center, scale=scale
+    )
     fitted = z.normalization
-    arrays = {"ncols": fitted.ncols}
+    dimension = "ncols" if axis == 0 else "nrows"
+    cls = ColumnNormalizationParams if axis == 0 else RowNormalizationParams
+    arrays = {dimension: getattr(fitted, dimension)}
     for name in ("centers", "scales"):
         value = getattr(fitted, name)
         if value is not None:
@@ -176,8 +213,8 @@ def test_portable_checkpoint_round_trip(tmp_path, center, scale):
     checkpoint = tmp_path / "normalization.npz"
     np.savez(checkpoint, **arrays)
     with np.load(checkpoint, allow_pickle=False) as saved:
-        restored = NormalizationParams(
-            int(saved["ncols"]),
+        restored = cls(
+            int(saved[dimension]),
             centers=saved.get("centers"),
             scales=saved.get("scales"),
         )
@@ -187,14 +224,22 @@ def test_portable_checkpoint_round_trip(tmp_path, center, scale):
         expected -= z.centers
     if scale:
         expected /= z.scales
-    assert_allclose(restored.transform(new).toarray(), expected)
+    if axis == 1:
+        new = new.T
+        expected = expected.T
+    assert_allclose(LazyMatrix.from_normalization(new, restored).toarray(), expected)
 
 
 @pytest.mark.parametrize("storage", STORAGE)
-def test_explicit_parameters_preserve_ieee_values_and_ownership(storage, tmp_path):
+@pytest.mark.parametrize("axis", [0, 1])
+def test_explicit_parameters_preserve_ieee_values_and_ownership(
+    storage, tmp_path, axis
+):
     centers = np.array([np.nan, np.inf, -np.inf, -0.0, 2.0, 0.0])
     scales = np.array([np.nan, np.inf, -np.inf, -2.0, 1e-300, 3.0])
-    params = NormalizationParams(6, centers=centers, scales=scales)
+    cls = ColumnNormalizationParams if axis == 0 else RowNormalizationParams
+    dimension = "ncols" if axis == 0 else "nrows"
+    params = cls(6, centers=centers, scales=scales)
     centers[:] = 99
     scales[:] = 99
     expected_centers = np.array([np.nan, np.inf, -np.inf, -0.0, 2.0, 0.0])
@@ -204,22 +249,27 @@ def test_explicit_parameters_preserve_ieee_values_and_ownership(storage, tmp_pat
     params.centers[:] = 99
     params.scales[:] = 99
     path = tmp_path / "ieee.npz"
-    np.savez(path, ncols=params.ncols, centers=params.centers, scales=params.scales)
+    np.savez(path, **{dimension: 6, "centers": params.centers, "scales": params.scales})
     with np.load(path, allow_pickle=False) as saved:
-        restored = NormalizationParams(
-            int(saved["ncols"]), centers=saved["centers"], scales=saved["scales"]
+        restored = cls(
+            int(saved[dimension]), centers=saved["centers"], scales=saved["scales"]
         )
     raw = np.array([[1.0, 2.0, 3.0, 4.0, 2.0, 9.0], [0.0, 0.0, 0.0, 0.0, 2.0, 0.0]])
-    z = LazyMatrix.from_normalization(storage(raw), restored)
     with np.errstate(invalid="ignore"):
         expected = (raw - expected_centers) / expected_scales
+    if axis == 1:
+        raw = raw.T
+        expected = expected.T
+    z = LazyMatrix.from_normalization(storage(raw), restored)
     assert_array_equal(z.centers, expected_centers)
     assert_array_equal(z.scales, expected_scales)
     assert np.signbit(z.centers[3])
     assert_array_equal(z.toarray(), expected)
     assert_array_equal(z.T.toarray(), expected.T)
-    for j in range(6):
+    for j in range(raw.shape[1]):
         assert_array_equal(z[:, j], expected[:, j])
+    for j in range(raw.shape[0]):
+        assert_array_equal(z.T[:, j], expected.T[:, j])
 
 
 @pytest.mark.parametrize("center", ["min", "median"])
@@ -247,35 +297,44 @@ def test_zero_column_parameters(scale):
 
 @pytest.mark.parametrize("storage", STORAGE)
 def test_column_mismatch_is_recoverable(storage):
-    for params in (NormalizationParams(3), NormalizationParams(3, scales=[1, 2, 3])):
+    for params in (
+        ColumnNormalizationParams(3),
+        ColumnNormalizationParams(3, scales=[1, 2, 3]),
+    ):
         with pytest.raises(ValueError, match="column count"):
             params.transform(storage(np.ones((4, 2))))
         assert params.transform(storage(np.ones((4, 3)))).shape == (4, 3)
 
 
 @pytest.mark.parametrize("zero", [0.0, -0.0])
-def test_explicit_zero_scales_are_rejected(zero):
-    with pytest.raises(ValueError, match="column 1"):
-        NormalizationParams(3, scales=[1, zero, 2])
+@pytest.mark.parametrize(
+    "cls, label",
+    [(ColumnNormalizationParams, "column"), (RowNormalizationParams, "row")],
+)
+def test_explicit_zero_scales_are_rejected(zero, cls, label):
+    with pytest.raises(ValueError, match=f"{label} 1"):
+        cls(3, scales=[1, zero, 2])
 
 
 @pytest.mark.parametrize("name", ["centers", "scales"])
 @pytest.mark.parametrize("values", [[1], [1, 2, 3], [[1, 2]]])
-def test_parameter_dimensions(name, values):
-    with pytest.raises(ValueError, match="length ncols|one-dimensional"):
-        NormalizationParams(2, **{name: values})
+@pytest.mark.parametrize("cls", [ColumnNormalizationParams, RowNormalizationParams])
+def test_parameter_dimensions(name, values, cls):
+    with pytest.raises(ValueError, match="length ncols|length nrows|one-dimensional"):
+        cls(2, **{name: values})
 
 
-def test_parameter_types():
+@pytest.mark.parametrize("cls", [ColumnNormalizationParams, RowNormalizationParams])
+def test_parameter_types(cls):
     with pytest.raises(ValueError, match="nonnegative"):
-        NormalizationParams(-1)
+        cls(-1)
     for ncols in (1.5, "2", None):
         with pytest.raises(TypeError):
-            NormalizationParams(ncols)
+            cls(ncols)
     for value in ([1j], ["1"], [object()]):
         with pytest.raises(TypeError, match="real numeric"):
-            NormalizationParams(1, scales=value)
-    with pytest.raises(TypeError, match="NormalizationParams"):
+            cls(1, scales=value)
+    with pytest.raises(TypeError, match="ColumnNormalizationParams"):
         LazyMatrix.from_normalization(np.ones((3, 2)), [1, 2])
 
 
@@ -305,3 +364,129 @@ def test_method_validation(name):
 def test_quantile_validation(bounds):
     with pytest.raises(ValueError, match="quantile"):
         LazyMatrix(np.eye(2), scale="quantile_range", quantile_range=bounds)
+
+
+@pytest.mark.parametrize("storage", STORAGE)
+def test_frozen_rows_validate_row_count_and_preserve_inactive_dimension(storage):
+    for params in (
+        RowNormalizationParams(3),
+        RowNormalizationParams(3, scales=[1, 2, 3]),
+    ):
+        with pytest.raises(ValueError, match="row count"):
+            params.apply_frozen(storage(np.ones((4, 2))))
+        z = params.apply_frozen(storage(np.ones((3, 2))))
+        assert z.shape == (3, 2)
+        assert z.normalization.nrows == 3
+        assert_allclose(
+            z.toarray(),
+            np.ones((3, 2)) / np.array([1, 2, 3])[:, None]
+            if params.scales is not None
+            else np.ones((3, 2)),
+        )
+
+
+@pytest.mark.parametrize("storage", STORAGE)
+@pytest.mark.parametrize("nrows", [1, 2, 3])
+def test_row_recipe_fits_new_samples_independently(storage, nrows):
+    recipe = RowNormalization(center=False, scale="l2")
+    train = recipe.fit_apply(storage(np.array([[3.0, 4.0], [0.0, 0.0]])))
+    raw = np.array([[0.0, 10.0], [6.0, 8.0], [-12.0, 5.0]])[:nrows]
+    validation = recipe.fit_apply(storage(raw))
+    assert isinstance(validation.normalization, RowNormalizationParams)
+    assert validation.normalization.nrows == nrows
+    assert_allclose(train.scales, [5.0, 1.0])
+    assert_allclose(validation.scales, [10.0, 10.0, 13.0][:nrows])
+    assert_allclose(validation.toarray(), raw / np.linalg.norm(raw, axis=1)[:, None])
+    if nrows == 2:
+        frozen = train.normalization.apply_frozen(storage(raw))
+        assert_allclose(frozen.toarray(), raw / np.array([5.0, 1.0])[:, None])
+        assert not np.allclose(frozen.toarray(), validation.toarray())
+
+
+@pytest.mark.parametrize("storage", STORAGE)
+@pytest.mark.parametrize(
+    "cls, params_cls, axis",
+    [
+        (ColumnNormalization, ColumnNormalizationParams, 0),
+        (RowNormalization, RowNormalizationParams, 1),
+    ],
+)
+def test_recipes_fit_without_retaining_input(storage, cls, params_cls, axis):
+    raw = np.array([[0.0, -1.0, 4.0], [2.0, 3.0, 0.0]])
+    bounds = [0.1, 0.9]
+    recipe = cls(center="median", scale="quantile_range", quantile_range=bounds)
+    bounds[:] = [0.3, 0.4]
+    assert recipe.quantile_range == (0.1, 0.9)
+    with pytest.raises(AttributeError):
+        recipe.center = False
+    params = recipe.fit(storage(raw))
+    assert isinstance(params, params_cls)
+    expected, centers, scales = reference(
+        raw, "median", "quantile_range", (0.1, 0.9), axis
+    )
+    raw[:] = 100
+    assert_allclose(params.centers, centers)
+    assert_allclose(params.scales, scales)
+    source = storage(np.array([[0.0, -1.0, 4.0], [2.0, 3.0, 0.0]]))
+    wrapped = params.transform(source) if axis == 0 else params.apply_frozen(source)
+    assert_allclose(wrapped.toarray(), expected)
+
+
+@pytest.mark.parametrize("cls", [ColumnNormalization, RowNormalization])
+@pytest.mark.parametrize(
+    "options, error",
+    [
+        ({"center": "invalid"}, ValueError),
+        ({"scale": None}, TypeError),
+        ({"df": -1}, ValueError),
+        ({"quantile_range": (0.8, 0.2)}, ValueError),
+    ],
+)
+def test_recipe_validation_is_immediate(cls, options, error):
+    with pytest.raises(error):
+        cls(**options)
+
+
+@pytest.mark.parametrize("constructor", [LazyMatrix, standardize])
+def test_axis_validation(constructor):
+    for axis in (-1, 2):
+        with pytest.raises(ValueError, match="axis"):
+            constructor(np.eye(2), axis=axis)
+    for axis in (True, np.bool_(False), 1.0, "rows", None, (0, 1)):
+        with pytest.raises(TypeError):
+            constructor(np.eye(2), axis=axis)
+    assert isinstance(
+        constructor(np.eye(2), axis=np.int64(1)).normalization, RowNormalizationParams
+    )
+
+
+@pytest.mark.parametrize("storage", STORAGE)
+def test_row_degrees_of_freedom_use_column_count(storage):
+    raw = np.array([[1.0, 2.0, 3.0], [3.0, 5.0, 7.0]])
+    z = standardize(storage(raw), axis=1, df=1)
+    assert_allclose(z.scales, raw.std(axis=1, ddof=1))
+    for df in (3, 4, np.iinfo(np.uintp).max):
+        z = standardize(storage(raw), axis=1, df=df)
+        assert np.isnan(z.scales).all()
+        assert np.isnan(z.toarray()).all()
+        unscaled = standardize(storage(raw), axis=1, scale=False, df=df)
+        assert unscaled.scales is None
+        assert_allclose(unscaled.toarray(), raw - raw.mean(axis=1)[:, None])
+
+
+@pytest.mark.parametrize("storage", STORAGE)
+def test_empty_row_normalization_dimensions(storage):
+    z = standardize(storage(np.empty((0, 3))), axis=1)
+    assert z.shape == (0, 3)
+    assert z.normalization.nrows == 0
+    assert z.toarray().shape == (0, 3)
+    assert_array_equal(z @ np.ones(3), np.empty(0))
+    assert_array_equal(z.T @ np.empty(0), np.zeros(3))
+    assert_array_equal(z[:, 0], np.empty(0))
+    for shape in ((3, 0), (0, 0)):
+        with pytest.raises(ValueError, match="column"):
+            standardize(storage(np.empty(shape)), axis=1)
+    rows = RowNormalizationParams(3).apply_frozen(storage(np.empty((3, 0))))
+    assert rows.toarray().shape == (3, 0)
+    columns = ColumnNormalizationParams(3).transform(storage(np.empty((0, 3))))
+    assert columns.toarray().shape == (0, 3)
