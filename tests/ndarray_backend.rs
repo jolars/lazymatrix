@@ -194,6 +194,51 @@ macro_rules! backend_suite {
             }
 
             #[test]
+            fn row_and_chain_eager_conversion_preserves_strided_views() {
+                use lazymatrix::{ColumnNormalizationParams, FittedRowNormalization,
+                    NormalizationChainParams, RowNormalization, RowNormalizationParams};
+                let mut storage = Array2::from_shape_fn((4, 6), |(i, j)| (i * 6 + j) as f64);
+                let original = storage.clone();
+                let rows = RowNormalizationParams::from_parts(2, Some(vec![1., 2.]), Some(vec![-2., 4.]));
+                let columns = ColumnNormalizationParams::from_parts(3, Some(vec![3.; 3]), Some(vec![-4.; 3]));
+                let chain = NormalizationChainParams::from_parts(
+                    FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()), columns,
+                );
+                let view = storage.slice_mut(s![..;2, ..;-2]);
+                let expected = chain.view().apply_frozen(&view).to_eager::<Array2<f64>>().unwrap();
+                let pointer = view.as_ptr();
+                let strides = view.strides().to_vec();
+                let eager = chain.view().apply_frozen(view).into_eager();
+                assert_eq!(eager.data().as_ptr(), pointer);
+                assert_eq!(eager.data().strides(), strides);
+                assert_eq!(eager.data(), expected.data());
+                for i in 0..4 {
+                    for j in 0..6 {
+                        if i % 2 == 1 || j % 2 == 0 {
+                            assert_eq!(storage[(i, j)], original[(i, j)]);
+                        }
+                    }
+                }
+                let source = storage.slice(s![..;2, ..;-2]);
+                let row = rows.view().apply_frozen(source);
+                let expected = row.to_eager::<Array2<f64>>().unwrap();
+                let mut destination = Array2::from_elem((4, 6), 99.);
+                let mut output = destination.slice_mut(s![..;2, ..;-2]);
+                let borrowed = row.to_eager_into(&mut output).unwrap();
+                assert_eq!(borrowed.data().view(), expected.data().view());
+                let in_place = rows.view().apply_frozen(output).into_eager();
+                let expected = rows.view().apply_frozen(expected.data()).to_eager::<Array2<f64>>().unwrap();
+                assert_eq!(in_place.data(), expected.data());
+                for i in 0..4 {
+                    for j in 0..6 {
+                        if i % 2 == 1 || j % 2 == 0 {
+                            assert_eq!(destination[(i, j)], 99.);
+                        }
+                    }
+                }
+            }
+
+            #[test]
             fn intercept_accepts_strided_vectors_and_outputs() {
                 use lazymatrix::{WithIntercept, WeightedGramInto, WeightedColumnSumsInto, MatVecScaledInto, MatTransposeVecScaledInto};
                 let storage = Array2::from_shape_fn((6, 4), |(i, j)| (i + j) as f64);

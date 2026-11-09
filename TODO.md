@@ -219,7 +219,7 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - `RowStats::row_normalization_stats` returns raw row centers and scales.
     References and checked sparse wrappers forward the hook without refitting.
 
-- [ ] Extend `LazyMatrix` capabilities to row and composed normalization.
+- [x] Extend `LazyMatrix` capabilities to row and composed normalization.
 
   - [x] Add fused vector products.
   - [x] Add vector products with caller-owned workspace.
@@ -248,7 +248,13 @@ with single-axis fitting and reuse before introducing fitted pipelines.
       chains support dense, sparse, and chunked storage; mixed chains require
       dense indexed access. Full-storage sums scan once. Sparse sums and Gram
       products use bounded logical panels without materializing the design.
-  - [ ] Add eager conversion.
+  - [x] Add eager conversion.
+    - Allocating and reusable-output conversion copies fitted metadata into owned
+      vectors. Row and chain conversion uses one native traversal, including
+      explicit mixed chains on sparse and chunked storage. It applies stages
+      after coalescing duplicates and includes transformed implicit zeros.
+      Consuming conversion normalizes writable dense storage in place while
+      retaining owned or borrowed fitted parameters.
 
 - [ ] Expose row normalization in Python, including independent fitting for new
   samples and explicit parameters.

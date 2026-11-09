@@ -4821,10 +4821,141 @@ impl<F: lazymatrix::Scalar> lazymatrix::MatrixOwned<F> for MaterializeOutput<F> 
     }
 }
 
+/// Row and explicit chain conversion share one oracle across storage backends.
+pub fn run_normalized_materialization_suite<M: lazymatrix::MatrixTraversal<f64>>(
+    build: impl Fn(&TestMatrix) -> M,
+) {
+    use lazymatrix::{
+        ColumnNormalizationParams, FittedRowNormalization, MatrixOwned, NormalizationChainParams,
+        RowNormalization, RowNormalizationParams,
+    };
+    for (rows, cols, density) in [(7, 4, 0.4), (3, 2, 0.0), (0, 3, 0.0), (3, 0, 0.0)] {
+        let tm = random_matrix(4822, rows, cols, density);
+        let source = build(&tm);
+        for center in [false, true] {
+            for scale in [false, true] {
+                let rp = RowNormalizationParams::from_parts(
+                    rows,
+                    center.then(|| (0..rows).map(|i| i as f64 - 2.).collect()),
+                    scale.then(|| {
+                        (0..rows)
+                            .map(|i| if i % 2 == 0 { -2. } else { 3. })
+                            .collect()
+                    }),
+                );
+                let cp = ColumnNormalizationParams::from_parts(
+                    cols,
+                    center.then(|| (0..cols).map(|j| j as f64 + 1.).collect()),
+                    scale.then(|| vec![-4.; cols]),
+                );
+                let row_expected = materialize_rows(&tm.dense, rp.centers(), rp.scales());
+                let row = rp.view().apply_frozen(&source);
+                let eager = row.to_eager::<MaterializeOutput>().unwrap();
+                assert_eq!((eager.nrows(), eager.ncols()), (rows, cols));
+                assert_parameter_bits(eager.normalization().centers(), rp.centers());
+                assert_parameter_bits(eager.normalization().scales(), rp.scales());
+                assert_close(
+                    &eager.data().values,
+                    &row_expected.iter().flatten().copied().collect::<Vec<_>>(),
+                    EPS,
+                );
+                let fitted = || {
+                    FittedRowNormalization::from_parts(RowNormalization::standardize(), rp.view())
+                };
+                let rc = NormalizationChainParams::from_parts(fitted(), cp.view());
+                let cr = NormalizationChainParams::from_parts(cp.view(), fitted());
+                let cc = NormalizationChainParams::from_parts(cp.view(), cp.view());
+                let rr = NormalizationChainParams::from_parts(fitted(), fitted());
+                let repeated = NormalizationChainParams::from_parts(rc.view(), cr.view());
+                let rc_expected = materialize(&row_expected, cp.centers(), cp.scales());
+                macro_rules! check {
+                    ($params:expr, $expected:expr) => {{
+                        let params = $params;
+                        let op = params.view().apply_frozen(&source);
+                        let expected: Vec<_> = $expected.into_iter().flatten().collect();
+                        let eager = op.to_eager::<MaterializeOutput>().unwrap();
+                        assert_eq!((eager.nrows(), eager.ncols()), (rows, cols));
+                        assert_close(&eager.data().values, &expected, EPS);
+                        let mut out = MaterializeOutput::zeros(rows, cols);
+                        out.values.fill(f64::NAN);
+                        let copied = op.to_eager_into(&mut out).unwrap();
+                        assert_close(&copied.data().values, &expected, EPS);
+                    }};
+                }
+                check!(&rc, rc_expected.clone());
+                check!(
+                    &cr,
+                    materialize_rows(
+                        &materialize(&tm.dense, cp.centers(), cp.scales()),
+                        rp.centers(),
+                        rp.scales()
+                    )
+                );
+                check!(
+                    &cc,
+                    materialize(
+                        &materialize(&tm.dense, cp.centers(), cp.scales()),
+                        cp.centers(),
+                        cp.scales()
+                    )
+                );
+                check!(
+                    &rr,
+                    materialize_rows(&row_expected, rp.centers(), rp.scales())
+                );
+                check!(
+                    &repeated,
+                    materialize_rows(
+                        &materialize(&rc_expected, cp.centers(), cp.scales()),
+                        rp.centers(),
+                        rp.scales()
+                    )
+                );
+                let mut out = MaterializeOutput::zeros(rows, cols);
+                out.values.fill(f64::NAN);
+                let copied = row.to_eager_into(&mut out).unwrap();
+                assert_close(&copied.data().values, &eager.data().values, EPS);
+            }
+        }
+        let rp = RowNormalizationParams::from_parts(
+            rows,
+            Some(
+                (0..rows)
+                    .map(|i| if i % 2 == 0 { f64::INFINITY } else { f64::NAN })
+                    .collect(),
+            ),
+            Some(
+                (0..rows)
+                    .map(|i| if i % 2 == 0 { -2. } else { f64::INFINITY })
+                    .collect(),
+            ),
+        );
+        let eager = rp
+            .view()
+            .apply_frozen(&source)
+            .to_eager::<MaterializeOutput>()
+            .unwrap();
+        let expected = materialize_rows(&tm.dense, rp.centers(), rp.scales());
+        for (&actual, expected) in eager
+            .data()
+            .values
+            .iter()
+            .zip(expected.into_iter().flatten())
+        {
+            if expected.is_nan() {
+                assert!(actual.is_nan());
+            } else {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
+        }
+    }
+}
+
 pub fn run_materialization_suite<M>(build: impl Fn(&TestMatrix) -> M)
 where
-    M: lazymatrix::MaterializeDense<f64> + ColumnStats<f64>,
+    M: lazymatrix::MaterializeDense<f64> + ColumnStats<f64> + lazymatrix::MatrixTraversal<f64>,
 {
+    run_normalized_materialization_suite(&build);
     use lazymatrix::MatrixOwned;
     for (rows, cols, density) in [(7, 4, 0.4), (3, 2, 0.0), (0, 3, 0.0), (3, 0, 0.0)] {
         let tm = random_matrix(4821, rows, cols, density);
@@ -4953,8 +5084,10 @@ pub fn run_eager_product_suite<M, D, V>(
     to_v: impl Fn(&[f64]) -> V,
     from_v: impl Fn(&V) -> Vec<f64>,
 ) where
-    M: lazymatrix::MaterializeDense<f64> + ColumnStats<f64>,
+    M: lazymatrix::MaterializeDense<f64> + ColumnStats<f64> + lazymatrix::MatrixTraversal<f64>,
     D: lazymatrix::MatrixOwned<f64>
+        + lazymatrix::MatrixRead<f64>
+        + lazymatrix::DenseNormalize<f64>
         + RawColumns<f64>
         + MatVec<V>
         + MatTransposeVec<V>
@@ -4978,6 +5111,40 @@ pub fn run_eager_product_suite<M, D, V>(
         lazy.normalization().scales(),
     );
     check_transpose_products(&eager, &dense, &to_v, &from_v);
+    let row = LazyMatrix::from_row_parts(lazy.data(), Some(vec![2.; 7]), Some(vec![-3.; 7]));
+    let row_dense = materialize_rows(&tm.dense, Some(&[2.; 7]), Some(&[-3.; 7]));
+    let row_eager = row.to_eager::<D>().unwrap();
+    check_transpose_products(&row_eager, &row_dense, &to_v, &from_v);
+    let (data, params) = row_eager.into_parts();
+    assert_eq!(params.centers(), Some(&[2.; 7][..]));
+    // Reuse normalized storage as raw input to another explicit row stage.
+    let twice = LazyMatrix::from_parts(data, params.view()).into_eager();
+    let twice_dense = materialize_rows(&row_dense, params.centers(), params.scales());
+    check_transpose_products(&twice, &twice_dense, &to_v, &from_v);
+    let chain = lazymatrix::NormalizationChainParams::from_parts(
+        lazymatrix::FittedRowNormalization::from_parts(
+            lazymatrix::RowNormalization::standardize(),
+            params.view(),
+        ),
+        lazy.normalization().view(),
+    );
+    let chain_dense = materialize(
+        &row_dense,
+        lazy.normalization().centers(),
+        lazy.normalization().scales(),
+    );
+    let chain_eager = chain
+        .view()
+        .apply_frozen(lazy.data())
+        .to_eager::<D>()
+        .unwrap();
+    check_transpose_products(&chain_eager, &chain_dense, &to_v, &from_v);
+    let mut raw = D::zeros(7, 4);
+    lazy.data()
+        .materialize_normalized_into(None, None, &mut raw)
+        .unwrap();
+    let in_place = chain.view().apply_frozen(&mut raw).into_eager();
+    check_transpose_products(&in_place, &chain_dense, &to_v, &from_v);
     let coefficients = random_vec(129, 4);
     let rows = random_vec(130, 7);
     let x = to_v(&coefficients);
@@ -5037,7 +5204,10 @@ pub fn run_eager_product_suite<M, D, V>(
     );
 }
 
-pub fn check_materialize_f32<M: lazymatrix::MaterializeDense<f32>>(source: &M, raw: &[f32]) {
+pub fn check_materialize_f32<M>(source: &M, raw: &[f32])
+where
+    M: lazymatrix::MaterializeDense<f32> + lazymatrix::MatrixTraversal<f32>,
+{
     let centers = vec![1.0; source.ncols()];
     let scales = vec![-2.0; source.ncols()];
     let eager = LazyMatrix::from_column_parts(source, Some(centers), Some(scales))
@@ -5045,6 +5215,44 @@ pub fn check_materialize_f32<M: lazymatrix::MaterializeDense<f32>>(source: &M, r
         .unwrap();
     let expected: Vec<_> = raw.iter().map(|&x| (x - 1.0) / -2.0).collect();
     assert_eq!(eager.data().values, expected);
+    for active in [false, true] {
+        let rows = lazymatrix::RowNormalizationParams::from_parts(
+            source.nrows(),
+            active.then(|| vec![1.; source.nrows()]),
+            active.then(|| vec![-2.; source.nrows()]),
+        );
+        let expected: Vec<_> = raw
+            .iter()
+            .map(|&x| if active { (x - 1.) / -2. } else { x })
+            .collect();
+        let row = rows
+            .view()
+            .apply_frozen(source)
+            .to_eager::<MaterializeOutput<f32>>()
+            .unwrap();
+        for (actual, expected) in row.data().values.iter().zip(&expected) {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+        let columns = lazymatrix::ColumnNormalizationParams::from_parts(
+            source.ncols(),
+            Some(vec![3.; source.ncols()]),
+            Some(vec![-4.; source.ncols()]),
+        );
+        let chain = lazymatrix::NormalizationChainParams::from_parts(
+            lazymatrix::FittedRowNormalization::from_parts(
+                lazymatrix::RowNormalization::standardize(),
+                rows.view(),
+            ),
+            columns,
+        );
+        let composed = chain
+            .apply_frozen(source)
+            .to_eager::<MaterializeOutput<f32>>()
+            .unwrap();
+        for (actual, &expected) in composed.data().values.iter().zip(&expected) {
+            assert_eq!(actual.to_bits(), ((expected - 3.) / -4.).to_bits());
+        }
+    }
 }
 
 /// Dense rectangular output retaining both dimensions for empty shapes.

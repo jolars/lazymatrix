@@ -333,6 +333,15 @@ supplied parameter storage, including any borrows. Both wrappers expose metadata
 through `normalization()`, and `into_parts()` returns `(data, params)` without
 copying. Eager data already contains normalized values; lazy data remains raw.
 
+These conversions support row normalization and ordered chains as well as column
+normalization. Row and chain materialization uses one storage scan and applies
+every saved stage in order. It coalesces sparse duplicates before normalization
+and includes transformed implicit zeros, using only backend traversal buffers in
+addition to the dense output and copied parameters. Explicit mixed chains can
+convert sparse or Zarr inputs through `MatrixTraversal`, independently of the
+capabilities needed to fit or multiply those chains. In-place row and chain
+conversion requires writable dense indexed storage and allocates no workspace.
+
 ## Reuse fitted parameters
 
 Fit column parameters independently, then share them between training and
