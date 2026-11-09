@@ -50,6 +50,35 @@ fn row_fitting_and_products_stream_serial_scans() {
             store.reset();
             let frozen = lazy.normalization().view().apply_frozen(&matrix);
             assert_scans(&store, &matrix, 0);
+            store.reset();
+            let eager = frozen.to_eager::<common::MaterializeOutput>().unwrap();
+            assert_scans(&store, &matrix, 1);
+            let columns = lazymatrix::ColumnNormalizationParams::from_parts(
+                3,
+                Some(vec![1., 2., 3.]),
+                Some(vec![-2.; 3]),
+            );
+            let chain = lazymatrix::NormalizationChainParams::from_parts(
+                lazymatrix::FittedRowNormalization::from_parts(spec, frozen.normalization().view()),
+                columns.view(),
+            );
+            store.reset();
+            let composed = chain
+                .apply_frozen(&matrix)
+                .to_eager::<common::MaterializeOutput>()
+                .unwrap();
+            assert_scans(&store, &matrix, 1);
+            for i in 0..5 {
+                for j in 0..3 {
+                    let expected =
+                        (eager.data().values[i * 3 + j] - columns.centers().unwrap()[j]) / -2.;
+                    assert_eq!(
+                        composed.data().values[i * 3 + j].to_bits(),
+                        expected.to_bits()
+                    );
+                }
+            }
+            store.reset();
             frozen.matvec(&vec![1.0; 3]).unwrap();
             assert_scans(&store, &matrix, 1);
             store.reset();

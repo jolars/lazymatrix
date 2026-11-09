@@ -49,7 +49,9 @@
 //! or [`SparseColumns`]. Views preserve fitted row or composed normalization
 //! without copying or refitting. Weighted column sums and Gram products use
 //! [`MatrixTraversal`], applying fitted parameters before accumulation with
-//! bounded workspace. Eager conversion remains future work for row normalization.
+//! bounded workspace. Explicit eager conversion supports row and composed
+//! normalization through the same traversal capability, including mixed chains
+//! with explicitly supplied parameters on sparse or chunked storage.
 //!
 //! [`ColumnNormalization::fit`] and [`RowNormalization::fit`] fit parameters
 //! independently of a matrix wrapper. Their results own the fitted vectors
@@ -193,7 +195,13 @@
 //! a dense, sparse, or Zarr input. The caller chooses the destination backend.
 //! [`LazyMatrix::to_eager_into`] fills existing dense storage and returns an
 //! [`EagerMatrix`] borrowing it. [`LazyMatrix::into_eager`] consumes writable
-//! dense data and normalizes it in its existing allocation.
+//! dense data and normalizes it in its existing allocation. All three conversions
+//! support column, row, and ordered normalization chains. Row and chain
+//! materialization uses one [`MatrixTraversal`] scan, with backend traversal
+//! buffers as workspace. Each cell undergoes all saved stages in order, after
+//! sparse duplicates have been coalesced; implicit zeros are transformed too.
+//! Mixed chains can be explicitly applied to sparse or chunked inputs for eager
+//! conversion independently of their fitting and product capabilities.
 //!
 //! Eager operations use the already normalized backend data. Original fitted
 //! centers and scales remain available through [`EagerMatrix::normalization`]

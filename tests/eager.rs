@@ -1,12 +1,17 @@
-use std::convert::Infallible;
+use std::{cell::Cell, convert::Infallible, ops::Range};
+
+#[path = "common/runner.rs"]
+mod common;
 
 #[cfg(feature = "ndarray_all")]
 #[path = "common/backend_aliases.rs"]
 mod backend_aliases;
 
 use lazymatrix::{
-    ColumnNormalizationParams, DenseNormalize, EagerMatrix, LazyMatrix, MatVec, MaterializeDense,
-    MatrixErrorType, MatrixOwned, MatrixShape, MatrixWrite,
+    ColumnNormalizationParams, DenseNormalize, EagerMatrix, FittedRowNormalization, LazyMatrix,
+    MatVec, MaterializeDense, MatrixErrorType, MatrixOwned, MatrixRead, MatrixShape,
+    MatrixTraversal, MatrixWrite, NormalizationChainParams, RowNormalization,
+    RowNormalizationParams, TraversalLayout,
 };
 
 #[derive(Clone, Debug)]
@@ -32,6 +37,26 @@ impl MatrixErrorType for Dense {
 impl MatrixWrite<f64> for Dense {
     fn set(&mut self, row: usize, column: usize, value: f64) {
         self.values[row * self.columns + column] = value;
+    }
+}
+
+impl MatrixRead<f64> for Dense {
+    fn get(&self, row: usize, column: usize) -> f64 {
+        self.values[row * self.columns + column]
+    }
+}
+
+impl MatrixTraversal<f64> for Dense {
+    fn traversal_layout(&self) -> TraversalLayout {
+        TraversalLayout::Full
+    }
+    fn for_each_entry(
+        &self,
+        rows: Range<usize>,
+        columns: Range<usize>,
+        visit: impl FnMut(usize, usize, f64),
+    ) -> Result<(), Self::Error> {
+        self.dense_for_each_entry(rows, columns, visit)
     }
 }
 
@@ -99,6 +124,184 @@ fn source() -> Dense {
         columns: 2,
         values: vec![2.0, 4.0, 6.0, 8.0],
     }
+}
+
+#[test]
+fn row_and_chain_conversion_matches_the_shared_oracle() {
+    common::run_normalized_materialization_suite(|tm| Dense {
+        rows: tm.nrows,
+        columns: tm.ncols,
+        values: tm.dense.iter().flatten().copied().collect(),
+    });
+}
+
+#[test]
+fn row_and_chain_conversion_owns_metadata_and_preserves_in_place_borrows() {
+    let rows = RowNormalizationParams::from_parts(2, Some(vec![2., 6.]), Some(vec![-2., 4.]));
+    let cols = ColumnNormalizationParams::from_parts(2, Some(vec![1., -1.]), Some(vec![2., -3.]));
+    let mut raw = source();
+    let pointer = raw.values.as_ptr();
+    let rp = rows.centers().unwrap().as_ptr();
+    let cp = cols.scales().unwrap().as_ptr();
+    let chain = NormalizationChainParams::from_parts(
+        FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+        cols.view(),
+    );
+    let eager = chain.view().apply_frozen(&mut raw).into_eager();
+    assert_eq!(eager.data().values.as_ptr(), pointer);
+    assert_eq!(
+        eager
+            .normalization()
+            .first()
+            .parameters()
+            .centers()
+            .unwrap()
+            .as_ptr(),
+        rp
+    );
+    assert_eq!(eager.normalization().next().scales().unwrap().as_ptr(), cp);
+    assert_eq!(eager.matvec(&vec![1., 2.]).unwrap(), [-0.5, -1.5]);
+    let mut destination = Dense::zeros(2, 2);
+    let (copied, copied_into) = {
+        let owned_chain = NormalizationChainParams::from_parts(
+            FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.clone()),
+            cols.clone(),
+        );
+        let op = owned_chain.view().apply_frozen(source());
+        let copied = op.to_eager::<Dense>().unwrap();
+        assert_ne!(
+            copied
+                .normalization()
+                .first()
+                .parameters()
+                .centers()
+                .unwrap()
+                .as_ptr(),
+            rp
+        );
+        assert_ne!(copied.normalization().next().scales().unwrap().as_ptr(), cp);
+        assert_eq!(
+            copied.normalization().first().recipe(),
+            RowNormalization::standardize()
+        );
+        (copied, op.to_eager_into(&mut destination).unwrap())
+    };
+    assert_eq!(copied.data().values, eager.data().values);
+    assert_eq!(copied_into.data().values, eager.data().values);
+    let (raw, params) = eager.into_parts();
+    assert_eq!(raw.values.as_ptr(), pointer);
+    assert_eq!(params.first().parameters().centers().unwrap().as_ptr(), rp);
+    let row_pointer = raw.values.as_ptr();
+    let row = rows.view().apply_frozen(raw).into_eager();
+    assert_eq!(row.data().values.as_ptr(), row_pointer);
+    assert_eq!(row.normalization().centers().unwrap().as_ptr(), rp);
+}
+
+struct Tracked {
+    data: Dense,
+    scans: Cell<usize>,
+    fail: bool,
+    layout: TraversalLayout,
+}
+impl MatrixShape for Tracked {
+    fn nrows(&self) -> usize {
+        self.data.rows
+    }
+    fn ncols(&self) -> usize {
+        self.data.columns
+    }
+}
+impl MatrixErrorType for Tracked {
+    type Error = std::io::Error;
+}
+impl MatrixTraversal<f64> for Tracked {
+    fn traversal_layout(&self) -> TraversalLayout {
+        self.layout
+    }
+    fn for_each_entry(
+        &self,
+        rows: Range<usize>,
+        columns: Range<usize>,
+        mut visit: impl FnMut(usize, usize, f64),
+    ) -> Result<(), Self::Error> {
+        self.scans.set(self.scans.get() + 1);
+        assert_eq!(rows, 0..self.nrows());
+        assert_eq!(columns, 0..self.ncols());
+        for i in rows {
+            for j in columns.clone() {
+                visit(i, j, self.data.get(i, j));
+                if self.fail {
+                    return Err(std::io::Error::other("injected read failure"));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn conversion_scans_once_and_propagates_read_errors() {
+    for layout in [TraversalLayout::Full, TraversalLayout::SparseRows] {
+        for fail in [false, true] {
+            let source = Tracked {
+                data: source(),
+                scans: Cell::new(0),
+                fail,
+                layout,
+            };
+            let rows = RowNormalizationParams::from_parts(2, Some(vec![1.; 2]), Some(vec![-2.; 2]));
+            let cols =
+                ColumnNormalizationParams::from_parts(2, Some(vec![3.; 2]), Some(vec![4.; 2]));
+            let chain = NormalizationChainParams::from_parts(cols.view(), cols.view());
+            let mut out = Dense::zeros(2, 2);
+            macro_rules! check {
+                ($op:expr) => {{
+                    source.scans.set(0);
+                    let result = $op.to_eager_into(&mut out);
+                    assert_eq!(
+                        result.err().map(|err| err.to_string()),
+                        fail.then(|| "injected read failure".to_string())
+                    );
+                    assert_eq!(source.scans.get(), 1);
+                }};
+            }
+            check!(rows.view().apply_frozen(&source));
+            check!(chain.view().apply_frozen(&source));
+            let mixed = NormalizationChainParams::from_parts(
+                FittedRowNormalization::from_parts(RowNormalization::standardize(), rows.view()),
+                chain,
+            );
+            check!(mixed.apply_frozen(&source));
+        }
+    }
+}
+
+#[test]
+fn row_and_chain_shapes_are_checked_before_reads_or_writes() {
+    let source = Tracked {
+        data: source(),
+        scans: Cell::new(0),
+        fail: true,
+        layout: TraversalLayout::Full,
+    };
+    let rows = RowNormalizationParams::<f64>::from_parts(2, None, None);
+    let cols = ColumnNormalizationParams::<f64>::from_parts(2, None, None);
+    let mut out = Dense::zeros(1, 2);
+    out.values.fill(99.);
+    macro_rules! check {
+        ($op:expr) => {{
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = $op.to_eager_into(&mut out);
+                }))
+                .is_err()
+            );
+            assert_eq!(source.scans.get(), 0);
+            assert_eq!(out.values, [99.; 2]);
+        }};
+    }
+    check!(rows.view().apply_frozen(&source));
+    check!(NormalizationChainParams::from_parts(cols.view(), cols.view()).apply_frozen(&source));
 }
 
 #[test]

@@ -11,6 +11,7 @@ use crate::traits::{
 };
 
 mod columns;
+mod eager;
 mod row;
 
 /// A matrix presented with lazy row, column, or ordered normalization.
@@ -659,8 +660,10 @@ where
     }
 }
 
-impl<M: crate::MaterializeDense<F>, F: Scalar, S: AsRef<[F]>>
-    LazyMatrix<M, ColumnNormalizationParams<F, S>>
+impl<M, P> LazyMatrix<M, P>
+where
+    M: MatrixShape + crate::MatrixErrorType,
+    P: eager::Materialize<M>,
 {
     /// Allocate normalized dense storage in the selected backend.
     ///
@@ -670,27 +673,23 @@ impl<M: crate::MaterializeDense<F>, F: Scalar, S: AsRef<[F]>>
     /// ncols) output storage, plus backend workspace. Allocation size overflow
     /// panics; allocation failures follow the selected backend's behavior.
     ///
+    /// Column normalization requires [`crate::MaterializeDense`]. Row and chain
+    /// normalization require [`crate::MatrixTraversal`], including explicit
+    /// mixed chains on sparse or chunked storage. They apply stages in order
+    /// with one scan, coalescing duplicates before normalization and including
+    /// transformed implicit zeros. Workspace is limited to traversal buffers.
+    ///
     /// # Errors
     /// Returns the source error if reading the matrix fails.
-    pub fn to_eager<D: crate::MatrixOwned<F>>(
+    pub fn to_eager<D: crate::MatrixOwned<P::Scalar>>(
         &self,
-    ) -> Result<crate::EagerMatrix<D, ColumnNormalizationParams<F>>, M::Error> {
-        crate::materialize::validate_allocation::<F>(self.nrows(), self.ncols());
+    ) -> Result<crate::EagerMatrix<D, P::Owned>, M::Error> {
+        crate::materialize::validate_allocation::<P::Scalar>(self.nrows(), self.ncols());
         let mut data = D::zeros(self.nrows(), self.ncols());
-        crate::materialize::validate_output(
-            self,
-            &data,
-            self.normalization.centers(),
-            self.normalization.scales(),
-        );
-        self.data.materialize_normalized_into(
-            self.normalization.centers(),
-            self.normalization.scales(),
-            &mut data,
-        )?;
+        self.materialize_into(&mut data)?;
         Ok(crate::EagerMatrix::from_normalized(
             data,
-            self.normalization.copy_owned(),
+            self.normalization.copy_params(),
         ))
     }
 
@@ -717,36 +716,39 @@ impl<M: crate::MaterializeDense<F>, F: Scalar, S: AsRef<[F]>>
     ///
     /// # Panics
     /// Panics before writing if the output shape differs from the input shape.
-    pub fn to_eager_into<'a, D: crate::MatrixWrite<F> + ?Sized>(
+    pub fn to_eager_into<'a, D: crate::MatrixWrite<P::Scalar> + ?Sized>(
         &self,
         out: &'a mut D,
-    ) -> Result<crate::EagerMatrix<&'a mut D, ColumnNormalizationParams<F>>, M::Error> {
-        crate::materialize::validate_output(
-            self,
-            out,
-            self.normalization.centers(),
-            self.normalization.scales(),
-        );
-        self.data.materialize_normalized_into(
-            self.normalization.centers(),
-            self.normalization.scales(),
-            out,
-        )?;
+    ) -> Result<crate::EagerMatrix<&'a mut D, P::Owned>, M::Error> {
+        self.materialize_into(out)?;
         Ok(crate::EagerMatrix::from_normalized(
             out,
-            self.normalization.copy_owned(),
+            self.normalization.copy_params(),
         ))
+    }
+
+    fn materialize_into<D: crate::MatrixWrite<P::Scalar> + ?Sized>(
+        &self,
+        out: &mut D,
+    ) -> Result<(), M::Error> {
+        crate::materialize::validate_output(self, out, None, None);
+        self.normalization.assert_shape(self.nrows(), self.ncols());
+        self.normalization.materialize(&self.data, out)
     }
 }
 
-impl<M: crate::DenseNormalize<F>, F: Scalar, S: AsRef<[F]>>
-    LazyMatrix<M, ColumnNormalizationParams<F, S>>
+impl<M, P> LazyMatrix<M, P>
+where
+    M: MatrixShape,
+    P: eager::InPlace<M>,
 {
     /// Consume writable dense data, normalizing it in its existing allocation.
     ///
     /// Mutable views modify their borrowed storage. All statistics have already
     /// been fitted, and no new statistics or full matrix allocation are needed.
     /// The fitted parameter storage is retained unchanged, including any borrows.
+    /// Row and chain conversion additionally require [`crate::MatrixRead`] and
+    /// apply every stage in order to each entry without workspace allocation.
     ///
     /// Borrowed immutable and sparse storage do not support in-place conversion:
     ///
@@ -756,9 +758,9 @@ impl<M: crate::DenseNormalize<F>, F: Scalar, S: AsRef<[F]>>
     ///     let _ = matrix.into_eager();
     /// }
     /// ```
-    pub fn into_eager(mut self) -> crate::EagerMatrix<M, ColumnNormalizationParams<F, S>> {
-        self.data
-            .normalize_in_place(self.normalization.centers(), self.normalization.scales());
+    pub fn into_eager(mut self) -> crate::EagerMatrix<M, P> {
+        self.normalization.assert_shape(self.nrows(), self.ncols());
+        self.normalization.normalize(&mut self.data);
         crate::EagerMatrix::from_normalized(self.data, self.normalization)
     }
 }

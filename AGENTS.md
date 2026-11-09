@@ -47,6 +47,10 @@ parameters. `.apply_frozen()` reuses every stage unchanged. Fitting and products
 for mixed chains require dense storage; column-only chains also support sparse
 and chunked storage. Borrowed logical rows require only `SparseRows`; columns
 require `RawColumns` or `SparseColumns`, including for explicit mixed chains.
+Eager conversion supports every normalization type. Row and chain conversion
+requires `MatrixTraversal`, including explicit mixed chains on sparse or chunked
+storage, and uses one scan plus traversal buffers. In-place row and chain
+conversion requires writable dense indexed storage.
 Select the axis through `ColumnNormalizationParams`
 or `RowNormalizationParams`, and inspect centers and scales through
 `normalization()`. Both `LazyMatrix` and `EagerMatrix` return `(data, params)`

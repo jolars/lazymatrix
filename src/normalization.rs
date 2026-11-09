@@ -804,6 +804,14 @@ impl<F: crate::Scalar, S: AsRef<[F]>> RowNormalizationParams<F, S> {
     pub fn into_parts(self) -> (usize, Option<S>, Option<S>) {
         (self.nrows, self.centers, self.scales)
     }
+
+    pub(crate) fn copy_owned(&self) -> RowNormalizationParams<F> {
+        RowNormalizationParams::from_parts(
+            self.nrows,
+            self.centers().map(<[F]>::to_vec),
+            self.scales().map(<[F]>::to_vec),
+        )
+    }
 }
 
 impl<F: crate::Scalar, S: AsRef<[F]>> NormalizationParams for ColumnNormalizationParams<F, S> {
