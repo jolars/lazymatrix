@@ -259,6 +259,9 @@ with single-axis fitting and reuse before introducing fitted pipelines.
 - [ ] Expose row normalization in Python, including independent fitting for new
   samples and explicit parameters.
 
+- [ ] Add a general Python `normalize()` factory for centering and scaling,
+  retaining `standardize()` as the mean and standard-deviation shortcut.
+
 - [ ] Benchmark row fitting and products across storage layouts and document
   scan counts, workspace, and tradeoffs against eager normalization.
 
