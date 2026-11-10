@@ -307,7 +307,7 @@ pub fn run_column_pipeline_suite<M, V>(build: impl Fn(&TestMatrix) -> M, to_v: i
 where
     M: lazymatrix::MatrixTraversal<f64>,
     NormalizationChain<ColumnNormalization, ColumnNormalization>:
-        NormalizationRecipe<M, ColumnChain>,
+        NormalizationRecipe<M, ColumnChain, Error = M::Error>,
     LazyMatrix<M, ColumnChain>: MatVec<V>
         + MatVecInto<V>
         + MatTransposeVec<V>

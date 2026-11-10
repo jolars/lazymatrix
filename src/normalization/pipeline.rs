@@ -122,7 +122,7 @@ impl<A, B> NormalizationChain<A, B> {
     where
         M: MatrixShape + MatrixErrorType,
         P: NormalizationParams,
-        Self: NormalizationRecipe<M, P>,
+        Self: NormalizationRecipe<M, P, Error = M::Error>,
     {
         NormalizationRecipe::fit(self, data)
     }
@@ -135,7 +135,7 @@ impl<A, B> NormalizationChain<A, B> {
     where
         M: MatrixShape + MatrixErrorType,
         P: NormalizationParams,
-        Self: NormalizationRecipe<M, P>,
+        Self: NormalizationRecipe<M, P, Error = M::Error>,
     {
         let params = self.fit(&data)?;
         Ok(LazyMatrix::from_parts(data, params))
@@ -770,7 +770,8 @@ where
     }
 }
 
-impl<M, A, B, P, Q> private::Recipe<M, NormalizationChainParams<P, Q>> for NormalizationChain<A, B>
+impl<M, A, B, P, Q> NormalizationRecipe<M, NormalizationChainParams<P, Q>>
+    for NormalizationChain<A, B>
 where
     M: MatrixShape + MatrixErrorType,
     P: Stage,
@@ -778,7 +779,9 @@ where
     P::Kind: Combine<Q::Kind>,
     Self: Fit<M, P::Scalar, Params = NormalizationChainParams<P, Q>>,
 {
-    fn fit_recipe(self, data: &M) -> Result<NormalizationChainParams<P, Q>, M::Error> {
+    type Error = M::Error;
+
+    fn fit(self, data: &M) -> Result<NormalizationChainParams<P, Q>, Self::Error> {
         Fit::fit(self, data)
     }
 }

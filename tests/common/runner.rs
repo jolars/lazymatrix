@@ -1804,6 +1804,7 @@ pub fn run_backend_suite<M, V>(
         + ScaledSubSlice<f64>,
 {
     column_parameter_application(&build, &to_v, &from_v);
+    custom_recipe_products(&build, &to_v, &from_v);
     intercept_products(&build, &to_v, &from_v);
     vector_algebra(&to_v, &from_v);
     oracle_parity(&build, &to_v, &from_v);
@@ -1823,6 +1824,53 @@ pub fn run_backend_suite<M, V>(
     zero_scale_guard(&build, &to_v, &from_v);
     empty_and_nonfinite_stats(&build);
     shape_is_inferred(&build);
+}
+
+struct ShrunkMean(f64);
+
+impl<M: ColumnStats<f64> + MatrixShape>
+    lazymatrix::NormalizationRecipe<M, lazymatrix::ColumnNormalizationParams> for ShrunkMean
+{
+    type Error = M::Error;
+
+    fn fit(self, data: &M) -> Result<lazymatrix::ColumnNormalizationParams, Self::Error> {
+        let centers = data
+            .col_means()?
+            .into_iter()
+            .map(|mean| self.0 * mean)
+            .collect();
+        Ok(lazymatrix::ColumnNormalizationParams::from_parts(
+            data.ncols(),
+            Some(centers),
+            None,
+        ))
+    }
+}
+
+fn custom_recipe_products<M, V>(
+    build: &impl Fn(&TestMatrix) -> M,
+    to_v: &impl Fn(&[f64]) -> V,
+    from_v: &impl Fn(&V) -> Vec<f64>,
+) where
+    M: MatVec<V> + MatVecInto<V> + MatTransposeVec<V> + MatTransposeVecInto<V> + ColumnStats<f64>,
+    V: Clone
+        + ElemDivAssign<f64>
+        + DotSlice<f64>
+        + SubScalarAssign<f64>
+        + SumEntries<f64>
+        + ScaledSubSlice<f64>,
+{
+    use lazymatrix::NormalizationRecipe;
+
+    let raw = random_matrix(0xC0570, 9, 4, 0.3);
+    let centers: Vec<_> = (0..raw.ncols)
+        .map(|j| 0.5 * raw.dense.iter().map(|row| row[j]).sum::<f64>() / raw.nrows as f64)
+        .collect();
+    let expected = materialize(&raw.dense, Some(&centers), None);
+    let matrix = build(&raw);
+    let fitted = ShrunkMean(0.5).fit_apply(matrix).unwrap();
+    assert_close(fitted.normalization().centers().unwrap(), &centers, EPS);
+    check_transpose_products(&fitted, &expected, to_v, from_v);
 }
 
 fn column_parameter_application<M, V>(

@@ -182,9 +182,9 @@ impl<F: Scalar> MatrixRead<F> for Dense<F> {
     }
 }
 
-fn fit_recipe<M, P, R>(data: &M, recipe: R) -> Result<P, M::Error>
+fn fit_recipe<M, P, R>(data: &M, recipe: R) -> Result<P, R::Error>
 where
-    M: MatrixShape + MatrixErrorType,
+    M: MatrixShape + MatrixErrorType + ?Sized,
     P: NormalizationParams,
     R: NormalizationRecipe<M, P>,
 {
@@ -220,6 +220,10 @@ fn check_fitting<F: Scalar>() {
             ColumnNormalization::standardize().fit(erased).unwrap(),
             generic
         );
+        assert_eq!(
+            fit_recipe(erased, ColumnNormalization::standardize()).unwrap(),
+            generic
+        );
         fitted.into_parts().1
     };
     let _: &ColumnNormalizationParams<F> = &columns;
@@ -242,6 +246,10 @@ fn check_fitting<F: Scalar>() {
         let erased: &dyn DenseSource<F, Error = Infallible> = &source;
         assert_eq!(
             RowNormalization::standardize().fit(erased).unwrap(),
+            generic
+        );
+        assert_eq!(
+            fit_recipe(erased, RowNormalization::standardize()).unwrap(),
             generic
         );
         fitted.into_parts().1
@@ -428,6 +436,189 @@ impl MatrixShape for Shape {
     }
 }
 
+impl MatrixErrorType for Shape {
+    type Error = Infallible;
+}
+
+struct FirstRow;
+
+impl<M, F> NormalizationRecipe<M, ColumnNormalizationParams<F>> for FirstRow
+where
+    M: MatrixRead<F> + MatrixErrorType + ?Sized,
+    F: Scalar,
+{
+    type Error = Infallible;
+
+    fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, Self::Error> {
+        let centers = (0..data.ncols())
+            .map(|j| {
+                if data.nrows() == 0 {
+                    F::zero()
+                } else {
+                    data.get(0, j)
+                }
+            })
+            .collect();
+        Ok(ColumnNormalizationParams::from_parts(
+            data.ncols(),
+            Some(centers),
+            None,
+        ))
+    }
+}
+
+struct FirstColumn;
+
+impl<M, F> NormalizationRecipe<M, RowNormalizationParams<F>> for FirstColumn
+where
+    M: MatrixRead<F> + MatrixErrorType + ?Sized,
+    F: Scalar,
+{
+    type Error = Infallible;
+
+    fn fit(self, data: &M) -> Result<RowNormalizationParams<F>, Self::Error> {
+        let centers = (0..data.nrows())
+            .map(|i| {
+                if data.ncols() == 0 {
+                    F::zero()
+                } else {
+                    data.get(i, 0)
+                }
+            })
+            .collect();
+        Ok(RowNormalizationParams::from_parts(
+            data.nrows(),
+            Some(centers),
+            None,
+        ))
+    }
+}
+
+fn check_custom_recipes<F: Scalar>() {
+    let value = |v| F::from_f64(v).unwrap();
+    let mut source = Dense {
+        values: [[value(1.), value(3.)], [value(10.), value(14.)]],
+        reads: Cell::new(0),
+    };
+    let columns = fit_recipe(&source, FirstRow).unwrap();
+    assert_eq!(columns.centers().unwrap(), &[value(1.), value(3.)]);
+    assert!(columns.scales().is_none());
+    assert_eq!(
+        LazyMatrix::new(&source, FirstRow).unwrap().normalization(),
+        &columns
+    );
+    let columns = FirstRow.fit_apply(&mut source).unwrap();
+    assert_eq!(
+        columns.normalization().centers().unwrap(),
+        &[value(1.), value(3.)]
+    );
+
+    let rows = fit_recipe(&source, FirstColumn).unwrap();
+    assert_eq!(rows.centers().unwrap(), &[value(1.), value(10.)]);
+    assert!(rows.scales().is_none());
+    assert_eq!(
+        LazyMatrix::new(&source, FirstColumn)
+            .unwrap()
+            .normalization(),
+        &rows
+    );
+    source.reads.set(0);
+    let rows = FirstColumn.fit_apply(source).unwrap();
+    assert_eq!(rows.data().reads.get(), 2);
+    let mut out = vec![F::nan(); 2];
+    rows.matvec_into(&vec![value(2.), value(3.)], &mut out)
+        .unwrap();
+    assert_eq!(out, vec![value(6.), value(12.)]);
+    rows.mat_transpose_vec_into(&vec![value(2.), value(3.)], &mut out)
+        .unwrap();
+    assert_eq!(out, vec![F::zero(), value(16.)]);
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn custom_recipes_infer_f32_without_builtin_fitting_capabilities() {
+    check_custom_recipes::<f32>();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn custom_recipes_infer_f64_without_builtin_fitting_capabilities() {
+    check_custom_recipes::<f64>();
+}
+
+struct Precomputed<P>(P);
+
+impl<M: MatrixErrorType + ?Sized, P: NormalizationParams> NormalizationRecipe<M, P>
+    for Precomputed<P>
+{
+    type Error = Infallible;
+
+    fn fit(self, _: &M) -> Result<P, Self::Error> {
+        Ok(self.0)
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn custom_recipes_can_return_borrowed_parameters_and_chains() {
+    let columns = ColumnNormalizationParams::from_parts(2, Some(vec![1., 3.]), None);
+    let rows = RowNormalizationParams::from_parts(2, None, Some(vec![-2., 4.]));
+    let lazy = Precomputed(columns.view()).fit_apply(Shape(2, 2)).unwrap();
+    assert_eq!(
+        lazy.normalization().centers().unwrap().as_ptr(),
+        columns.centers().unwrap().as_ptr()
+    );
+    let lazy = LazyMatrix::new(Shape(2, 2), Precomputed(rows.view())).unwrap();
+    assert_eq!(
+        lazy.normalization().scales().unwrap().as_ptr(),
+        rows.scales().unwrap().as_ptr()
+    );
+
+    let row_stage = lazymatrix::FittedRowNormalization::from_parts(
+        RowNormalization::standardize(),
+        rows.view(),
+    );
+    let params = lazymatrix::NormalizationChainParams::from_parts(row_stage, columns.view());
+    let lazy = Precomputed(params).fit_apply(Shape(2, 2)).unwrap();
+    assert_eq!(lazy.normalization().first().parameters(), &rows.view());
+    assert_eq!(lazy.normalization().next(), &columns.view());
+}
+
+#[test]
+fn custom_recipes_validate_dimensions_when_building_operators() {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    let source = Dense {
+        values: [[1., 2.], [3., 4.]],
+        reads: Cell::new(0),
+    };
+    let columns = ColumnNormalizationParams::<f64>::from_parts(3, None, None);
+    let rows = RowNormalizationParams::<f64>::from_parts(3, None, None);
+    for apply in [false, true] {
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                if apply {
+                    Precomputed(columns.view()).fit_apply(&source).unwrap();
+                } else {
+                    LazyMatrix::new(&source, Precomputed(columns.view())).unwrap();
+                }
+            }))
+            .is_err()
+        );
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                if apply {
+                    Precomputed(rows.view()).fit_apply(&source).unwrap();
+                } else {
+                    LazyMatrix::new(&source, Precomputed(rows.view())).unwrap();
+                }
+            }))
+            .is_err()
+        );
+    }
+    assert_eq!(source.reads.get(), 0);
+}
+
 #[test]
 fn application_checks_the_fitted_axis_without_reading_data() {
     use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -488,6 +679,42 @@ impl std::fmt::Display for ReadError {
 }
 impl std::error::Error for ReadError {}
 
+#[derive(Debug, PartialEq)]
+enum FitError<E> {
+    TooFewRows,
+    Backend(E),
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for FitError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooFewRows => f.write_str("too few training rows"),
+            Self::Backend(error) => error.fmt(f),
+        }
+    }
+}
+
+impl<E: std::error::Error> std::error::Error for FitError<E> {}
+
+struct MinimumRows(usize);
+
+impl<M, F> NormalizationRecipe<M, ColumnNormalizationParams<F>> for MinimumRows
+where
+    M: ColumnStats<F> + MatrixShape + ?Sized,
+    F: Scalar,
+{
+    type Error = FitError<M::Error>;
+
+    fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, Self::Error> {
+        if data.nrows() < self.0 {
+            return Err(FitError::TooFewRows);
+        }
+        ColumnNormalization::standardize()
+            .fit(data)
+            .map_err(FitError::Backend)
+    }
+}
+
 #[derive(Debug)]
 struct Failing;
 
@@ -529,6 +756,42 @@ impl<F: Scalar> lazymatrix::RowStats<F> for Failing {
     ) -> Result<lazymatrix::RowNormalizationStats<F>, ReadError> {
         Err(ReadError)
     }
+}
+
+#[test]
+fn custom_fitting_errors_wrap_backend_failures_and_leave_product_errors_unchanged() {
+    let source = Statistics {
+        centers: vec![1., 2.],
+        scales: vec![1., 2.],
+        calls: Cell::new(0),
+    };
+    assert_eq!(
+        fit_recipe(&source, MinimumRows(3)),
+        Err(FitError::TooFewRows)
+    );
+    assert!(matches!(
+        LazyMatrix::new(&source, MinimumRows(3)),
+        Err(FitError::TooFewRows)
+    ));
+    assert!(matches!(
+        MinimumRows(3).fit_apply(&source),
+        Err(FitError::TooFewRows)
+    ));
+    assert_eq!(source.calls.get(), 0);
+
+    let fitted: Result<ColumnNormalizationParams<f32>, _> = fit_recipe(&Failing, MinimumRows(2));
+    assert_eq!(fitted, Err(FitError::Backend(ReadError)));
+    let fitted: Result<LazyMatrix<_, ColumnNormalizationParams<f64>>, _> =
+        MinimumRows(2).fit_apply(Failing);
+    assert!(matches!(fitted, Err(FitError::Backend(ReadError))));
+
+    let lazy = MinimumRows(2).fit_apply(source).unwrap();
+    assert_eq!(lazy.data().calls.get(), 1);
+    let (_, params) = lazy.into_parts();
+    let lazy = Precomputed(params).fit_apply(Failing).unwrap();
+    let mut out = vec![99.; 2];
+    let product: Result<(), ReadError> = lazy.matvec_into(&vec![1.; 2], &mut out);
+    assert_eq!(product, Err(ReadError));
 }
 
 macro_rules! failing_row_product {

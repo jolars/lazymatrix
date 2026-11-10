@@ -119,14 +119,13 @@ with single-axis fitting and reuse before introducing fitted pipelines.
   - Cover shared-parameter reuse, lifetimes, dimension validation, and parity
     with existing constructors across supported backends.
 
-- [ ] Evaluate a public fitting trait for downstream estimators.
-  - Keep explicit parameter construction available for custom fitting. Add an
-    open trait only when it improves integration with generic consumers.
-  - Specify scalar inference, output types, errors, and validation before
-    opening the interface. Custom recipes should produce supported fitted
-    parameter types; operator kernels and parameter invariants remain library
-    controlled. Keep backend statistics capabilities and shared scan hooks
-    independent of recipe extensibility.
+- [x] Add a public fitting trait for downstream estimators.
+  - Allow downstream crates to implement custom normalization recipes for
+    generic consumers. Keep explicit parameter construction available.
+  - Define scalar inference, output types, errors, and validation. Custom
+    recipes must produce supported fitted parameter types; operator kernels
+    and parameter invariants remain library controlled. Keep backend statistics
+    capabilities and shared scan hooks independent of recipe extensibility.
 
 ## Row normalization
 

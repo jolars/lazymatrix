@@ -83,10 +83,13 @@ workspace rather than a second full design matrix.
 
 ## Errors, Borrowing, and Storage
 
-Products, column statistics, and computed normalization return `Result`, sharing
-the backend error through `MatrixErrorType`; in-memory backends use
-`Infallible`. Dimension mismatches panic. Reusable outputs may be partial after
-an error; apply normalization corrections only after the backend succeeds.
+Products, column statistics, and built-in normalization fitting return `Result`,
+sharing the backend error through `MatrixErrorType`; in-memory backends use
+`Infallible`. Custom `NormalizationRecipe` implementations select their fitting
+error type and return supported fitted parameters. Parameter types and operator
+kernels remain library controlled. Dimension mismatches panic. Reusable outputs
+may be partial after an error; apply normalization corrections only after the
+backend succeeds.
 Forward `normalization_stats` through references and wrappers so storage backends
 can share scans.
 

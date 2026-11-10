@@ -18,10 +18,6 @@ mod private {
         fn scaled_correction(&self, value: F, row: usize, column: usize) -> F;
     }
 
-    pub trait Recipe<M: crate::MatrixErrorType, P> {
-        fn fit_recipe(self, data: &M) -> Result<P, M::Error>;
-    }
-
     pub trait NewSamples<M> {}
 }
 
@@ -45,33 +41,84 @@ pub trait NormalizationParams: private::Params<Self::Scalar> {
 
 /// A normalization recipe supported by a backend and fitted parameter type.
 ///
-/// [`crate::LazyMatrix::new`] selects fitting through this sealed trait. Column
-/// recipes require [`crate::ColumnStats`]; row recipes require [`crate::RowStats`].
-/// Implementing those capabilities enables fitting for a downstream backend
-/// without implementing this trait directly.
-/// Mixed and row-only chains require dense indexed access. Column-only chains
-/// use the supported backend adapters' native scans.
-pub trait NormalizationRecipe<M: crate::MatrixErrorType, P: NormalizationParams>:
-    private::Recipe<M, P>
-{
+/// Downstream crates can implement this trait for custom recipes and pass them
+/// to [`crate::LazyMatrix::new`] or generic consumers. `P` identifies the fitted
+/// axis and scalar, allowing a recipe to support both `f32` and `f64` without
+/// selecting one in its own type. Ambiguous calls can annotate the fitted
+/// parameter type or use fully qualified trait syntax.
+///
+/// Return supported parameter types such as [`ColumnNormalizationParams`],
+/// [`RowNormalizationParams`], their borrowed views, or
+/// [`NormalizationChainParams`]. Their constructors validate vector lengths
+/// and reject exact zero scales. Custom fitting must replace computed zero
+/// scales with one before construction. [`NormalizationParams`] remains sealed;
+/// fitting extensibility does not add new operator kernels or transformations.
+///
+/// Built-in column recipes require [`crate::ColumnStats`]; built-in row recipes
+/// require [`crate::RowStats`]. Implementing those capabilities enables built-in
+/// fitting for a downstream backend independently of custom recipes. Mixed and
+/// row-only chains require dense indexed access; column-only chains use native
+/// backend scans. Implementing this trait does not make a custom recipe usable
+/// as a stage in the built-in recipe chains.
+///
+/// For example, a custom recipe can shrink column means toward zero:
+///
+/// ```
+/// use lazymatrix::{
+///     ColumnNormalizationParams, ColumnStats, MatrixShape, NormalizationRecipe, Scalar,
+/// };
+///
+/// struct ShrunkMean<F>(F);
+///
+/// impl<M, F> NormalizationRecipe<M, ColumnNormalizationParams<F>> for ShrunkMean<F>
+/// where
+///     M: ColumnStats<F> + MatrixShape + ?Sized,
+///     F: Scalar,
+/// {
+///     type Error = M::Error;
+///
+///     fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, Self::Error> {
+///         let centers = data.col_means()?.into_iter().map(|c| self.0 * c).collect();
+///         Ok(ColumnNormalizationParams::from_parts(data.ncols(), Some(centers), None))
+///     }
+/// }
+/// ```
+pub trait NormalizationRecipe<M: crate::MatrixErrorType + ?Sized, P: NormalizationParams> {
+    /// Failure while fitting this recipe.
+    ///
+    /// Built-in recipes use `M::Error`. Custom recipes can use their own error
+    /// type to report invalid recipe settings and wrap backend failures.
+    /// Products on the fitted operator still return the backend's error type.
+    type Error: std::error::Error;
+
     /// Fit parameters without retaining or modifying the training data.
     ///
+    /// The returned parameter dimensions must match the corresponding axes of
+    /// `data`. Use the parameter constructors to preserve their invariants.
+    ///
     /// # Errors
-    /// Returns the backend error from fitting.
-    fn fit(self, data: &M) -> Result<P, M::Error>
+    /// Returns the recipe's error if fitting fails.
+    fn fit(self, data: &M) -> Result<P, Self::Error>
+    where
+        Self: Sized;
+
+    /// Fit once and move the data handle and parameters into a lazy operator.
+    ///
+    /// Pass owned data, a reference, or a backend view to select data ownership.
+    /// The fitted parameters retain their supplied owned or borrowed storage.
+    ///
+    /// # Errors
+    /// Returns the recipe's error if fitting fails.
+    ///
+    /// # Panics
+    /// Panics if the fitted parameter dimensions do not match the matrix.
+    fn fit_apply(self, data: M) -> Result<crate::LazyMatrix<M, P>, Self::Error>
     where
         Self: Sized,
+        M: crate::MatrixShape + Sized,
     {
-        private::Recipe::fit_recipe(self, data)
+        crate::LazyMatrix::new(data, self)
     }
-}
-
-impl<M, P, R> NormalizationRecipe<M, P> for R
-where
-    M: crate::MatrixErrorType,
-    P: NormalizationParams,
-    R: private::Recipe<M, P>,
-{
 }
 
 /// Computed column centers and raw scales, respectively.
@@ -935,18 +982,22 @@ impl<F: crate::Scalar, S: AsRef<[F]>> private::Params<F> for RowNormalizationPar
     }
 }
 
-impl<M: crate::ColumnStats<F> + crate::MatrixShape, F: crate::Scalar>
-    private::Recipe<M, ColumnNormalizationParams<F>> for ColumnNormalization
+impl<M: crate::ColumnStats<F> + crate::MatrixShape + ?Sized, F: crate::Scalar>
+    NormalizationRecipe<M, ColumnNormalizationParams<F>> for ColumnNormalization
 {
-    fn fit_recipe(self, data: &M) -> Result<ColumnNormalizationParams<F>, M::Error> {
+    type Error = M::Error;
+
+    fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, Self::Error> {
         ColumnNormalization::fit(self, data)
     }
 }
 
-impl<M: crate::RowStats<F>, F: crate::Scalar> private::Recipe<M, RowNormalizationParams<F>>
-    for RowNormalization
+impl<M: crate::RowStats<F> + ?Sized, F: crate::Scalar>
+    NormalizationRecipe<M, RowNormalizationParams<F>> for RowNormalization
 {
-    fn fit_recipe(self, data: &M) -> Result<RowNormalizationParams<F>, M::Error> {
+    type Error = M::Error;
+
+    fn fit(self, data: &M) -> Result<RowNormalizationParams<F>, Self::Error> {
         RowNormalization::fit(self, data)
     }
 }

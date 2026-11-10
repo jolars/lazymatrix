@@ -63,6 +63,10 @@ refitting. The [getting-started
 guide](https://lazymatrix.org/guide/getting-started#reuse-fitted-parameters)
 shows how to share fitted parameters between operators.
 
+Implement `NormalizationRecipe<M, P>` for custom fitting methods that return
+the existing parameter types. Custom recipes work with `LazyMatrix::new`,
+`.fit()`, and `.fit_apply()` and can report their own fitting errors.
+
 The [examples](examples/) cover gradient descent, coordinate descent, ridge
 regression, weighted Gram matrices, and file-backed input. Run one from a
 checkout with:

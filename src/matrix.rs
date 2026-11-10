@@ -58,17 +58,22 @@ pub struct LazyMatrix<M, P = ColumnNormalizationParams<f64>> {
 }
 
 impl<M: MatrixShape, P: NormalizationParams> LazyMatrix<M, P> {
-    /// Fit row or column parameters according to the recipe.
+    /// Fit normalization parameters according to a built-in or custom recipe.
     ///
-    /// Scales use centered values when centering is active. Exact computed zero
-    /// scales become one; negative and nonfinite values are preserved. Column
-    /// recipes use [`crate::ColumnStats`], while row recipes use [`crate::RowStats`].
+    /// Built-in scales use centered values when centering is active. Exact
+    /// computed zero scales become one; negative and nonfinite values are
+    /// preserved. Built-in column recipes use [`crate::ColumnStats`], while
+    /// row recipes use [`crate::RowStats`]. Custom recipes implement
+    /// [`NormalizationRecipe`] and return supported fitted parameter types.
     /// To fit parameters separately, use [`crate::ColumnNormalization::fit`]
     /// or [`crate::RowNormalization::fit`].
     ///
     /// # Errors
-    /// Returns the backend error if computing normalization statistics fails.
-    pub fn new<R>(data: M, recipe: R) -> Result<Self, M::Error>
+    /// Returns the recipe's fitting error. Built-in recipes use the backend error.
+    ///
+    /// # Panics
+    /// Panics if the fitted parameter dimensions do not match the matrix.
+    pub fn new<R>(data: M, recipe: R) -> Result<Self, R::Error>
     where
         M: crate::MatrixErrorType,
         R: NormalizationRecipe<M, P>,

@@ -58,7 +58,7 @@ fn fit_chain<M, P, A, B>(recipe: NormalizationChain<A, B>, data: &M) -> Result<P
 where
     M: MatrixShape + MatrixErrorType,
     P: NormalizationParams,
-    NormalizationChain<A, B>: NormalizationRecipe<M, P>,
+    NormalizationChain<A, B>: NormalizationRecipe<M, P, Error = M::Error>,
 {
     recipe.fit(data)
 }
@@ -70,7 +70,7 @@ fn fit_apply_chain<M, P, A, B>(
 where
     M: MatrixShape + MatrixErrorType,
     P: NormalizationParams,
-    NormalizationChain<A, B>: NormalizationRecipe<M, P>,
+    NormalizationChain<A, B>: NormalizationRecipe<M, P, Error = M::Error>,
 {
     recipe.fit_apply(data)
 }

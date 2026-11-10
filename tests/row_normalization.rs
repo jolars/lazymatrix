@@ -52,7 +52,7 @@ impl<F: Scalar> MatrixRead<F> for Dense<F> {
     }
 }
 
-fn fit<M, P, R>(data: M, recipe: R) -> Result<LazyMatrix<M, P>, M::Error>
+fn fit<M, P, R>(data: M, recipe: R) -> Result<LazyMatrix<M, P>, R::Error>
 where
     M: MatrixShape + MatrixErrorType,
     P: NormalizationParams,

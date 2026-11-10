@@ -62,6 +62,13 @@
 //! same fitting path as [`LazyMatrix::new`]. Application performs no fitting or
 //! parameter copies and stores the supplied owned or borrowed data handle.
 //!
+//! Implement [`NormalizationRecipe<M, P>`](NormalizationRecipe) to integrate a
+//! custom fitting method with generic consumers, [`LazyMatrix::new`], and
+//! [`NormalizationRecipe::fit_apply`]. Recipes select their own fitting error
+//! type and return supported, validated parameter types. Built-in recipes keep
+//! the backend error type; fitted operators always use the backend's errors for
+//! matrix operations.
+//!
 //! [`ColumnNormalizationParamsView`] and [`RowNormalizationParamsView`] borrow
 //! the fitted vectors as slices. They share the owned forms' operator
 //! capabilities and must not outlive their source parameters. A consuming

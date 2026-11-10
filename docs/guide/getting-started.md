@@ -434,5 +434,51 @@ explicit stored zeros, and treat omitted cells as zero. Empty rectangles
 perform no reads. Dense indexed backends can use the provided dense traversal
 helper. Mixed chains continue to use dense indexed access.
 
+### Custom fitting recipes
+
+Implement `NormalizationRecipe<M, P>` for a custom fitting method. The output
+type `P` selects the axis and scalar and must be a supported parameter type.
+For example, this recipe shrinks each column mean toward zero:
+
+```rust
+use lazymatrix::{
+    ColumnNormalizationParams, ColumnStats, LazyMatrix, MatrixShape,
+    NormalizationRecipe, Scalar,
+};
+
+struct ShrunkMean<F>(F);
+
+impl<M, F> NormalizationRecipe<M, ColumnNormalizationParams<F>> for ShrunkMean<F>
+where
+    M: ColumnStats<F> + MatrixShape + ?Sized,
+    F: Scalar,
+{
+    type Error = M::Error;
+
+    fn fit(self, data: &M) -> Result<ColumnNormalizationParams<F>, Self::Error> {
+        let centers = data.col_means()?.into_iter().map(|c| self.0 * c).collect();
+        Ok(ColumnNormalizationParams::from_parts(
+            data.ncols(), Some(centers), None,
+        ))
+    }
+}
+
+let fitted = ShrunkMean(0.5).fit(&x).unwrap();
+let lazy = ShrunkMean(0.5).fit_apply(&x).unwrap();
+let equivalent = LazyMatrix::new(&x, ShrunkMean(0.5)).unwrap();
+```
+
+Generic consumers can return `R::Error` with a bound of
+`R: NormalizationRecipe<M, P>`. Built-in recipes use `M::Error`; custom recipes
+can define an error type that includes recipe validation and backend failures.
+Fitted operators continue to return backend errors from matrix operations.
+
+Parameter constructors validate vector lengths and reject exact zero scales.
+Replace computed zero scales with one before constructing parameters. Both
+`LazyMatrix::new` and the default `.fit_apply()` validate the fitted dimensions
+against the matrix. Custom recipes can return owned parameters, borrowed
+parameter views, or supported fitted chains. Implementing the fitting trait
+does not make a custom recipe a stage in the built-in `.then()` chains.
+
 Read [how it works](/guide/how-it-works) for the algebra and
 [benchmarks](/benchmarks) for measured tradeoffs between representations.
