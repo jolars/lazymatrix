@@ -6,6 +6,7 @@ from lazymatrix import (
     LazyMatrix,
     RowNormalization,
     RowNormalizationParams,
+    normalize,
     standardize,
 )
 from numpy.testing import assert_allclose, assert_array_equal
@@ -65,7 +66,8 @@ def assert_optional(actual, expected):
 @pytest.mark.parametrize("center", CENTERS)
 @pytest.mark.parametrize("scale", SCALES)
 @pytest.mark.parametrize("axis", [0, 1])
-def test_methods_products_and_reuse(storage, center, scale, axis):
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
+def test_methods_products_and_reuse(storage, center, scale, axis, constructor):
     raw = np.array(
         [
             [0.0, -6.0, 5.0, 0.0],
@@ -75,7 +77,7 @@ def test_methods_products_and_reuse(storage, center, scale, axis):
         ]
     )
     expected, centers, scales = reference(raw, center, scale, axis=axis)
-    z = LazyMatrix(storage(raw), axis=axis, center=center, scale=scale)
+    z = constructor(storage(raw), axis=axis, center=center, scale=scale)
     assert_optional(z.centers, centers)
     assert_optional(z.scales, scales)
     assert_allclose(z.toarray(), expected, atol=1e-14)
@@ -125,9 +127,10 @@ def test_methods_products_and_reuse(storage, center, scale, axis):
 @pytest.mark.parametrize("bounds", [(0.0, 1.0), (0.1, 0.8), (0.4, 0.6)])
 @pytest.mark.parametrize("storage", STORAGE)
 @pytest.mark.parametrize("axis", [0, 1])
-def test_custom_exact_quantile_ranges(storage, bounds, axis):
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
+def test_custom_exact_quantile_ranges(storage, bounds, axis, constructor):
     raw = np.array([[0.0, 1.0], [0.0, 2.0], [0.0, 5.0], [4.0, 12.0], [10.0, 100.0]])
-    z = LazyMatrix(
+    z = constructor(
         storage(raw),
         axis=axis,
         center="median",
@@ -188,7 +191,8 @@ def test_sparse_fitting_and_reuse_do_not_materialize(monkeypatch, scale, storage
     z = recipe.fit_apply(x)
     params = recipe.fit(x)
     reused = LazyMatrix.from_normalization(x, params)
-    for operator in (z, reused):
+    normalized = normalize(x, axis=axis, center="median", scale=scale)
+    for operator in (z, reused, normalized):
         assert_allclose(operator @ np.ones(3), expected @ np.ones(3), atol=1e-14)
         assert_allclose(operator.T @ np.ones(4), expected.T @ np.ones(4), atol=1e-14)
         assert_allclose(operator[:, 0], expected[:, 0])
@@ -287,10 +291,11 @@ def test_nan_statistics_propagate(center, scale):
 
 
 @pytest.mark.parametrize("scale", SCALES)
-def test_zero_column_parameters(scale):
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
+def test_zero_column_parameters(scale, constructor):
     for storage in STORAGE:
         x = storage(np.empty((3, 0)))
-        z = LazyMatrix(x, center="median", scale=scale)
+        z = constructor(x, center="median", scale=scale)
         assert z.normalization.ncols == 0
         assert z.normalization.transform(x).shape == (3, 0)
 
@@ -339,12 +344,13 @@ def test_parameter_types(cls):
 
 
 @pytest.mark.parametrize("name", ["center", "scale"])
-def test_method_validation(name):
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
+def test_method_validation(name, constructor):
     for value in (1, None, ["mean"]):
         with pytest.raises(TypeError, match="boolean or method"):
-            LazyMatrix(np.eye(2), **{name: value})
+            constructor(np.eye(2), **{name: value})
     with pytest.raises(ValueError, match="unknown"):
-        LazyMatrix(np.eye(2), **{name: "unsupported"})
+        constructor(np.eye(2), **{name: "unsupported"})
 
 
 @pytest.mark.parametrize(
@@ -361,9 +367,11 @@ def test_method_validation(name):
         [[0, 1]],
     ],
 )
-def test_quantile_validation(bounds):
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
+@pytest.mark.parametrize("scale", [True, "quantile_range"])
+def test_quantile_validation(bounds, constructor, scale):
     with pytest.raises(ValueError, match="quantile"):
-        LazyMatrix(np.eye(2), scale="quantile_range", quantile_range=bounds)
+        constructor(np.eye(2), scale=scale, quantile_range=bounds)
 
 
 @pytest.mark.parametrize("storage", STORAGE)
@@ -447,7 +455,7 @@ def test_recipe_validation_is_immediate(cls, options, error):
         cls(**options)
 
 
-@pytest.mark.parametrize("constructor", [LazyMatrix, standardize])
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize, standardize])
 def test_axis_validation(constructor):
     for axis in (-1, 2):
         with pytest.raises(ValueError, match="axis"):
@@ -461,22 +469,24 @@ def test_axis_validation(constructor):
 
 
 @pytest.mark.parametrize("storage", STORAGE)
-def test_row_degrees_of_freedom_use_column_count(storage):
+@pytest.mark.parametrize("constructor", [normalize, standardize])
+def test_row_degrees_of_freedom_use_column_count(storage, constructor):
     raw = np.array([[1.0, 2.0, 3.0], [3.0, 5.0, 7.0]])
-    z = standardize(storage(raw), axis=1, df=1)
+    z = constructor(storage(raw), axis=1, df=1)
     assert_allclose(z.scales, raw.std(axis=1, ddof=1))
     for df in (3, 4, np.iinfo(np.uintp).max):
-        z = standardize(storage(raw), axis=1, df=df)
+        z = constructor(storage(raw), axis=1, df=df)
         assert np.isnan(z.scales).all()
         assert np.isnan(z.toarray()).all()
-        unscaled = standardize(storage(raw), axis=1, scale=False, df=df)
+        unscaled = constructor(storage(raw), axis=1, scale=False, df=df)
         assert unscaled.scales is None
         assert_allclose(unscaled.toarray(), raw - raw.mean(axis=1)[:, None])
 
 
 @pytest.mark.parametrize("storage", STORAGE)
-def test_empty_row_normalization_dimensions(storage):
-    z = standardize(storage(np.empty((0, 3))), axis=1)
+@pytest.mark.parametrize("constructor", [normalize, standardize])
+def test_empty_row_normalization_dimensions(storage, constructor):
+    z = constructor(storage(np.empty((0, 3))), axis=1)
     assert z.shape == (0, 3)
     assert z.normalization.nrows == 0
     assert z.toarray().shape == (0, 3)
@@ -485,7 +495,7 @@ def test_empty_row_normalization_dimensions(storage):
     assert_array_equal(z[:, 0], np.empty(0))
     for shape in ((3, 0), (0, 0)):
         with pytest.raises(ValueError, match="column"):
-            standardize(storage(np.empty(shape)), axis=1)
+            constructor(storage(np.empty(shape)), axis=1)
     rows = RowNormalizationParams(3).apply_frozen(storage(np.empty((3, 0))))
     assert rows.toarray().shape == (3, 0)
     columns = ColumnNormalizationParams(3).transform(storage(np.empty((0, 3))))

@@ -2,8 +2,10 @@
 
 LazyMatrix applies column or row normalization during matrix operations on NumPy
 arrays and SciPy sparse matrices. Start with `standardize` for mean centering and
-standard-deviation scaling, or use `LazyMatrix` to choose other methods. Both
-accept `axis=0` for columns or `axis=1` for rows.
+standard-deviation scaling, or use `normalize` to choose other methods. Both
+accept `axis=0` for columns or `axis=1` for rows and return a `LazyMatrix`.
+`normalize(X)` defaults to the same standardization as `standardize(X)`.
+Direct `LazyMatrix` construction accepts the same options as `normalize`.
 
 `ColumnNormalization` and `RowNormalization` retain reusable fitting recipes.
 Their `fit` methods return parameters, and `fit_apply` fits and wraps raw input

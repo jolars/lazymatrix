@@ -51,11 +51,20 @@ conversion and elementwise NumPy operations are unsupported.
 
 ## Normalization
 
-Import `LazyMatrix` from `lazymatrix` for other normalization recipes. Use
-`LazyMatrix(X, center="min", scale="range")` for min-max scaling or
-`LazyMatrix(X, center="median", scale="quantile_range")` for median centering
-and interquartile-range scaling. Centering and scaling are independently
-optional, and exact zero scales become one.
+Use `normalize` for other normalization recipes:
+
+```python
+from lazymatrix import normalize
+
+min_max = normalize(X, center="min", scale="range")
+robust = normalize(X, center="median", scale="quantile_range")
+unit_columns = normalize(X, center=False, scale="l2")
+```
+
+`normalize(X)` defaults to mean centering and population standard-deviation
+scaling, like `standardize(X)`. Centering and scaling are independently optional,
+and exact zero scales become one. Both factories return a `LazyMatrix`; direct
+`LazyMatrix` construction accepts the same options as `normalize`.
 
 Reuse training normalization without refitting with
 `Z.normalization.transform(X_validation)`. The input must have the same features
@@ -65,12 +74,13 @@ methods and [fitted
 parameters](https://lazymatrix.org/guide/python#reuse-fitted-parameters) for
 saving and restoring normalization.
 
-Pass `axis=1` to `standardize` or `LazyMatrix` to normalize each row independently:
+Pass `axis=1` to `standardize` or `normalize` to normalize each row independently:
 
 ```python
 from lazymatrix import RowNormalization
 
 rows = standardize(X, axis=1)
+unit_rows = normalize(X, axis=1, center=False, scale="l2")
 recipe = RowNormalization(center=False, scale="l2")
 training = recipe.fit_apply(X)
 validation = recipe.fit_apply(np.array([[3.0, 4.0]]))

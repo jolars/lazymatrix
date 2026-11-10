@@ -603,6 +603,93 @@ class LazyMatrix:
         return self._matrix.toarray(self._transposed)
 
 
+def normalize(
+    X: Any,
+    *,
+    axis: NormalizationAxis = 0,
+    center: Centering = True,
+    scale: Scaling = True,
+    df: int = 0,
+    quantile_range: tuple[float, float] = (0.25, 0.75),
+) -> LazyMatrix:
+    """Fit centers and scales and return a lazy matrix.
+
+    Parameters
+    ----------
+    X : numpy.ndarray or scipy.sparse matrix or array
+        Two-dimensional real numeric input. Sparse input must use CSR or CSC.
+        Values are copied to float64 storage, and sparse copies are canonicalized
+        while retaining their orientation. Later changes to X do not affect
+        the returned matrix.
+    axis : {0, 1}, default=0
+        Zero fits each column; one fits each row independently. The fitted axis
+        must have at least one entry: rows for axis=0, or columns for axis=1.
+    center : bool or {"none", "mean", "min", "median"}, default=True
+        Center to subtract. True selects the mean; False or "none" disables
+        centering.
+    scale : bool or {"none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"}, default=True
+        Scale to divide by. True selects standard deviation; False or "none"
+        disables scaling. Norms and maximum absolute values use centered values
+        when centering is active, including implicit sparse zeros. Exact zero
+        scales become one.
+    df : int, default=0
+        Nonnegative degrees of freedom subtracted from nrows for axis=0 or
+        ncols for axis=1 in the variance divisor. Use zero for population
+        standard deviations or one for sample standard deviations. Scales are
+        NaN when that dimension is at most df. Used only for sd scaling.
+    quantile_range : tuple of float, default=(0.25, 0.75)
+        Lower and upper probabilities satisfying 0 <= lower < upper <= 1.
+        Quantile-range scaling uses exact linear quantiles at (n - 1) * q,
+        where n is the fitted axis length, without standard-normal calibration.
+        Bounds are validated for all methods.
+
+    Returns
+    -------
+    LazyMatrix
+        A matrix retaining fitted parameters without constructing a normalized
+        copy. Statistics are fitted immediately. Defaults match standardize.
+
+    Raises
+    ------
+    TypeError
+        If the input type, storage format, values, or option types are unsupported.
+    ValueError
+        If the input is not two-dimensional, the fitted axis is empty, axis or
+        method names are invalid, df is negative, or quantile bounds are invalid.
+
+    Notes
+    -----
+    This function accepts the same options as LazyMatrix and fits each input
+    independently. Products and column access do not materialize a normalized
+    matrix. Nonfinite values follow the Rust core's IEEE arithmetic; missing
+    values are not ignored.
+
+    Reuse training column parameters with ``Z.normalization.transform(new_X)``.
+    New samples need independently fitted row parameters; call this function
+    again with axis=1 or reuse a RowNormalization recipe. Saved row parameters
+    can be applied unchanged to the same rows with ``params.apply_frozen(X)``.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from lazymatrix import normalize
+    >>> X = np.array([[1.0, 2.0], [3.0, 6.0]])
+    >>> normalize(X, center="min", scale="range").toarray()
+    array([[0., 0.],
+           [1., 1.]])
+    >>> normalize(np.array([[3.0, 4.0]]), axis=1, center=False, scale="l2").toarray()
+    array([[0.6, 0.8]])
+    """
+    return LazyMatrix(
+        X,
+        axis=axis,
+        center=center,
+        scale=scale,
+        df=df,
+        quantile_range=quantile_range,
+    )
+
+
 def standardize(
     X: Any,
     *,
@@ -650,8 +737,8 @@ def standardize(
     This function fits each input independently. Reuse training parameters with
     ``Z.normalization.transform(new_X)`` for column normalization. New samples
     need independently fitted row parameters; call this function again with
-    axis=1 or reuse a RowNormalization recipe. For other centering and scaling
-    methods, construct LazyMatrix directly.
+    axis=1 or reuse a RowNormalization recipe. Use normalize for other centering
+    and scaling methods.
 
     Examples
     --------
@@ -664,4 +751,4 @@ def standardize(
     """
     if not isinstance(center, bool) or not isinstance(scale, bool):
         raise TypeError("center and scale must be booleans")
-    return LazyMatrix(X, axis=axis, center=center, scale=scale, df=df)
+    return normalize(X, axis=axis, center=center, scale=scale, df=df)

@@ -85,21 +85,25 @@ statistics on the new data. The new input must have `params.ncols` columns in
 the same feature order as the training input, but it can have a different
 number of rows and use dense or sparse storage.
 
-Keep using `params.transform` for new observations. Calling `standardize` or
-`LazyMatrix` on them would fit new statistics. The parameter object owns its
-centers and scales independently of the training matrix.
+Keep using `params.transform` for new observations. Calling `standardize`,
+`normalize`, or `LazyMatrix` on them would fit new statistics. The parameter
+object owns its centers and scales independently of the training matrix.
 
 ## Choose normalization methods
 
-Use `LazyMatrix` to choose a different centering or scaling method:
+Use `normalize` to choose a different centering or scaling method:
 
 ```python
-from lazymatrix import LazyMatrix
+from lazymatrix import normalize
 
-min_max = LazyMatrix(X, center="min", scale="range")
-robust = LazyMatrix(X, center="median", scale="quantile_range")
-unit_columns = LazyMatrix(X, center=False, scale="l2")
+min_max = normalize(X, center="min", scale="range")
+robust = normalize(X, center="median", scale="quantile_range")
+unit_columns = normalize(X, center=False, scale="l2")
 ```
+
+`normalize(X)` defaults to mean centering and population standard-deviation
+scaling, just like `standardize(X)`. Both return a `LazyMatrix`. Direct
+`LazyMatrix` construction accepts the same options as `normalize`.
 
 | Goal            | Centering | Scaling               |
 | --------------- | --------- | --------------------- |
@@ -126,12 +130,12 @@ constructor options.
 ## Normalize rows
 
 The default `axis=0` fits one center and scale per column. Pass `axis=1` to
-`standardize` or `LazyMatrix` to fit each row independently:
+`standardize` or `normalize` to fit each row independently:
 
 ```python
 rows = standardize(X, axis=1)
-unit_rows = LazyMatrix(X, axis=1, center=False, scale="l2")
-robust_rows = LazyMatrix(X, axis=1, center="median", scale="quantile_range")
+unit_rows = normalize(X, axis=1, center=False, scale="l2")
+robust_rows = normalize(X, axis=1, center="median", scale="quantile_range")
 ```
 
 Row normalization supports the same methods, products, column access, SciPy

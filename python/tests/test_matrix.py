@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
-from lazymatrix import LazyMatrix, __version__, standardize
+from lazymatrix import LazyMatrix, __version__, normalize, standardize
 from numpy.testing import assert_allclose, assert_array_equal
 from scipy import sparse
 from scipy.sparse.linalg import lsqr
@@ -38,8 +38,9 @@ def dense_reference(x, center=True, scale=True, df=0, axis=0):
 @pytest.mark.parametrize("scale", [False, True])
 @pytest.mark.parametrize("df", [0, 1, 2])
 @pytest.mark.parametrize("axis", [0, 1])
-def test_normalization_and_products(matrix, center, scale, df, axis):
-    z = standardize(matrix, axis=axis, center=center, scale=scale, df=df)
+@pytest.mark.parametrize("constructor", [normalize, standardize])
+def test_normalization_and_products(matrix, center, scale, df, axis, constructor):
+    z = constructor(matrix, axis=axis, center=center, scale=scale, df=df)
     expected = dense_reference(matrix, center, scale, df, axis)
     v = np.array([0.5, -2.0, 1.0])
     u = np.array([1.0, -0.25, 2.0, 0.0])
@@ -71,6 +72,24 @@ def test_normalization_and_products(matrix, center, scale, df, axis):
     assert_allclose(z[:, -1], expected[:, -1])
     assert (z.centers is None) == (not center)
     assert (z.scales is None) == (not scale)
+
+
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize, standardize])
+def test_normalization_defaults(matrix, constructor):
+    z = constructor(matrix)
+    raw = matrix.toarray() if sparse.issparse(matrix) else matrix
+    scales = raw.std(axis=0)
+    scales[scales == 0] = 1
+    assert_allclose(z.centers, raw.mean(axis=0))
+    assert_allclose(z.scales, scales)
+    assert_allclose(z.toarray(), dense_reference(matrix))
+
+
+@pytest.mark.parametrize("name", ["center", "scale"])
+@pytest.mark.parametrize("value", ["none", "mean", "sd", "l2", 1, None, np.bool_(True)])
+def test_standardize_requires_boolean_options(name, value):
+    with pytest.raises(TypeError, match="center and scale must be booleans"):
+        standardize(np.eye(2), **{name: value})
 
 
 @pytest.mark.parametrize("axis", [0, 1])
@@ -117,7 +136,7 @@ def test_standard_deviations_preserve_small_variation(df, axis):
         assert_allclose(z.toarray(), dense_reference(source, df=df, axis=axis))
 
 
-@pytest.mark.parametrize("constructor", [LazyMatrix, standardize])
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize, standardize])
 def test_degrees_of_freedom_validation(constructor, matrix):
     assert_allclose(
         constructor(matrix, df=np.int64(1)).toarray(), dense_reference(matrix, df=1)
@@ -201,15 +220,16 @@ def test_scipy_adapter_and_least_squares(matrix, axis):
     assert_allclose(actual, reference, atol=1e-12)
 
 
-def test_empty_dimensions():
+@pytest.mark.parametrize("constructor", [normalize, standardize])
+def test_empty_dimensions(constructor):
     for x in (np.empty((3, 0)), sparse.csc_matrix((3, 0))):
-        z = standardize(x)
+        z = constructor(x)
         assert z.toarray().shape == (3, 0)
         assert_array_equal(z @ np.empty(0), np.zeros(3))
         assert (z @ np.empty((0, 2))).shape == (3, 2)
         assert (np.empty((2, 3)) @ z).shape == (2, 0)
     with pytest.raises(ValueError, match="row"):
-        standardize(np.empty((0, 2)))
+        constructor(np.empty((0, 2)))
 
 
 @pytest.mark.parametrize("df", [0, 1])
@@ -225,9 +245,10 @@ def test_nonfinite_values_are_retained(df):
 
 
 @pytest.mark.parametrize("x", [np.ones(3), np.ones((2, 2, 2))])
-def test_invalid_matrix_dimensions(x):
+@pytest.mark.parametrize("constructor", [normalize, standardize])
+def test_invalid_matrix_dimensions(x, constructor):
     with pytest.raises(ValueError, match="two-dimensional"):
-        standardize(x)
+        constructor(x)
 
 
 @pytest.mark.parametrize(
@@ -239,9 +260,10 @@ def test_invalid_matrix_dimensions(x):
         sparse.coo_matrix(np.eye(2)),
     ],
 )
-def test_unsupported_input_types(x):
+@pytest.mark.parametrize("constructor", [normalize, standardize])
+def test_unsupported_input_types(x, constructor):
     with pytest.raises(TypeError):
-        standardize(x)
+        constructor(x)
 
 
 @pytest.mark.parametrize("index", [3, -4])
