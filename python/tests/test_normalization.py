@@ -11,6 +11,7 @@ from lazymatrix import (
 )
 from numpy.testing import assert_allclose, assert_array_equal
 from scipy import sparse
+from scipy.special import ndtri
 
 CENTERS = [False, True, "none", "mean", "min", "median"]
 SCALES = [False, True, "none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"]
@@ -23,9 +24,11 @@ STORAGE = [
 ]
 
 
-def reference(raw, center, scale, bounds=(0.25, 0.75), axis=0):
+def reference(raw, center, scale, bounds=(0.25, 0.75), axis=0, unit_variance=False):
     if axis == 1:
-        values, centers, scales = reference(raw.T, center, scale, bounds)
+        values, centers, scales = reference(
+            raw.T, center, scale, bounds, unit_variance=unit_variance
+        )
         return values.T, centers, scales
     centers = None
     if center is True or center == "mean":
@@ -43,6 +46,8 @@ def reference(raw, center, scale, bounds=(0.25, 0.75), axis=0):
     elif scale == "quantile_range":
         lower, upper = np.quantile(raw, bounds, axis=0, method="linear")
         scales = upper - lower
+        if unit_variance:
+            scales /= ndtri(bounds[1]) - ndtri(bounds[0])
     elif scale == "maxabs":
         scales = np.max(np.abs(values), axis=0)
     elif scale == "l1":
@@ -124,31 +129,73 @@ def test_methods_products_and_reuse(storage, center, scale, axis, constructor):
     assert_optional(reused.scales, scales)
 
 
-@pytest.mark.parametrize("bounds", [(0.0, 1.0), (0.1, 0.8), (0.4, 0.6)])
+@pytest.mark.parametrize(
+    "bounds, unit_variance",
+    [
+        ((0.0, 1.0), False),
+        ((0.1, 0.8), False),
+        ((0.4, 0.6), False),
+        ((0.25, 0.75), True),
+        ((0.1, 0.8), True),
+        ((0.4, 0.6), True),
+        ((1e-300, 0.99), True),
+    ],
+)
 @pytest.mark.parametrize("storage", STORAGE)
 @pytest.mark.parametrize("axis", [0, 1])
 @pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
-def test_custom_exact_quantile_ranges(storage, bounds, axis, constructor):
-    raw = np.array([[0.0, 1.0], [0.0, 2.0], [0.0, 5.0], [4.0, 12.0], [10.0, 100.0]])
+def test_custom_exact_quantile_ranges(
+    storage, bounds, axis, constructor, unit_variance
+):
+    raw = np.array(
+        [
+            [0.0, 1.0, 7.0, 0.0],
+            [0.0, 2.0, 7.0, 0.0],
+            [0.0, 5.0, 7.0, 0.0],
+            [4.0, 12.0, 7.0, 0.0],
+            [10.0, 100.0, 7.0, 0.0],
+            [7.0, 7.0, 7.0, 7.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ]
+    )
     z = constructor(
         storage(raw),
         axis=axis,
         center="median",
         scale="quantile_range",
         quantile_range=bounds,
+        unit_variance=unit_variance,
     )
-    expected, centers, scales = reference(raw, "median", "quantile_range", bounds, axis)
+    expected, centers, scales = reference(
+        raw, "median", "quantile_range", bounds, axis, unit_variance
+    )
     assert_allclose(z.centers, centers)
-    assert_allclose(z.scales, scales)
+    assert_allclose(z.scales, scales, rtol=1e-13, atol=1e-14)
     assert_allclose(z.toarray(), expected)
+    assert_allclose(
+        z @ np.ones(raw.shape[1]), expected @ np.ones(raw.shape[1]), atol=1e-13
+    )
+    assert_allclose(
+        z.T @ np.ones(raw.shape[0]), expected.T @ np.ones(raw.shape[0]), atol=1e-13
+    )
+    parameters = z.normalization
+    reused = (
+        parameters.transform(storage(raw))
+        if axis == 0
+        else parameters.apply_frozen(storage(raw))
+    )
+    assert_allclose(reused.toarray(), expected)
 
 
 @pytest.mark.parametrize("center", ["min", "median"])
-@pytest.mark.parametrize("scale", SCALES)
+@pytest.mark.parametrize(
+    "scale, unit_variance",
+    [(scale, False) for scale in SCALES] + [("quantile_range", True)],
+)
 @pytest.mark.parametrize("orientation", ["csr", "csc"])
 @pytest.mark.parametrize("axis", [0, 1])
 def test_duplicates_are_combined_before_nonlinear_statistics(
-    center, scale, orientation, axis
+    center, scale, orientation, axis, unit_variance
 ):
     x = sparse.csc_matrix(
         ([3.0, 1.0, -1.0, 0.0, 4.0, -7.0, 2.0], [2, 0, 0, 1, 0, 0, 2], [0, 4, 7]),
@@ -159,8 +206,12 @@ def test_duplicates_are_combined_before_nonlinear_statistics(
         x = x.T.tocsr()
     raw = x.toarray()
     before = (x.data.copy(), x.indices.copy(), x.indptr.copy())
-    expected, centers, scales = reference(raw, center, scale, axis=axis)
-    z = LazyMatrix(x, axis=axis, center=center, scale=scale)
+    expected, centers, scales = reference(
+        raw, center, scale, axis=axis, unit_variance=unit_variance
+    )
+    z = LazyMatrix(
+        x, axis=axis, center=center, scale=scale, unit_variance=unit_variance
+    )
     assert_allclose(z.toarray(), expected, atol=1e-14)
     assert_allclose(z.centers, centers)
     assert_optional(z.scales, scales)
@@ -419,18 +470,29 @@ def test_row_recipe_fits_new_samples_independently(storage, nrows):
         (RowNormalization, RowNormalizationParams, 1),
     ],
 )
-def test_recipes_fit_without_retaining_input(storage, cls, params_cls, axis):
+@pytest.mark.parametrize("unit_variance", [False, True])
+def test_recipes_fit_without_retaining_input(
+    storage, cls, params_cls, axis, unit_variance
+):
     raw = np.array([[0.0, -1.0, 4.0], [2.0, 3.0, 0.0]])
     bounds = [0.1, 0.9]
-    recipe = cls(center="median", scale="quantile_range", quantile_range=bounds)
+    recipe = cls(
+        center="median",
+        scale="quantile_range",
+        quantile_range=bounds,
+        unit_variance=unit_variance,
+    )
     bounds[:] = [0.3, 0.4]
     assert recipe.quantile_range == (0.1, 0.9)
+    assert recipe.unit_variance == unit_variance
+    with pytest.raises(AttributeError):
+        recipe.unit_variance = False
     with pytest.raises(AttributeError):
         recipe.center = False
     params = recipe.fit(storage(raw))
     assert isinstance(params, params_cls)
     expected, centers, scales = reference(
-        raw, "median", "quantile_range", (0.1, 0.9), axis
+        raw, "median", "quantile_range", (0.1, 0.9), axis, unit_variance
     )
     raw[:] = 100
     assert_allclose(params.centers, centers)
@@ -448,11 +510,58 @@ def test_recipes_fit_without_retaining_input(storage, cls, params_cls, axis):
         ({"scale": None}, TypeError),
         ({"df": -1}, ValueError),
         ({"quantile_range": (0.8, 0.2)}, ValueError),
+        ({"unit_variance": True}, ValueError),
+        ({"unit_variance": 1}, TypeError),
+        (
+            {
+                "scale": "quantile_range",
+                "unit_variance": True,
+                "quantile_range": (0.0, 0.75),
+            },
+            ValueError,
+        ),
+        (
+            {
+                "scale": "quantile_range",
+                "unit_variance": True,
+                "quantile_range": (0.25, 1.0),
+            },
+            ValueError,
+        ),
     ],
 )
 def test_recipe_validation_is_immediate(cls, options, error):
     with pytest.raises(error):
         cls(**options)
+
+
+@pytest.mark.parametrize("constructor", [LazyMatrix, normalize])
+@pytest.mark.parametrize("axis", [0, 1])
+def test_unit_variance_validation(constructor, axis):
+    for value in (None, 0, 1, "true"):
+        with pytest.raises(TypeError, match="unit_variance"):
+            constructor(
+                np.eye(2), axis=axis, scale="quantile_range", unit_variance=value
+            )
+    for scale in (False, True, "none", "sd", "range", "maxabs", "l1", "l2"):
+        with pytest.raises(ValueError, match="unit_variance"):
+            constructor(np.eye(2), axis=axis, scale=scale, unit_variance=True)
+    for bounds in [(0.0, 0.75), (0.25, 1.0), (0.0, 1.0)]:
+        with pytest.raises(ValueError, match="unit_variance"):
+            constructor(
+                np.eye(2),
+                axis=axis,
+                scale="quantile_range",
+                quantile_range=bounds,
+                unit_variance=True,
+            )
+    actual = constructor(
+        np.eye(2), axis=axis, scale="quantile_range", unit_variance=np.bool_(True)
+    )
+    expected = constructor(
+        np.eye(2), axis=axis, scale="quantile_range", unit_variance=True
+    )
+    assert_allclose(actual.toarray(), expected.toarray())
 
 
 @pytest.mark.parametrize("constructor", [LazyMatrix, normalize, standardize])

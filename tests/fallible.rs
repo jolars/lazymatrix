@@ -333,7 +333,10 @@ fn default_normalization_hook_propagates_statistic_errors() {
             Scaling::L2,
             Scaling::MaxAbs,
             Scaling::Range,
-            Scaling::QuantileRange(lazymatrix::QuantileRange::default()),
+            Scaling::QuantileRange {
+                range: lazymatrix::QuantileRange::default(),
+                unit_variance: false,
+            },
         ] {
             let spec = ColumnNormalization::new(center, scale);
             if spec != ColumnNormalization::default() {

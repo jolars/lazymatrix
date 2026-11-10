@@ -23,6 +23,11 @@ pub trait ColumnStats<F: Scalar>: MatrixErrorType {
     /// Backends may override this hook to share scans between statistics. Exact
     /// zero scales are returned unchanged; [`ColumnNormalization::fit`] replaces
     /// them with one. Each present vector must have length `ncols`.
+    /// Quantile-range scales include the requested standard-normal calibration;
+    /// [`Self::col_quantile_ranges`] always returns uncalibrated ranges.
+    ///
+    /// # Panics
+    /// Panics if calibrated quantile bounds contain an endpoint (`0` or `1`).
     ///
     /// # Errors
     /// Returns the first error encountered while computing the statistics.
@@ -112,6 +117,7 @@ where
     M: ColumnStats<F> + ?Sized,
     F: Scalar,
 {
+    spec.scale.validate_quantile_range();
     let (medians, ranges) = quantiles.unwrap_or_default();
     let centers = match spec.center {
         Centering::None => None,
@@ -126,10 +132,12 @@ where
         Scaling::None => None,
         Scaling::Sd { df } => Some(matrix.col_sds(df)?),
         Scaling::Range => Some(matrix.col_ranges()?),
-        Scaling::QuantileRange(range) => Some(match ranges {
-            Some(values) => values,
-            None => matrix.col_quantile_ranges(range)?,
-        }),
+        Scaling::QuantileRange { range, .. } => {
+            Some(spec.scale.calibrate_quantile_scales(match ranges {
+                Some(values) => values,
+                None => matrix.col_quantile_ranges(range)?,
+            }))
+        }
         Scaling::L1 => Some(match &centers {
             Some(c) => matrix.col_l1_centered(c)?,
             None => matrix.col_l1()?,

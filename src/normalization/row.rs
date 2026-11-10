@@ -35,6 +35,7 @@ pub(crate) fn fit<M: MatrixRead<F> + ?Sized, F: Scalar>(
     matrix: &M,
     spec: RowNormalization,
 ) -> RowNormalizationStats<F> {
+    spec.scale.validate_quantile_range();
     let (medians, ranges) = crate::quantiles::row_quantiles(matrix, spec);
     let mean = |i| row_values(matrix, i).sum::<F>() / F::from_usize(matrix.ncols()).unwrap();
     let centers = match spec.center {
@@ -49,7 +50,7 @@ pub(crate) fn fit<M: MatrixRead<F> + ?Sized, F: Scalar>(
     };
     let scales = match spec.scale {
         Scaling::None => None,
-        Scaling::QuantileRange(_) => ranges,
+        Scaling::QuantileRange { .. } => ranges,
         scaling => Some(
             (0..matrix.nrows())
                 .map(|i| {
@@ -90,11 +91,14 @@ pub(crate) fn fit<M: MatrixRead<F> + ?Sized, F: Scalar>(
                         }
                         Scaling::L1 => centered().map(|value| value.abs()).sum(),
                         Scaling::L2 => centered().map(|value| value * value).sum::<F>().sqrt(),
-                        Scaling::None | Scaling::QuantileRange(_) => unreachable!(),
+                        Scaling::None | Scaling::QuantileRange { .. } => unreachable!(),
                     }
                 })
                 .collect::<Vec<_>>(),
         ),
     };
-    (centers, scales)
+    (
+        centers,
+        scales.map(|values| spec.scale.calibrate_quantile_scales(values)),
+    )
 }

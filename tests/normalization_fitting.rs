@@ -12,6 +12,7 @@ use lazymatrix::{
     ColumnNormalizationStats, ColumnStats, LazyMatrix, MatTransposeVecInto, MatVecInto,
     MatrixErrorType, MatrixRead, MatrixShape, NormalizationParams, NormalizationRecipe,
     QuantileRange, RowNormalization, RowNormalizationParams, RowNormalizationParamsView, Scalar,
+    Scaling,
 };
 
 struct Statistics<F> {
@@ -78,6 +79,61 @@ impl<F: Scalar> lazymatrix::RowStats<F> for Statistics<F> {
         self.calls.set(self.calls.get() + 1);
         Ok((Some(self.centers.clone()), Some(self.scales.clone())))
     }
+}
+
+#[test]
+fn calibrated_quantile_endpoints_panic_before_reading_storage() {
+    let source = Statistics {
+        centers: vec![0.0_f64; 2],
+        scales: vec![1.0; 2],
+        calls: Cell::new(0),
+    };
+    for range in [QuantileRange::new(0.0, 0.75), QuantileRange::new(0.25, 1.0)] {
+        let scale = Scaling::QuantileRange {
+            range,
+            unit_variance: true,
+        };
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                ColumnNormalization::new(lazymatrix::Centering::Median, scale).fit(&source)
+            }))
+            .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                RowNormalization::new(lazymatrix::Centering::Median, scale).fit(&source)
+            }))
+            .is_err()
+        );
+        assert_eq!(source.calls.get(), 0);
+    }
+}
+
+#[test]
+fn row_calibration_reuses_scans_and_preserves_zero_scale_fallback() {
+    let source = Dense {
+        values: [[1.0_f32, 3.0], [4.0, 4.0]],
+        reads: Cell::new(0),
+    };
+    let raw = RowNormalization::robust().fit(&source).unwrap();
+    let raw_reads = source.reads.replace(0);
+    let calibrated = RowNormalization::new(
+        lazymatrix::Centering::Median,
+        Scaling::QuantileRange {
+            range: QuantileRange::default(),
+            unit_variance: true,
+        },
+    )
+    .fit(&source)
+    .unwrap();
+    assert_eq!(source.reads.get(), raw_reads);
+    assert_eq!(calibrated.centers(), raw.centers());
+    approx::assert_relative_eq!(
+        calibrated.scales().unwrap()[0],
+        (1.0 / 1.3489795003921634) as f32,
+        epsilon = 1e-7
+    );
+    assert_eq!(calibrated.scales().unwrap()[1], 1.0);
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]

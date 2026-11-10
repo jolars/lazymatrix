@@ -110,7 +110,7 @@ impl<A: ZarrArray<F>, F: Scalar> ColumnStats<F> for ZarrMatrix<A, F> {
         &self,
         spec: ColumnNormalization,
     ) -> Result<crate::ColumnNormalizationStats<F>, Self::Error> {
-        if spec.center == Centering::Median || matches!(spec.scale, Scaling::QuantileRange(_)) {
+        if spec.center == Centering::Median || matches!(spec.scale, Scaling::QuantileRange { .. }) {
             return crate::quantiles::fit(self, spec, |request| self.quantiles(request));
         }
         if spec == ColumnNormalization::default() {

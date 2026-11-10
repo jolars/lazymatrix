@@ -130,15 +130,38 @@ use lazymatrix::{Centering, QuantileRange, Scaling};
 
 let custom = ColumnNormalization::new(
     Centering::Median,
-    Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+    Scaling::QuantileRange {
+        range: QuantileRange::new(0.1, 0.9),
+        unit_variance: false,
+    },
 );
 let robust = LazyMatrix::new(x.view(), custom).unwrap();
 ```
 
 Bounds are probabilities satisfying `0 <= lower < upper <= 1`; invalid bounds panic.
 Median centering and quantile-range scaling can also be used independently or
-combined with the existing options. Unlike standard-normal calibration, a raw
-quantile range does not target unit variance.
+combined with the existing options. `robust()` and `unit_variance: false` divide
+by the raw quantile range.
+
+Set `unit_variance: true` to calibrate the scale to a normal distribution:
+
+```rust
+let calibrated = ColumnNormalization::new(
+    Centering::Median,
+    Scaling::QuantileRange {
+        range: QuantileRange::default(),
+        unit_variance: true,
+    },
+);
+```
+
+Calibration divides the observed quantile range by the corresponding standard
+normal quantile range, approximately `1.34898` for the interquartile range.
+It targets unit variance for normally distributed data; finite samples and
+other distributions can have different variances. Calibrated bounds must be
+strictly inside `(0, 1)`; fitting with an endpoint panics. Exact zero scales
+become one after calibration. The same `Scaling` option works with
+`RowNormalization`, and calibration adds no storage scans.
 
 Fitting uses exact quantiles with linear interpolation at `(nrows - 1) * q`.
 Dense and CSC backends sort one working column at a time. CSR and Zarr use

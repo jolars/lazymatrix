@@ -25,7 +25,7 @@ assuming full API or numerical parity.
     selection state and exact repeated scans without storage conversion.
     Document scan costs, workspace, and numerical differences from scikit-learn.
 
-- [ ] Evaluate optional standard-normal calibration (`unit_variance`) for
+- [x] Add optional standard-normal calibration (`unit_variance`) for
   quantile-range scaling, as provided by `RobustScaler`.
 
 - [ ] Consider explicitly approximate quantiles if storage-backed consumers need

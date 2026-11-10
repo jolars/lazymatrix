@@ -125,7 +125,10 @@ fn row_fitting_and_products_stream_serial_scans() {
             RowNormalization::new(Centering::Median, Scaling::None),
             RowNormalization::new(
                 Centering::None,
-                Scaling::QuantileRange(QuantileRange::default()),
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: false,
+                },
             ),
         ] {
             store.reset();

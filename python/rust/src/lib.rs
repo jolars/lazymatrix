@@ -44,7 +44,7 @@ fn infallible<T>(result: Result<T, Infallible>) -> T {
     }
 }
 
-type Specification = (usize, String, String, usize, (f64, f64));
+type Specification = (usize, String, String, usize, (f64, f64), bool);
 
 fn fitted<M>(
     raw: &M,
@@ -71,7 +71,7 @@ where
             }
             Ok(params.inner.clone())
         }
-        (Some((axis, center, scale, df, (lower, upper))), None) => {
+        (Some((axis, center, scale, df, (lower, upper), unit_variance)), None) => {
             validate_axis(axis)?;
             if axis == 0 && raw.nrows() == 0 {
                 return Err(PyValueError::new_err("input must have at least one row"));
@@ -96,11 +96,19 @@ where
                     "quantile bounds must satisfy 0 <= lower < upper <= 1",
                 ));
             }
+            if unit_variance && (scale != "quantile_range" || !(0.0 < lower && upper < 1.0)) {
+                return Err(PyValueError::new_err(
+                    "unit_variance requires quantile-range scaling with bounds strictly inside (0, 1)",
+                ));
+            }
             let scale = match scale.as_str() {
                 "none" => Scaling::None,
                 "sd" => Scaling::Sd { df },
                 "range" => Scaling::Range,
-                "quantile_range" => Scaling::QuantileRange(QuantileRange::new(lower, upper)),
+                "quantile_range" => Scaling::QuantileRange {
+                    range: QuantileRange::new(lower, upper),
+                    unit_variance,
+                },
                 "maxabs" => Scaling::MaxAbs,
                 "l1" => Scaling::L1,
                 "l2" => Scaling::L2,

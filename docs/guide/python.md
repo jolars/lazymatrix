@@ -120,7 +120,22 @@ sparse zeros.
 Robust scaling uses the 25th and 75th percentiles by default. Pass
 `quantile_range=(0.1, 0.9)` for the 10th-to-90th percentile range. Bounds are
 probabilities satisfying `0 <= lower < upper <= 1`. Quantiles use exact linear
-interpolation, and quantile-range scaling does not target unit variance.
+interpolation. By default, scaling divides by the raw quantile range.
+
+Use `unit_variance=True` for standard-normal calibration:
+
+```python
+calibrated = normalize(X, center="median", scale="quantile_range", unit_variance=True)
+```
+
+This divides the observed range by the corresponding standard normal quantile
+range, approximately `1.34898` for the interquartile range. It targets unit
+variance for normally distributed data; it does not guarantee unit sample
+variance for arbitrary data. Calibration requires `scale="quantile_range"` and
+bounds strictly inside `(0, 1)`. Exact zero scales become one after calibration.
+The option also works with `LazyMatrix`, `ColumnNormalization`,
+`RowNormalization`, and `axis=1`. Fitted parameters retain the calibrated scales
+for reuse without further correction.
 
 Min-max scaling maps finite, nonconstant training columns to `[0, 1]`. New
 observations can fall outside that interval; reusing the parameters does not

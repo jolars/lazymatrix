@@ -62,6 +62,7 @@ pub(crate) fn stats<M: Source<F>, F: Scalar>(
     matrix: &M,
     spec: RowNormalization,
 ) -> Result<RowNormalizationStats<F>, M::Error> {
+    spec.scale.validate_quantile_range();
     #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
     if matches!(matrix.traversal_layout(), Layout::SparseRows) {
         return buffered_stats(matrix, spec);
@@ -107,7 +108,10 @@ fn buffered_stats<M: Source<F>, F: Scalar>(
         finish(&mut values);
         current += 1;
     }
-    Ok((centers, scales))
+    Ok((
+        centers,
+        scales.map(|values| spec.scale.calibrate_quantile_scales(values)),
+    ))
 }
 
 #[cfg(any(feature = "faer_all", feature = "nalgebra_all", feature = "sprs_all"))]
@@ -137,7 +141,7 @@ fn fit_row<F: Scalar>(
     let centered = |v| center.map_or(v, |c| v - c);
     let scale = match spec.scale {
         Scaling::None => None,
-        Scaling::QuantileRange(_) => range,
+        Scaling::QuantileRange { .. } => range,
         Scaling::Range => Some(max - min),
         Scaling::Sd { df } => {
             let squares = sum_with_zeros(values, missing, |v| (v - mean) * (v - mean));

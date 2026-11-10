@@ -18,7 +18,7 @@ class Params:
     @property
     def scales(self) -> NDArray[np.float64] | None: ...
 
-Specification = tuple[int, str, str, int, tuple[float, float]]
+Specification = tuple[int, str, str, int, tuple[float, float], bool]
 
 class Matrix:
     @staticmethod

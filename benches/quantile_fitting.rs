@@ -182,7 +182,10 @@ fn main() {
         let expected = sorted_reference(&raw);
         let spec = ColumnNormalization::new(
             Centering::Median,
-            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
         );
         profile(
             case,

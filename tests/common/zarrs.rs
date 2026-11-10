@@ -912,7 +912,10 @@ fn quantile_fitting_shares_scans_and_propagates_later_failures() {
         let (matrix, store) = tracked(compressed);
         let spec = ColumnNormalization::new(
             Centering::Median,
-            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
         );
         let lazy = LazyMatrix::new(&matrix, spec).unwrap();
         assert_eq!(lazy.normalization().centers().unwrap(), [7.0, 8.0, 9.0]);

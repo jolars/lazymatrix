@@ -135,10 +135,11 @@ impl Request {
     }
 
     fn from_spec(spec: ColumnNormalization) -> Self {
+        spec.scale.validate_quantile_range();
         Self {
             median: spec.center == Centering::Median,
             range: match spec.scale {
-                Scaling::QuantileRange(range) => Some(range),
+                Scaling::QuantileRange { range, .. } => Some(range),
                 _ => None,
             },
         }

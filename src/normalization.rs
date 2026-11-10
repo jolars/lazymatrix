@@ -1,3 +1,4 @@
+mod normal;
 pub(crate) mod pipeline;
 pub(crate) mod row;
 
@@ -174,10 +175,58 @@ pub enum Scaling {
     L2,
     /// Divide by the range, `max - min`.
     Range,
-    /// Divide by the upper quantile minus the lower quantile.
+    /// Divide by the optionally calibrated upper quantile minus lower quantile.
     ///
     /// Quantiles use linear interpolation at position `(n - 1) * q`.
-    QuantileRange(QuantileRange),
+    QuantileRange {
+        /// Lower and upper quantile probabilities.
+        range: QuantileRange,
+        /// Calibrate the range to estimate a normal distribution's standard deviation.
+        ///
+        /// Divides the observed range by `Phi^-1(upper) - Phi^-1(lower)`,
+        /// where `Phi^-1` is the standard normal quantile function. For the
+        /// interquartile range, this divisor is approximately `1.34898`.
+        /// This targets unit variance for normally distributed data; it does
+        /// not guarantee unit sample variance or change the distribution's shape.
+        /// Fitting still replaces exact zero scales with one after calibration.
+        ///
+        /// # Panics
+        /// Fitting or requesting normalization statistics panics when this is
+        /// `true` and either bound is an endpoint (`0` or `1`).
+        unit_variance: bool,
+    },
+}
+
+impl Scaling {
+    pub(crate) fn validate_quantile_range(self) {
+        if let Self::QuantileRange {
+            range,
+            unit_variance: true,
+        } = self
+        {
+            assert!(
+                range.lower() > 0.0 && range.upper() < 1.0,
+                "unit_variance requires quantile bounds strictly inside (0, 1)"
+            );
+        }
+    }
+
+    pub(crate) fn calibrate_quantile_scales<F: crate::Scalar>(self, mut scales: Vec<F>) -> Vec<F> {
+        let Self::QuantileRange {
+            range,
+            unit_variance: true,
+        } = self
+        else {
+            return scales;
+        };
+        self.validate_quantile_range();
+        let divisor = normal::quantile_range(range.lower(), range.upper());
+        for scale in &mut scales {
+            // Keep narrow f64 probability ranges representable for f32 data.
+            *scale = F::from_f64(scale.to_f64().unwrap() / divisor).unwrap();
+        }
+        scales
+    }
 }
 
 /// A column normalization specification: an independent [`Centering`] and
@@ -222,7 +271,8 @@ impl ColumnNormalization {
     ///
     /// # Panics
     /// Panics if the backend returns a center or scale vector whose length
-    /// differs from the number of columns.
+    /// differs from the number of columns, or if calibrated quantile bounds
+    /// contain an endpoint (`0` or `1`).
     ///
     /// ```
     /// # #[cfg(feature = "ndarray_v0_17")]
@@ -243,6 +293,7 @@ impl ColumnNormalization {
         M: crate::ColumnStats<F> + crate::MatrixShape + ?Sized,
         F: crate::Scalar,
     {
+        self.scale.validate_quantile_range();
         let (centers, scales) = data.normalization_stats(self)?;
         Ok(ColumnNormalizationParams::from_parts(
             data.ncols(),
@@ -263,6 +314,7 @@ impl ColumnNormalization {
     ///
     /// # Panics
     /// Panics if the backend returns parameter vectors with incorrect lengths.
+    /// Also panics if calibrated quantile bounds contain an endpoint (`0` or `1`).
     pub fn fit_apply<M, F>(
         self,
         data: M,
@@ -299,11 +351,15 @@ impl ColumnNormalization {
     /// The range uses the 25th and 75th percentiles with linear interpolation
     /// at `(nrows - 1) * q`. It has no standard-normal calibration and does not
     /// target unit variance. Fitting replaces exact zero ranges with one.
-    /// Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds.
+    /// Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds
+    /// or standard-normal calibration through `unit_variance: true`.
     pub fn robust() -> Self {
         Self::new(
             Centering::Median,
-            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
         )
     }
 }
@@ -495,6 +551,10 @@ impl RowNormalization {
     /// # Errors
     /// Returns the backend error if computing row statistics fails.
     ///
+    /// # Panics
+    /// Panics if the backend returns parameter vectors with incorrect lengths,
+    /// or if calibrated quantile bounds contain an endpoint (`0` or `1`).
+    ///
     /// ```
     /// # #[cfg(feature = "ndarray_v0_17")]
     /// # {
@@ -514,6 +574,7 @@ impl RowNormalization {
         M: crate::RowStats<F> + ?Sized,
         F: crate::Scalar,
     {
+        self.scale.validate_quantile_range();
         let (centers, scales) = data.row_normalization_stats(self)?;
         let scales = scales.map(replace_zero_scales);
         Ok(RowNormalizationParams::from_parts(
@@ -564,11 +625,15 @@ impl RowNormalization {
     ///
     /// Quantiles use linear interpolation at `(ncols - 1) * q`. There is no
     /// standard-normal calibration. Fitting replaces exact zero ranges with
-    /// one. Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds.
+    /// one. Use [`Self::new`] with [`Scaling::QuantileRange`] for custom bounds
+    /// or standard-normal calibration through `unit_variance: true`.
     pub fn robust() -> Self {
         Self::new(
             Centering::Median,
-            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
         )
     }
 }

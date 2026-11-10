@@ -21,7 +21,7 @@ def _real_array(value: Any) -> NDArray[np.float64]:
 Centering = bool | Literal["none", "mean", "min", "median"]
 Scaling = bool | Literal["none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"]
 NormalizationAxis = Literal[0, 1]
-Specification = tuple[int, str, str, int, tuple[float, float]]
+Specification = tuple[int, str, str, int, tuple[float, float], bool]
 
 
 def _method(value: Any, name: str, default: str, choices: tuple[str, ...]) -> str:
@@ -40,6 +40,7 @@ def _specification(
     scale: Scaling,
     df: int,
     quantile_range: tuple[float, float],
+    unit_variance: bool,
 ) -> Specification:
     if isinstance(axis, (bool, np.bool_)):
         raise TypeError("axis must be the integer 0 or 1")
@@ -62,7 +63,16 @@ def _specification(
     lower, upper = map(float, bounds)
     if not (np.isfinite(bounds).all() and 0 <= lower < upper <= 1):
         raise ValueError("quantile bounds must satisfy 0 <= lower < upper <= 1")
-    return axis, center, scale, df, (lower, upper)
+    if not isinstance(unit_variance, (bool, np.bool_)):
+        raise TypeError("unit_variance must be a boolean")
+    if unit_variance:
+        if scale != "quantile_range":
+            raise ValueError('unit_variance requires scale="quantile_range"')
+        if not (0 < lower < upper < 1):
+            raise ValueError(
+                "unit_variance requires quantile bounds strictly inside (0, 1)"
+            )
+    return axis, center, scale, df, (lower, upper), bool(unit_variance)
 
 
 class _NormalizationParams:
@@ -211,9 +221,10 @@ class _Normalization:
         scale: Scaling = True,
         df: int = 0,
         quantile_range: tuple[float, float] = (0.25, 0.75),
+        unit_variance: bool = False,
     ) -> None:
         self._specification = _specification(
-            self._axis, center, scale, df, quantile_range
+            self._axis, center, scale, df, quantile_range, unit_variance
         )
         self._center = center
         self._scale = scale
@@ -238,6 +249,11 @@ class _Normalization:
         """The fixed lower and upper quantile probabilities."""
         return self._specification[4]
 
+    @property
+    def unit_variance(self) -> bool:
+        """Whether quantile ranges use standard-normal calibration."""
+        return self._specification[5]
+
     def _fit_apply(self, X: Any) -> "LazyMatrix":
         result = LazyMatrix.__new__(LazyMatrix)
         result._initialize(X, self._specification, None)
@@ -247,7 +263,7 @@ class _Normalization:
 class ColumnNormalization(_Normalization):
     """An immutable recipe for fitting column centers and scales.
 
-    The keyword-only center, scale, df, and quantile_range options follow
+    The keyword-only center, scale, df, quantile_range, and unit_variance options follow
     LazyMatrix with axis=0. Defaults select means and population standard
     deviations. ``fit`` returns ColumnNormalizationParams, and ``fit_apply``
     returns a LazyMatrix. Reuse fitted column parameters on new samples with
@@ -264,9 +280,14 @@ class ColumnNormalization(_Normalization):
         scale: Scaling = True,
         df: int = 0,
         quantile_range: tuple[float, float] = (0.25, 0.75),
+        unit_variance: bool = False,
     ) -> None:
         super().__init__(
-            center=center, scale=scale, df=df, quantile_range=quantile_range
+            center=center,
+            scale=scale,
+            df=df,
+            quantile_range=quantile_range,
+            unit_variance=unit_variance,
         )
 
     def fit(self, X: Any) -> ColumnNormalizationParams:
@@ -290,7 +311,7 @@ class ColumnNormalization(_Normalization):
 class RowNormalization(_Normalization):
     """An immutable recipe for fitting each row independently.
 
-    The keyword-only center, scale, df, and quantile_range options follow
+    The keyword-only center, scale, df, quantile_range, and unit_variance options follow
     LazyMatrix with axis=1. Defaults select means and population standard
     deviations. ``fit`` returns RowNormalizationParams, and ``fit_apply``
     returns a LazyMatrix. Fit new samples with another call to ``fit_apply``;
@@ -316,9 +337,14 @@ class RowNormalization(_Normalization):
         scale: Scaling = True,
         df: int = 0,
         quantile_range: tuple[float, float] = (0.25, 0.75),
+        unit_variance: bool = False,
     ) -> None:
         super().__init__(
-            center=center, scale=scale, df=df, quantile_range=quantile_range
+            center=center,
+            scale=scale,
+            df=df,
+            quantile_range=quantile_range,
+            unit_variance=unit_variance,
         )
 
     def fit(self, X: Any) -> RowNormalizationParams:
@@ -367,8 +393,13 @@ class LazyMatrix:
     quantile_range : tuple of float, default=(0.25, 0.75)
         Lower and upper probabilities satisfying 0 <= lower < upper <= 1.
         Quantile-range scaling uses exact linear quantiles at (n - 1) * q,
-        where n is the fitted axis length,
-        without standard-normal calibration. Bounds are validated for all methods.
+        where n is the fitted axis length. Bounds are validated for all methods.
+    unit_variance : bool, default=False
+        Calibrate quantile-range scales by the corresponding standard-normal
+        quantile range (approximately 1.34898 for the interquartile range).
+        Requires scale="quantile_range" and bounds strictly inside (0, 1).
+        Targets unit variance for normally distributed data, without guaranteeing
+        unit sample variance. Exact zero scales become one after calibration.
 
     Notes
     -----
@@ -404,9 +435,12 @@ class LazyMatrix:
         scale: Scaling = True,
         df: int = 0,
         quantile_range: tuple[float, float] = (0.25, 0.75),
+        unit_variance: bool = False,
     ) -> None:
         self._initialize(
-            X, _specification(axis, center, scale, df, quantile_range), None
+            X,
+            _specification(axis, center, scale, df, quantile_range, unit_variance),
+            None,
         )
 
     @classmethod
@@ -611,6 +645,7 @@ def normalize(
     scale: Scaling = True,
     df: int = 0,
     quantile_range: tuple[float, float] = (0.25, 0.75),
+    unit_variance: bool = False,
 ) -> LazyMatrix:
     """Fit centers and scales and return a lazy matrix.
 
@@ -640,8 +675,13 @@ def normalize(
     quantile_range : tuple of float, default=(0.25, 0.75)
         Lower and upper probabilities satisfying 0 <= lower < upper <= 1.
         Quantile-range scaling uses exact linear quantiles at (n - 1) * q,
-        where n is the fitted axis length, without standard-normal calibration.
-        Bounds are validated for all methods.
+        where n is the fitted axis length. Bounds are validated for all methods.
+    unit_variance : bool, default=False
+        Calibrate quantile-range scales by the corresponding standard-normal
+        quantile range (approximately 1.34898 for the interquartile range).
+        Requires scale="quantile_range" and bounds strictly inside (0, 1).
+        Targets unit variance for normally distributed data, without guaranteeing
+        unit sample variance. Exact zero scales become one after calibration.
 
     Returns
     -------
@@ -687,6 +727,7 @@ def normalize(
         scale=scale,
         df=df,
         quantile_range=quantile_range,
+        unit_variance=unit_variance,
     )
 
 

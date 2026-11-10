@@ -101,7 +101,10 @@ macro_rules! backend_suite {
                         Scaling::L2,
                         Scaling::MaxAbs,
                         Scaling::Range,
-                        Scaling::QuantileRange(lazymatrix::QuantileRange::default()),
+                        Scaling::QuantileRange {
+                            range: lazymatrix::QuantileRange::default(),
+                            unit_variance: false,
+                        },
                     ] {
                         if matrix.nrows() <= 1
                             && (center != Centering::None || scale != Scaling::None)

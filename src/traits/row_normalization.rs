@@ -11,6 +11,10 @@ pub trait RowStats<F: Scalar>: MatrixShape + MatrixErrorType {
     ///
     /// Backends can share scans through this hook. Returns the first storage
     /// error encountered while computing the statistics.
+    /// Quantile-range scales include the requested standard-normal calibration.
+    ///
+    /// # Panics
+    /// Panics if calibrated quantile bounds contain an endpoint (`0` or `1`).
     fn row_normalization_stats(
         &self,
         spec: RowNormalization,

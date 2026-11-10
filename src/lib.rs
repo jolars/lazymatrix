@@ -311,7 +311,10 @@
 //! let robust = ColumnNormalization::robust();
 //! let custom = ColumnNormalization::new(
 //!     Centering::Median,
-//!     Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+//!     Scaling::QuantileRange {
+//!         range: QuantileRange::new(0.1, 0.9),
+//!         unit_variance: false,
+//!     },
 //! );
 //! ```
 //!
@@ -321,7 +324,11 @@
 //! use O(ncols) selection state and a data-dependent number of scans. These
 //! streaming costs also apply to [`IndexedRows`] for every storage orientation.
 //! Quantile fitting remains serial when `parallel` is enabled. Custom
-//! [`ColumnStats`] implementations must provide [`ColumnStats::col_medians`]
+//! quantile-range recipes can set `unit_variance: true` to divide the scale by
+//! the corresponding standard normal quantile range. This targets unit variance
+//! for normally distributed data and requires bounds strictly inside `(0, 1)`.
+//! Calibration adds no storage scans; exact zero scales become one afterward.
+//! Custom [`ColumnStats`] implementations must provide [`ColumnStats::col_medians`]
 //! and [`ColumnStats::col_quantile_ranges`] alongside the existing reductions.
 //!
 //! With any ndarray version feature, a matrix view borrows the original array:

@@ -185,7 +185,18 @@ where
                 Scaling::L2,
                 Scaling::MaxAbs,
                 Scaling::Range,
-                Scaling::QuantileRange(QuantileRange::default()),
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: false,
+                },
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: true,
+                },
+                Scaling::QuantileRange {
+                    range: QuantileRange::new(0.1, 0.9),
+                    unit_variance: true,
+                },
             ] {
                 let lazy =
                     LazyMatrix::new(&matrix, ColumnNormalization::new(center, scale)).unwrap();
@@ -696,9 +707,26 @@ where
             Scaling::L2,
             Scaling::MaxAbs,
             Scaling::Range,
-            Scaling::QuantileRange(QuantileRange::default()),
-            Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
-            Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::new(0.1, 0.9),
+                unit_variance: false,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::new(0.0, 1.0),
+                unit_variance: false,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: true,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::new(0.1, 0.9),
+                unit_variance: true,
+            },
         ] {
             let spec = RowNormalization::new(center, scale);
             let params = spec.fit(&matrix).unwrap();
@@ -842,8 +870,17 @@ fn row_normalization_oracle(
                         }
                     }
                     Scaling::Range => max(row) - min(row),
-                    Scaling::QuantileRange(q) => {
-                        sorted_quantile(row, q.upper()) - sorted_quantile(row, q.lower())
+                    Scaling::QuantileRange {
+                        range: q,
+                        unit_variance,
+                    } => {
+                        let range =
+                            sorted_quantile(row, q.upper()) - sorted_quantile(row, q.lower());
+                        if unit_variance {
+                            range / normal_range_reference(q)
+                        } else {
+                            range
+                        }
                     }
                     Scaling::L1 => centered.iter().map(|v| v.abs()).sum(),
                     Scaling::L2 => centered.iter().map(|v| v * v).sum::<f64>().sqrt(),
@@ -1047,21 +1084,35 @@ pub fn run_row_normalization_f32_suite<M, V>(
 {
     use lazymatrix::RowNormalization;
     let raw = vec![vec![1e8_f32, 1e8 + 8.0, 1e8 + 16.0, 1e8 + 24.0]];
-    let spec = RowNormalization::new(
-        Centering::Median,
-        Scaling::QuantileRange(QuantileRange::new(0.125, 0.875)),
-    );
-    let lazy = LazyMatrix::new(build(&raw), spec).unwrap();
-    assert_eq!(lazy.normalization().scales().unwrap(), &[18.0]);
-    check_row_normalized_products(
-        &lazy,
-        &materialize_rows(
-            &raw,
-            lazy.normalization().centers(),
-            lazy.normalization().scales(),
-        ),
-        &to_v,
-    );
+    for unit_variance in [false, true] {
+        let spec = RowNormalization::new(
+            Centering::Median,
+            Scaling::QuantileRange {
+                range: QuantileRange::new(0.125, 0.875),
+                unit_variance,
+            },
+        );
+        let lazy = LazyMatrix::new(build(&raw), spec).unwrap();
+        let expected = if unit_variance {
+            (18.0 / normal_range_reference(QuantileRange::new(0.125, 0.875))) as f32
+        } else {
+            18.0
+        };
+        approx::assert_relative_eq!(
+            lazy.normalization().scales().unwrap()[0],
+            expected,
+            epsilon = 1e-6
+        );
+        check_row_normalized_products(
+            &lazy,
+            &materialize_rows(
+                &raw,
+                lazy.normalization().centers(),
+                lazy.normalization().scales(),
+            ),
+            &to_v,
+        );
+    }
     let raw = vec![vec![1e38_f32, 1e38], vec![0.0, 0.0]];
     let lazy = LazyMatrix::from_row_parts(build(&raw), None, Some(vec![1e38, 1.0]));
     check_row_normalized_products(&lazy, &[vec![1.0, 1.0], vec![0.0, 0.0]], &to_v);
@@ -4068,8 +4119,22 @@ fn new_matches_oracle<M, V>(
         Scaling::L2,
         Scaling::MaxAbs,
         Scaling::Range,
-        Scaling::QuantileRange(QuantileRange::default()),
-        Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+        Scaling::QuantileRange {
+            range: QuantileRange::default(),
+            unit_variance: false,
+        },
+        Scaling::QuantileRange {
+            range: QuantileRange::new(0.1, 0.9),
+            unit_variance: false,
+        },
+        Scaling::QuantileRange {
+            range: QuantileRange::default(),
+            unit_variance: true,
+        },
+        Scaling::QuantileRange {
+            range: QuantileRange::new(0.1, 0.9),
+            unit_variance: true,
+        },
     ];
     for center in centerings {
         for scale in scalings {
@@ -4091,7 +4156,7 @@ fn new_matches_oracle<M, V>(
                 epsilon = 1e-9
             );
 
-            if center == Centering::Median || matches!(scale, Scaling::QuantileRange(_)) {
+            if center == Centering::Median || matches!(scale, Scaling::QuantileRange { .. }) {
                 let prediction = random_matrix(141, 7, tm.ncols, 0.6);
                 let reused =
                     LazyMatrix::from_parts(build(&prediction), lazy.normalization().clone());
@@ -4123,6 +4188,15 @@ fn sorted_quantile(values: &[f64], q: f64) -> f64 {
         sorted[lo]
     } else {
         sorted[lo] * (1.0 - (rank - lo as f64)) + sorted[hi] * (rank - lo as f64)
+    }
+}
+
+fn normal_range_reference(range: QuantileRange) -> f64 {
+    match (range.lower(), range.upper()) {
+        (0.25, 0.75) => 1.3489795003921634,
+        (0.1, 0.9) => 2.5631031310892007,
+        (0.125, 0.875) => 2.300698760752016,
+        _ => panic!("add an independent standard-normal reference for this range"),
     }
 }
 
@@ -4172,17 +4246,37 @@ where
                 })
                 .collect();
             assert_quantile_values(&matrix.col_quantile_ranges(range).unwrap(), &ranges, EPS);
-            let normalized = LazyMatrix::new(
-                &matrix,
-                ColumnNormalization::new(Centering::Median, Scaling::QuantileRange(range)),
-            )
-            .unwrap();
-            assert_quantile_values(normalized.normalization().centers().unwrap(), &medians, EPS);
-            let guarded: Vec<_> = ranges
-                .iter()
-                .map(|&x| if x == 0.0 { 1.0 } else { x })
-                .collect();
-            assert_quantile_values(normalized.normalization().scales().unwrap(), &guarded, EPS);
+            for unit_variance in [false, true] {
+                if unit_variance && (range.lower() == 0.0 || range.upper() == 1.0) {
+                    continue;
+                }
+                let divisor = if unit_variance {
+                    normal_range_reference(range)
+                } else {
+                    1.0
+                };
+                let spec = ColumnNormalization::new(
+                    Centering::Median,
+                    Scaling::QuantileRange {
+                        range,
+                        unit_variance,
+                    },
+                );
+                let (_, raw_scales) = matrix.normalization_stats(spec).unwrap();
+                let expected: Vec<_> = ranges.iter().map(|&x| x / divisor).collect();
+                assert_quantile_values(&raw_scales.unwrap(), &expected, EPS);
+                let normalized = LazyMatrix::new(&matrix, spec).unwrap();
+                assert_quantile_values(
+                    normalized.normalization().centers().unwrap(),
+                    &medians,
+                    EPS,
+                );
+                let guarded: Vec<_> = expected
+                    .iter()
+                    .map(|&x| if x == 0.0 { 1.0 } else { x })
+                    .collect();
+                assert_quantile_values(normalized.normalization().scales().unwrap(), &guarded, EPS);
+            }
         }
     }
 
@@ -4305,8 +4399,22 @@ where
             Scaling::L2,
             Scaling::MaxAbs,
             Scaling::Range,
-            Scaling::QuantileRange(QuantileRange::default()),
-            Scaling::QuantileRange(QuantileRange::new(0.0, 1.0)),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::new(0.0, 1.0),
+                unit_variance: false,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: true,
+            },
+            Scaling::QuantileRange {
+                range: QuantileRange::new(0.1, 0.9),
+                unit_variance: true,
+            },
         ] {
             let spec = ColumnNormalization::new(center, scale);
             let (centers, scales) = matrix.normalization_stats(spec).unwrap();
@@ -4350,10 +4458,27 @@ pub fn check_column_stats_f32<M: ColumnStats<f32>>(matrix: &M) {
     let stats = matrix
         .normalization_stats(ColumnNormalization::new(
             Centering::Median,
-            Scaling::QuantileRange(QuantileRange::default()),
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: false,
+            },
         ))
         .unwrap();
     assert_eq!(stats, (Some(vec![2.0]), Some(vec![1.0])));
+    let (_, scales) = matrix
+        .normalization_stats(ColumnNormalization::new(
+            Centering::Median,
+            Scaling::QuantileRange {
+                range: QuantileRange::default(),
+                unit_variance: true,
+            },
+        ))
+        .unwrap();
+    approx::assert_relative_eq!(
+        scales.unwrap()[0],
+        (1.0 / normal_range_reference(QuantileRange::default())) as f32,
+        epsilon = 1e-6
+    );
 }
 
 /// (5): `ColumnStats` against hand-computed values on a fixed tiny matrix,
@@ -4600,8 +4725,19 @@ fn intercept_products<M, V>(
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::Range,
-                Scaling::QuantileRange(QuantileRange::default()),
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: false,
+                },
                 Scaling::MaxAbs,
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: true,
+                },
+                Scaling::QuantileRange {
+                    range: QuantileRange::new(0.1, 0.9),
+                    unit_variance: true,
+                },
             ] {
                 // Empty statistics can be nonfinite; finite explicit parameters
                 // isolate the operator's empty-sum behavior in this fixture.
@@ -4974,7 +5110,18 @@ where
                 Scaling::L1,
                 Scaling::L2,
                 Scaling::MaxAbs,
-                Scaling::QuantileRange(QuantileRange::default()),
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: false,
+                },
+                Scaling::QuantileRange {
+                    range: QuantileRange::default(),
+                    unit_variance: true,
+                },
+                Scaling::QuantileRange {
+                    range: QuantileRange::new(0.1, 0.9),
+                    unit_variance: true,
+                },
             ] {
                 let lazy =
                     LazyMatrix::new(&source, ColumnNormalization::new(center, scale)).unwrap();
@@ -5813,7 +5960,18 @@ where
                     Scaling::L2,
                     Scaling::MaxAbs,
                     Scaling::Range,
-                    Scaling::QuantileRange(QuantileRange::new(0.1, 0.9)),
+                    Scaling::QuantileRange {
+                        range: QuantileRange::new(0.1, 0.9),
+                        unit_variance: false,
+                    },
+                    Scaling::QuantileRange {
+                        range: QuantileRange::default(),
+                        unit_variance: true,
+                    },
+                    Scaling::QuantileRange {
+                        range: QuantileRange::new(0.1, 0.9),
+                        unit_variance: true,
+                    },
                 ] {
                     let spec = ColumnNormalization::new(center, scale);
                     let fitted = LazyMatrix::new(&selected, spec).unwrap();
