@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "lazymatrix"
-version = "0.4.0"
+version = "0.5.0"
 description = "Lazy row and column normalization for NumPy, SciPy, and PyTorch"
 readme = "README.md"
 requires-python = ">=3.11"

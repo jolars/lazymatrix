@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.12.0](https://github.com/jolars/lazymatrix/compare/v0.11.0...v0.12.0) (2026-11-11)
+
+### Breaking changes
+
+- support custom normalization recipes ([`fa9d877`](https://github.com/jolars/lazymatrix/commit/fa9d8778d761ee6ed61998c9f203cc88d20ab810))
+- add calibrated quantile scaling ([`4662044`](https://github.com/jolars/lazymatrix/commit/4662044cf11db4e485baf6bbb704f6d3005b74a1))
+- **python:** expose row normalization ([`499a402`](https://github.com/jolars/lazymatrix/commit/499a4024aa89058d02928287f7874d42fecda1f9))
+- add borrowed row and chain columns ([`5c2baff`](https://github.com/jolars/lazymatrix/commit/5c2baff4266309c88e3a96346ca2f0804338bc5a))
+
+### Features
+
+- support custom normalization recipes ([`fa9d877`](https://github.com/jolars/lazymatrix/commit/fa9d8778d761ee6ed61998c9f203cc88d20ab810))
+- add calibrated quantile scaling ([`4662044`](https://github.com/jolars/lazymatrix/commit/4662044cf11db4e485baf6bbb704f6d3005b74a1))
+- **python:** add `normalize()` factory ([`bb86947`](https://github.com/jolars/lazymatrix/commit/bb869474f1afe8072ec116b17e824f7f83e1f78c))
+- **python:** expose row normalization ([`499a402`](https://github.com/jolars/lazymatrix/commit/499a4024aa89058d02928287f7874d42fecda1f9))
+- add eager row and chain conversion ([`7c524b8`](https://github.com/jolars/lazymatrix/commit/7c524b8862de9e98f26fb5a4dff28d75f6e8df5d))
+- add weighted row and chain operations ([`8c25789`](https://github.com/jolars/lazymatrix/commit/8c25789ecf88ecbc6e5a909f0a341a794ff8008a))
+- add borrowed row and chain columns ([`5c2baff`](https://github.com/jolars/lazymatrix/commit/5c2baff4266309c88e3a96346ca2f0804338bc5a))
+- add borrowed row and chain normalization ([`367b508`](https://github.com/jolars/lazymatrix/commit/367b508057c8daea440949373ebceba7d38ef4c6))
+- add batched row and chain products ([`a4e402f`](https://github.com/jolars/lazymatrix/commit/a4e402fff9b111b9ee7dd5c60a14f1355e33939c))
+
+### Bug Fixes
+
+- **ci:** pin pest for Rust 1.87 checks ([`4fd7582`](https://github.com/jolars/lazymatrix/commit/4fd7582cee98744b3e3ff79813273b3a2534a889))
+
 ## [0.11.0](https://github.com/jolars/lazymatrix/compare/v0.10.0...v0.11.0) (2026-11-06)
 
 ### Features
