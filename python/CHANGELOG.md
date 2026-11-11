@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/jolars/lazymatrix/compare/python-v0.4.0...python-v0.5.0) (2026-11-11)
+
+### Breaking changes
+
+- add calibrated quantile scaling ([`4662044`](https://github.com/jolars/lazymatrix/commit/4662044cf11db4e485baf6bbb704f6d3005b74a1))
+- **python:** expose row normalization ([`499a402`](https://github.com/jolars/lazymatrix/commit/499a4024aa89058d02928287f7874d42fecda1f9))
+
+### Features
+
+- add calibrated quantile scaling ([`4662044`](https://github.com/jolars/lazymatrix/commit/4662044cf11db4e485baf6bbb704f6d3005b74a1))
+- **python:** add `normalize()` factory ([`bb86947`](https://github.com/jolars/lazymatrix/commit/bb869474f1afe8072ec116b17e824f7f83e1f78c))
+- **python:** expose row normalization ([`499a402`](https://github.com/jolars/lazymatrix/commit/499a4024aa89058d02928287f7874d42fecda1f9))
+
+### Dependencies
+
+- updated lazymatrix to v0.12.0
+
 ## [0.4.0](https://github.com/jolars/lazymatrix/compare/python-v0.3.0...python-v0.4.0) (2026-11-06)
 
 ### Dependencies
