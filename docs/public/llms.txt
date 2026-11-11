@@ -8,9 +8,12 @@ changes are expected.
 
 ## Documentation
 
-- [Getting started](https://lazymatrix.org/guide/getting-started): Installation, backend selection, and eager conversion.
+- [Getting started with Rust](https://lazymatrix.org/guide/getting-started): Install a backend, normalize a matrix, and reuse fitted parameters.
+- [Getting started with Python](https://lazymatrix.org/guide/python): Install the package, multiply by a normalized matrix, and reuse training parameters.
+- [Normalization](https://lazymatrix.org/guide/normalization): Centering and scaling, column and row recipes, fitted parameter reuse, persistence, and ordered stages.
+- [Using normalized matrices](https://lazymatrix.org/guide/matrix-operations): Forward and transpose products, SciPy solvers, submatrices, eager conversion, allocation control, and PyTorch integration.
+- [Backend setup](https://lazymatrix.org/guide/installation): Backend features, compiler requirements, optional BLAS acceleration, and Python installation.
 - [How it works](https://lazymatrix.org/guide/how-it-works): Normalization identities and sparse storage behavior.
-- [Python guide](https://lazymatrix.org/guide/python): NumPy and SciPy usage, ownership, and supported operations.
 - [Python API reference](https://lazymatrix.org/reference/python/): Public classes and methods.
 - [Rust API reference](https://lazymatrix.org/reference/rust/): Public types, traits, and methods.
 - [docs.rs](https://docs.rs/lazymatrix): The Rust API reference hosted by docs.rs.

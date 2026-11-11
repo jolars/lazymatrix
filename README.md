@@ -26,8 +26,7 @@ cargo add ndarray@0.17
 ```
 
 The core library requires Rust 1.84 or newer. Optional backends can require a
-newer compiler; see the [installation
-guide](https://lazymatrix.org/guide/getting-started#install-a-backend).
+newer compiler; see [backend setup](https://lazymatrix.org/guide/installation).
 
 For Python, run `pip install lazymatrix` and see the [Python
 README](python/README.md) for a quick start.
@@ -59,8 +58,8 @@ scales. Standardization uses population standard deviations. Use
 scaling. Centering and scaling are independently optional.
 
 Fit parameters once and reuse them for validation or prediction without
-refitting. The [getting-started
-guide](https://lazymatrix.org/guide/getting-started#reuse-fitted-parameters)
+refitting. The [normalization
+guide](https://lazymatrix.org/guide/normalization#reuse-fitted-parameters)
 shows how to share fitted parameters between operators.
 
 Implement `NormalizationRecipe<M, P>` for custom fitting methods that return
@@ -113,18 +112,22 @@ backend dependency to it. Enable `parallel` alongside a backend for parallel
 column statistics where supported.
 
 Optional BLAS acceleration is available for ndarray. See the [BLAS setup
-guide](https://lazymatrix.org/guide/getting-started#optional-blas-acceleration)
+guide](https://lazymatrix.org/guide/installation#optional-blas-acceleration)
 for features and provider configuration.
 
 ## Documentation
 
-- [Getting started](https://lazymatrix.org/guide/getting-started): installation,
-  normalization recipes, and fitted parameters.
+- [Getting started with Rust](https://lazymatrix.org/guide/getting-started):
+  installation, a first product, and parameter reuse.
+- [Normalization](https://lazymatrix.org/guide/normalization): choose recipes,
+  normalize rows, and reuse fitted parameters.
+- [Using normalized matrices](https://lazymatrix.org/guide/matrix-operations):
+  products, submatrices, and eager conversion.
 - [How it works](https://lazymatrix.org/guide/how-it-works): the algebra and
   memory tradeoffs.
 - [Rust API reference](https://docs.rs/lazymatrix): public types and backend
   capabilities.
-- [Python guide](https://lazymatrix.org/guide/python) and [API
+- [Getting started with Python](https://lazymatrix.org/guide/python) and [API
   reference](https://lazymatrix.org/reference/python/): NumPy, SciPy, and
   PyTorch integrations.
 - [Benchmarks](https://lazymatrix.org/benchmarks): runtime and memory

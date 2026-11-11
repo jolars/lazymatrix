@@ -3,7 +3,8 @@ layout: home
 hero:
   name: LazyMatrix
   text: Give your matrix a break.
-  tagline: Normalized design matrices for Rust. Keep sparse matrices sparse,
+  tagline:
+    Normalized design matrices for Rust and Python. Keep sparse matrices sparse,
     reuse fitted parameters, and choose when to materialize.
   image:
     light: /logo.png
@@ -11,8 +12,11 @@ hero:
     alt: A matrix relaxing in a beach chair under a palm tree.
   actions:
     - theme: brand
-      text: Get started
+      text: Get started with Rust
       link: /guide/getting-started
+    - theme: alt
+      text: Get started with Python
+      link: /guide/python
     - theme: alt
       text: Compare lazy and eager
       link: /benchmarks
@@ -82,8 +86,10 @@ BibTeX entries.
 
 ## Where to go next
 
-Read the [guide](/guide/getting-started) for installation and eager conversion,
-or see [how it works](/guide/how-it-works) for the normalization identities. The
+Start with [Rust](/guide/getting-started) or [Python](/guide/python) to normalize
+your first matrix, then see [normalization](/guide/normalization) and
+[using normalized matrices](/guide/matrix-operations) for the main workflows.
+Read [how it works](/guide/how-it-works) for the normalization identities. The
 [benchmark comparisons](/benchmarks) explain the costs of construction, repeated
 operations, and additional memory.
 

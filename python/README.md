@@ -9,9 +9,10 @@ CSC matrices during matrix operations, without constructing a normalized copy.
 It supports matrix products, SciPy's iterative solvers, and an optional PyTorch
 first layer.
 
-See the [Python guide](https://lazymatrix.org/guide/python) for supported
-operations and the [API reference](https://lazymatrix.org/reference/python/) for
-public classes and methods.
+See [using normalized matrices](https://lazymatrix.org/guide/matrix-operations)
+for supported operations and the
+[API reference](https://lazymatrix.org/reference/python/) for public classes and
+methods.
 
 ## Installation
 
@@ -69,9 +70,9 @@ and exact zero scales become one. Both factories return a `LazyMatrix`; direct
 Reuse training normalization without refitting with
 `Z.normalization.transform(X_validation)`. The input must have the same features
 in the same order. See the [normalization
-guide](https://lazymatrix.org/guide/python#choose-normalization-methods) for all
-methods and [fitted
-parameters](https://lazymatrix.org/guide/python#reuse-fitted-parameters) for
+guide](https://lazymatrix.org/guide/normalization#choose-centering-and-scaling)
+for all methods and [fitted
+parameters](https://lazymatrix.org/guide/normalization#reuse-fitted-parameters) for
 saving and restoring normalization.
 
 Pass `axis=1` to `standardize` or `normalize` to normalize each row independently:
@@ -93,7 +94,7 @@ order. Explicit row parameters take `nrows`, `centers`, and `scales`.
 Column recipes and parameters are named `ColumnNormalization` and
 `ColumnNormalizationParams`; the latter replaces the former
 `NormalizationParams` name. See the [row normalization
-guide](https://lazymatrix.org/guide/python#normalize-rows) for details.
+guide](https://lazymatrix.org/guide/normalization#normalize-rows) for details.
 
 ## PyTorch
 
@@ -107,8 +108,8 @@ pip install "lazymatrix[torch]"
 training, with weights in normalized coordinates. It supports dense tensors and
 sparse COO and CSR tensors on CPU and CUDA. PyTorch 2.9 or newer is required.
 See the [PyTorch
-guide](https://lazymatrix.org/guide/python#use-a-pytorch-first-layer) for an
-example and supported dtypes.
+guide](https://lazymatrix.org/guide/matrix-operations#use-a-pytorch-first-layer)
+for an example and supported dtypes.
 
 ## Citation
 

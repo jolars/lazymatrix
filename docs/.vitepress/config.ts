@@ -109,10 +109,21 @@ export default defineConfig({
     sidebar: {
       "/guide/": [
         {
+          text: "Getting started",
+          items: [
+            { text: "Rust", link: "/guide/getting-started" },
+            { text: "Python", link: "/guide/python" },
+          ],
+        },
+        {
           text: "Guide",
           items: [
-            { text: "Getting started", link: "/guide/getting-started" },
-            { text: "Python", link: "/guide/python" },
+            { text: "Normalization", link: "/guide/normalization" },
+            {
+              text: "Using normalized matrices",
+              link: "/guide/matrix-operations",
+            },
+            { text: "Backend setup", link: "/guide/installation" },
             { text: "How it works", link: "/guide/how-it-works" },
             { text: "Citation", link: "/guide/citation" },
           ],

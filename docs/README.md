@@ -4,6 +4,12 @@ The VitePress site at <https://lazymatrix.org> contains the introduction, user
 guide, benchmark comparisons, and Python and Rust API references. The Rust API
 also remains available at <https://docs.rs/lazymatrix>.
 
+Keep the Rust and Python getting-started pages focused on installation, a first
+product, and parameter reuse. Put task walkthroughs in the normalization and
+operator guides, configuration in backend setup, and algebra and numerical
+behavior in how it works. Keep exhaustive API contracts and implementation
+examples in the source API documentation, which generates the reference pages.
+
 From the repository root:
 
 ```sh

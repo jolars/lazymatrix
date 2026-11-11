@@ -1,10 +1,10 @@
 # How it works
 
-Let $X$ have $n$ rows and $p$ columns. Let $c$ contain the column centers,
-and let $S$ be the diagonal matrix of column scales. The normalized design is
+Let $X$ have $n$ rows and $p$ columns. Let $c$ contain the column centers, and
+let $S$ be the diagonal matrix of column scales. The normalized design is
 
 $$
-\widetilde{X} = (X - \mathbf{1}c^\top)S^{-1}.
+  \widetilde{X} = (X - \mathbf{1}c^\top)S^{-1}.
 $$
 
 Subtracting a nonzero center changes every implicit zero in a sparse column.
@@ -16,15 +16,14 @@ the original storage and folds normalization into each operation.
 For a coefficient vector $v$,
 
 $$
-\widetilde{X}v = X(S^{-1}v) - \mathbf{1}(c^\top S^{-1}v).
+  \widetilde{X}v = X(S^{-1}v) - \mathbf{1}(c^\top S^{-1}v).
 $$
 
-Scale the coefficients, multiply the original matrix, and subtract a scalar
-from each output entry. For a row-space vector $u$, the transpose product is
+Scale the coefficients, multiply the original matrix, and subtract a scalar from
+each output entry. For a row-space vector $u$, the transpose product is
 
 $$
-\widetilde{X}^\top u
-= S^{-1}\left(X^\top u - c\sum_{i=1}^n u_i\right).
+  \widetilde{X}^\top u = S^{-1}\left( X^\top u - c\sum_{i=1}^n u_i \right).
 $$
 
 Both identities let the backend use its original dense, sparse, or chunked
@@ -34,20 +33,27 @@ cancellation when a column's offset is much larger than its variation.
 Allocating, reusable-output, fused, and workspace products share this policy
 across faer, nalgebra, and ndarray. Bounded stack panels follow the matrix's
 strides while preserving each output's summation order. These kernels need no
-heap scratch or normalized design copy, but can cost more time than a native
-raw product.
-Uncentered products retain the native multiplication path. Sparse and chunked
-storage use the identities above to preserve their storage and access patterns.
+heap scratch or normalized design copy, but can cost more time than a native raw
+product. Uncentered products retain the native multiplication path. Sparse and
+chunked storage use the identities above to preserve their storage and access
+patterns.
 
 Logical column and sparse row views also expose normalized values without
 allocating an entire normalized matrix.
+
+Optional ndarray BLAS features accelerate `f32` and `f64` uncentered vector and
+batched products, eager products, and finite weighted Gram products when memory
+layouts permit. The Gram kernel centers bounded panels before multiplication.
+Centered lazy vector and batched products retain directly centered Rust kernels
+to preserve small variations around large offsets. See
+[backend setup](/guide/installation#optional-blas-acceleration) for configuration.
 
 ## Row and ordered normalization
 
 With row centers $r$ and diagonal row scales $D$, row normalization presents
 
 $$
-\widetilde{X} = D^{-1}(X - r\mathbf{1}^\top).
+  \widetilde{X} = D^{-1}(X - r\mathbf{1}^\top).
 $$
 
 Ordered chains apply each saved stage to the preceding stage's output. Dense
@@ -84,10 +90,10 @@ large raw moments after accumulation. Row normalization and column-only chains
 use native traversal on dense, sparse CSC/CSR, and Zarr storage. Mixed and
 row-only chains require dense indexed access. Full-storage sums need one scan;
 sparse sums use logical panels of at most 32 rows and 32 columns. Gram products
-use two such panels and a 32-by-32 accumulator, revisiting source panels for each
-column-panel pair. Sparse coalescing and chunk decoding use additional backend
-workspace, including outer shards. These operations preserve sparse storage and
-never materialize the full logical design matrix.
+use two such panels and a 32-by-32 accumulator, revisiting source panels for
+each column-panel pair. Sparse coalescing and chunk decoding use additional
+backend workspace, including outer shards. These operations preserve sparse
+storage and never materialize the full logical design matrix.
 
 ## Fit once, apply many times
 
@@ -96,9 +102,13 @@ statistics use the centered columns. Sparse statistics include the contribution
 of implicit zeros. Exact zero fitted scales become one, and nonfinite values
 retain their IEEE behavior.
 
-`ColumnNormalizationParams` stores the fitted centers and scales independently of the
-matrix backend. Reuse those parameters for prediction data or after converting
-to an eager representation.
+Standard deviations use the fitted axis length minus `df` as their variance
+divisor: `nrows - df` for columns and `ncols - df` for rows. Scales are NaN when
+that length is at most `df`. Missing values are not ignored or imputed.
+
+`ColumnNormalizationParams` stores the fitted centers and scales independently
+of the matrix backend. Reuse those parameters for prediction data or after
+converting to an eager representation.
 
 ## Quantile fitting
 
@@ -108,9 +118,14 @@ position `(nrows - 1) * q`, matching NumPy's default linear method for finite
 data. The default range is `q = 0.25` to `q = 0.75`. Centers and scales remain
 ordinary fitted parameters and can be reused on new matrices.
 
+With unit-variance calibration, the observed range is divided by the matching
+standard normal quantile range, approximately `1.34898` for the interquartile
+range. Calibration adds no storage scans. Exact zero scales become one after
+calibration.
+
 Dense fitting sorts a copied column. CSC fitting combines duplicate raw entries
-at each cell and sorts the stored logical values, representing implicit zeros
-by their count. Both reuse a working column and run serially, including with the
+at each cell and sorts the stored logical values, representing implicit zeros by
+their count. Both reuse a working column and run serially, including with the
 `parallel` feature. Sorting costs O(nrows log nrows) time per dense column and
 O(nnz log nnz) per CSC column, with O(nrows) and O(nnz) scratch, respectively.
 Combining unsorted duplicates can require additional sorting workspace.
@@ -118,19 +133,20 @@ Combining unsorted duplicates can require additional sorting workspace.
 CSR and Zarr fitting maintain O(ncols) selection state. Each pass counts values
 around pivots and narrows the bounds to observed neighbors until every requested
 rank is known. A median and a quantile range share passes when fitted together.
-CSR scans rows, combines duplicate cells, and accounts for implicit zeros without
-converting storage. Zarr reads chunks serially, including fill values and
-excluding edge padding. Chunk and codec memory, including outer shards, remains
-additional to the selection state.
+CSR scans rows, combines duplicate cells, and accounts for implicit zeros
+without converting storage. Zarr reads chunks serially, including fill values
+and excluding edge padding. Chunk and codec memory, including outer shards,
+remains additional to the selection state.
 
 The number of fitting passes depends on the values. Widely separated exponents
 can require many passes, so exact quantiles may be expensive on storage-backed
 inputs. Existing normalization choices without quantiles retain their fitting
-paths and, for Zarr column fitting, the bound of two scans. Zarr row fitting uses
-the same selection algorithm with O(nrows) state and positions along the column
-axis. Row standardization takes two scans; other row recipes without quantiles
-need up to three scans. Row products normalize each entry before accumulation
-and read each storage chunk once. [Quantile fitting measurements](https://github.com/jolars/lazymatrix/tree/main/benches/quantile_fitting)
+paths and, for Zarr column fitting, the bound of two scans. Zarr row fitting
+uses the same selection algorithm with O(nrows) state and positions along the
+column axis. Row standardization takes two scans; other row recipes without
+quantiles need up to three scans. Row products normalize each entry before
+accumulation and read each storage chunk once. [Quantile fitting
+measurements](https://github.com/jolars/lazymatrix/tree/main/benches/quantile_fitting)
 record time, peak additional allocation, and storage scans.
 
 Ranges use weighted gaps between order statistics to preserve small variation
@@ -153,11 +169,11 @@ missing-value and near-constant handling.
 | Existing writable dense input | Keeps normalization implicit           | Can normalize in place with `into_eager`         |
 
 For a dense copy of an $n \times p$ matrix of `f64` values, the values alone
-require $8np$ bytes. A borrowed lazy operator adds fitted parameters and operation
-scratch without copying the design. Overall memory also depends on whether the
-caller retains the source matrix.
+require $8np$ bytes. A borrowed lazy operator adds fitted parameters and
+operation scratch without copying the design. Overall memory also depends on
+whether the caller retains the source matrix.
 
 Eager normalization can pay off over repeated operations, but sparse products
 can remain faster than dense products. [Benchmarks](/benchmarks) compare the
-construction and execution phases separately. Lazy and eager arithmetic can
-also differ slightly because the floating-point operation order changes.
+construction and execution phases separately. Lazy and eager arithmetic can also
+differ slightly because the floating-point operation order changes.
