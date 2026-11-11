@@ -132,6 +132,11 @@ check_msrv() (
     # uuid 1.29 requires Rust 1.89, but zarrs 0.22 retains Rust 1.87 support.
     cargo update --package uuid --precise 1.26.1
     cargo update --manifest-path "$fixture_manifest" --package uuid --precise 1.26.1
+    # pest 2.9.6 requires Rust 1.88; downgrade dependents before their dependencies.
+    cargo update --package pest_derive --precise 2.9.5
+    cargo update --package pest_generator --precise 2.9.5
+    cargo update --package pest_meta --precise 2.9.5
+    cargo update --package pest --precise 2.9.5
     # Match pest_stack_guard's exact pin and avoid ar_archive_writer (Rust 1.88).
     cargo update --package psm --precise 0.1.24
     cargo check --all-targets --locked --no-default-features
