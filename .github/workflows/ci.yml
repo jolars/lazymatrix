@@ -297,6 +297,8 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
+          # Versionary can skip runs before invoking uv.
+          ignore-nothing-to-cache: true
       - uses: jolars/versionary@v1
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
