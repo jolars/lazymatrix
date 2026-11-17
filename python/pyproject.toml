@@ -21,7 +21,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://lazymatrix.org"
-Documentation = "https://lazymatrix.org/guide/python"
+Documentation = "https://lazymatrix.org/guide/getting-started"
 Repository = "https://github.com/jolars/lazymatrix"
 Changelog = "https://github.com/jolars/lazymatrix/blob/main/python/CHANGELOG.md"
 

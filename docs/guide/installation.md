@@ -59,8 +59,12 @@ Running `cargo test --all-features` directly requires a provider at link time.
 
 BLAS threading is controlled by the provider independently of `parallel`.
 For OpenBLAS, set `OPENBLAS_NUM_THREADS` and `OMP_NUM_THREADS` when controlling
-threads. See [how it works](/guide/how-it-works#matrix–vector-products) for
-which products use BLAS and the numerical policy for centered data.
+threads.
+
+BLAS accelerates uncentered `f32` and `f64` vector and batched products, eager
+products, and finite weighted Gram products when memory layouts permit.
+Centered lazy products use Rust kernels to preserve small differences between
+values with large offsets.
 
 ## Python installation
 

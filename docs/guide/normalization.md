@@ -263,7 +263,8 @@ Mixed and row-only chains require dense storage for fitting and products.
 Column-only chains also support sparse CSC/CSR storage and Zarr arrays. See
 [`NormalizationChainParams`](/reference/rust/lazymatrix.NormalizationChainParams)
 for inspecting and constructing saved stages, and
-[how it works](/guide/how-it-works#row-and-ordered-normalization) for costs.
+[how it works](/guide/how-it-works#row-and-ordered-normalization) for how row and
+column stages interact.
 
 For custom fitting methods, the
 [`NormalizationRecipe` reference](/reference/rust/lazymatrix.NormalizationRecipe)

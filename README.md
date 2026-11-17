@@ -117,8 +117,8 @@ for features and provider configuration.
 
 ## Documentation
 
-- [Getting started with Rust](https://lazymatrix.org/guide/getting-started):
-  installation, a first product, and parameter reuse.
+- [Getting started](https://lazymatrix.org/guide/getting-started): installation,
+  a first product, and parameter reuse in Rust and Python.
 - [Normalization](https://lazymatrix.org/guide/normalization): choose recipes,
   normalize rows, and reuse fitted parameters.
 - [Using normalized matrices](https://lazymatrix.org/guide/matrix-operations):
@@ -127,9 +127,8 @@ for features and provider configuration.
   memory tradeoffs.
 - [Rust API reference](https://docs.rs/lazymatrix): public types and backend
   capabilities.
-- [Getting started with Python](https://lazymatrix.org/guide/python) and [API
-  reference](https://lazymatrix.org/reference/python/): NumPy, SciPy, and
-  PyTorch integrations.
+- [Python API reference](https://lazymatrix.org/reference/python/): NumPy, SciPy,
+  and PyTorch integrations.
 - [Benchmarks](https://lazymatrix.org/benchmarks): runtime and memory
   comparisons.
 

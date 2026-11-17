@@ -96,7 +96,6 @@ export default defineConfig({
     },
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
-      { text: "Benchmarks", link: "/benchmarks" },
       {
         text: "API",
         items: [
@@ -109,15 +108,9 @@ export default defineConfig({
     sidebar: {
       "/guide/": [
         {
-          text: "Getting started",
-          items: [
-            { text: "Rust", link: "/guide/getting-started" },
-            { text: "Python", link: "/guide/python" },
-          ],
-        },
-        {
           text: "Guide",
           items: [
+            { text: "Getting started", link: "/guide/getting-started" },
             { text: "Normalization", link: "/guide/normalization" },
             {
               text: "Using normalized matrices",

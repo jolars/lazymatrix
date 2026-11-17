@@ -18,5 +18,5 @@ Both parameter classes accept explicit centers and scales, with `ncols` or
 The optional `lazymatrix.torch.NormalizedLinear` layer applies fitted
 normalization in a trainable PyTorch first layer.
 
-See the [Python guide](https://lazymatrix.org/guide/python) for installation,
-worked examples, and saving fitted parameters.
+See the [getting-started guide](https://lazymatrix.org/guide/getting-started)
+for installation, a first product, and parameter reuse.

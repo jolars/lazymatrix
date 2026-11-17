@@ -1,179 +1,160 @@
 # How it works
 
-Let $X$ have $n$ rows and $p$ columns. Let $c$ contain the column centers, and
-let $S$ be the diagonal matrix of column scales. The normalized design is
+Normalizing a matrix usually means subtracting a center from each column and
+dividing by a scale. You might do this before fitting a model so that features
+with different units are easier to work with.
+
+LazyMatrix saves those centers and scales alongside the original data. When you
+multiply by the matrix, it applies the normalization as part of the calculation.
+You get the normalized result without first building a normalized matrix.
+
+## Why zeros matter
+
+Take a column with values `[0, 0, 3]`. If you subtract a center of `1` and divide
+by a scale of `2`, you get `[-0.5, -0.5, 1]`.
+
+A sparse matrix can leave the original zeros unstored. After centering, those
+zeros become nonzero values. Across a large matrix, storing them can turn a
+compact sparse representation into a full dense array.
+
+LazyMatrix keeps the original sparse data and the two short vectors of centers
+and scales. The normalized entries are still there mathematically, but they
+don't have to take up space in memory.
+
+## Matrix–vector products
+
+When you write `Z @ beta` in Python or call `lazy.matvec(&beta)` in Rust, you
+ask for a result vector. LazyMatrix computes that vector without storing a
+normalized matrix first.
+
+Think of `beta` as one weight for each column. The product combines the columns
+using those weights and returns one value per row.
+
+For column normalization, you can get that result in three steps:
+
+1. Divide the coefficients by the column scales.
+2. Multiply the original matrix by those scaled coefficients.
+3. Subtract the contribution from the column centers.
+
+The transpose product uses the same idea: multiply by the original transpose,
+correct for centering, and apply the scales. This lets algorithms such as
+iterative least-squares solvers work with a normalized matrix while keeping its
+sparse storage.
+
+::: details The algebra
+
+Let $X$ have $n$ rows and $p$ columns. The vector $c$ contains one center per
+column, and $S$ is a diagonal matrix containing the column scales. The vector
+$\mathbf{1}$ contains $n$ ones, so $\mathbf{1}c^\top$ repeats the centers in
+every row. The normalized matrix is
 
 $$
   \widetilde{X} = (X - \mathbf{1}c^\top)S^{-1}.
 $$
 
-Subtracting a nonzero center changes every implicit zero in a sparse column.
-Storing those entries can require a full dense matrix. LazyMatrix instead keeps
-the original storage and folds normalization into each operation.
-
-## Matrix–vector products
-
-For a coefficient vector $v$,
+For a coefficient vector $v$ of length $p$,
 
 $$
   \widetilde{X}v = X(S^{-1}v) - \mathbf{1}(c^\top S^{-1}v).
 $$
 
-Scale the coefficients, multiply the original matrix, and subtract a scalar from
-each output entry. For a row-space vector $u$, the transpose product is
+The final term subtracts the same scalar from every output entry. For a vector
+$u$ of length $n$, the transpose product is
 
 $$
   \widetilde{X}^\top u = S^{-1}\left( X^\top u - c\sum_{i=1}^n u_i \right).
 $$
 
-Both identities let the backend use its original dense, sparse, or chunked
-storage. For centered dense matrices, LazyMatrix subtracts the center and
-applies the scale at each entry before accumulating products. This avoids
-cancellation when a column's offset is much larger than its variation.
-Allocating, reusable-output, fused, and workspace products share this policy
-across faer, nalgebra, and ndarray. Bounded stack panels follow the matrix's
-strides while preserving each output's summation order. These kernels need no
-heap scratch or normalized design copy, but can cost more time than a native raw
-product. Uncentered products retain the native multiplication path. Sparse and
-chunked storage use the identities above to preserve their storage and access
-patterns.
+These identities describe the transformation. LazyMatrix can choose a different
+order of calculation when that helps preserve floating-point accuracy.
 
-Logical column and sparse row views also expose normalized values without
-allocating an entire normalized matrix.
-
-Optional ndarray BLAS features accelerate `f32` and `f64` uncentered vector and
-batched products, eager products, and finite weighted Gram products when memory
-layouts permit. The Gram kernel centers bounded panels before multiplication.
-Centered lazy vector and batched products retain directly centered Rust kernels
-to preserve small variations around large offsets. See
-[backend setup](/guide/installation#optional-blas-acceleration) for configuration.
-
-## Row and ordered normalization
-
-With row centers $r$ and diagonal row scales $D$, row normalization presents
-
-$$
-  \widetilde{X} = D^{-1}(X - r\mathbf{1}^\top).
-$$
-
-Ordered chains apply each saved stage to the preceding stage's output. Dense
-products normalize entries before accumulation without storing an intermediate
-design matrix. Mixed and row-only chains require dense indexed access for
-fitting and products. Column-only chains also support sparse and Zarr storage.
-
-Sparse row fitting combines duplicates and includes implicit zeros. CSR fitting
-buffers one coalesced row; CSC fitting streams columns, with repeated scans for
-exact quantiles. Workspace is O(nrows + ncols). Sparse vector products use sums
-over missing index ranges, with logarithmic queries per stored cell during
-ordinary finite arithmetic. Exceptional IEEE arithmetic can require evaluating
-individual missing contributions.
-
-Zarr reads chunks serially, preserving fill values and excluding padding. Each
-vector product reads each storage chunk once. Chunk and codec buffers include
-outer shards and add to fitted vectors and operation workspace.
-
-Fused products compute `alpha * A * x + beta * out` using the same fitted vector
-kernels. Exact zero `alpha` skips storage reads, and exact zero `beta` ignores
-previous output values. Row and chain fused products hold one temporary vector
-of length `nrows` for forward products or `ncols` for transpose products. They
-merge the completed normalized product with the previous output only after the
-backend succeeds. The `matvec_scaled_with_workspace` and
-`mat_transpose_vec_scaled_with_workspace` methods reuse caller-provided product
-scratch of those same lengths. Dense calls need no additional workspace. Sparse
-traversal and codec workspace is additional for both fused and workspace calls.
-Dimensions are checked even when `alpha` is zero. After a backend error, scratch
-may be partial, and the final output remains unchanged.
-
-Weighted column sums and Gram products apply every saved stage to each logical
-entry before multiplication. This includes implicit zeros and avoids subtracting
-large raw moments after accumulation. Row normalization and column-only chains
-use native traversal on dense, sparse CSC/CSR, and Zarr storage. Mixed and
-row-only chains require dense indexed access. Full-storage sums need one scan;
-sparse sums use logical panels of at most 32 rows and 32 columns. Gram products
-use two such panels and a 32-by-32 accumulator, revisiting source panels for
-each column-panel pair. Sparse coalescing and chunk decoding use additional
-backend workspace, including outer shards. These operations preserve sparse
-storage and never materialize the full logical design matrix.
+:::
 
 ## Fit once, apply many times
 
-Fitting computes column centers and scales. When both are enabled, scaling
-statistics use the centered columns. Sparse statistics include the contribution
-of implicit zeros. Exact zero fitted scales become one, and nonfinite values
-retain their IEEE behavior.
+Fitting is the step that reads your data to choose centers and scales. For
+example, standardization computes a mean and standard deviation for each
+column. Later products reuse those values without fitting again.
 
-Standard deviations use the fitted axis length minus `df` as their variance
-divisor: `nrows - df` for columns and `ncols - df` for rows. Scales are NaN when
-that length is at most `df`. Missing values are not ignored or imputed.
+For validation or prediction, reuse the parameters fitted on your training
+data. That keeps new observations in the same coordinates as the data used to
+train the model. The new matrix can have a different number of rows, but it
+needs the same features in the same order.
 
-`ColumnNormalizationParams` stores the fitted centers and scales independently
-of the matrix backend. Reuse those parameters for prediction data or after
-converting to an eager representation.
+The [normalization guide](/guide/normalization#reuse-fitted-parameters) shows how
+to fit parameters separately, apply them to new data, and save them for later.
+
+## Row and ordered normalization
+
+You can also normalize each row independently. This is useful when each row is
+a sample whose overall size should be removed, such as scaling every sample to
+unit length. Each new sample needs its own fitted row parameters.
+
+In Rust, you can combine recipes in a sequence. For example, you might normalize
+each row, then standardize the columns. Each stage sees the output of the
+previous one, so changing the order changes the result. LazyMatrix saves the
+stages in that order and applies them during operations without storing an
+intermediate normalized matrix.
+
+For new samples, keep the training column parameters and fit fresh row
+parameters. The [normalization guide](/guide/normalization#compose-normalization-recipes)
+explains how to do this and which storage backends support each kind of chain.
 
 ## Quantile fitting
 
-Median centering and quantile-range scaling use exact order statistics. The
-quantile at probability `q` interpolates the neighboring sorted values at
-position `(nrows - 1) * q`, matching NumPy's default linear method for finite
-data. The default range is `q = 0.25` to `q = 0.75`. Centers and scales remain
-ordinary fitted parameters and can be reused on new matrices.
+Robust normalization uses a median and a quantile range instead of a mean and
+standard deviation. The default range runs from the 25th to the 75th percentile,
+covering the middle half of the data. This makes the fitted values less
+sensitive to extreme observations.
 
-With unit-variance calibration, the observed range is divided by the matching
-standard normal quantile range, approximately `1.34898` for the interquartile
-range. Calibration adds no storage scans. Exact zero scales become one after
-calibration.
+LazyMatrix computes exact quantiles, including the zeros that sparse storage
+leaves unstored. When a requested quantile falls between two sorted values, it
+interpolates between them.
 
-Dense fitting sorts a copied column. CSC fitting combines duplicate raw entries
-at each cell and sorts the stored logical values, representing implicit zeros by
-their count. Both reuse a working column and run serially, including with the
-`parallel` feature. Sorting costs O(nrows log nrows) time per dense column and
-O(nnz log nnz) per CSC column, with O(nrows) and O(nnz) scratch, respectively.
-Combining unsorted duplicates can require additional sorting workspace.
+Exact quantiles can cost more to fit than means and standard deviations. With
+sparse matrices stored by row (CSR) or chunked Zarr arrays, fitting may read the
+data several times. That can matter for large inputs or slow storage. Once
+fitted, these parameters are reused just like any others.
 
-CSR and Zarr fitting maintain O(ncols) selection state. Each pass counts values
-around pivots and narrows the bounds to observed neighbors until every requested
-rank is known. A median and a quantile range share passes when fitted together.
-CSR scans rows, combines duplicate cells, and accounts for implicit zeros
-without converting storage. Zarr reads chunks serially, including fill values
-and excluding edge padding. Chunk and codec memory, including outer shards,
-remains additional to the selection state.
+See [robust normalization](/guide/normalization#fit-robust-normalization) to
+choose quantile bounds or enable unit-variance calibration.
 
-The number of fitting passes depends on the values. Widely separated exponents
-can require many passes, so exact quantiles may be expensive on storage-backed
-inputs. Existing normalization choices without quantiles retain their fitting
-paths and, for Zarr column fitting, the bound of two scans. Zarr row fitting
-uses the same selection algorithm with O(nrows) state and positions along the
-column axis. Row standardization takes two scans; other row recipes without
-quantiles need up to three scans. Row products normalize each entry before
-accumulation and read each storage chunk once. [Quantile fitting
-measurements](https://github.com/jolars/lazymatrix/tree/main/benches/quantile_fitting)
-record time, peak additional allocation, and storage scans.
+## Numerical behavior
 
-Ranges use weighted gaps between order statistics to preserve small variation
-around large offsets. Empty columns and columns containing NaN produce NaN;
-missing values are not skipped. Infinities retain their order. Equal infinite
-interpolation endpoints retain that infinity, while interpolation between
-opposing infinities produces NaN. Subtraction of nonfinite quantiles follows
-IEEE arithmetic. Only exact zero fitted scales become one, including when a
-nonconstant column has zero IQR. These policies differ from scikit-learn's
-missing-value and near-constant handling.
+If a fitted scale is exactly zero, LazyMatrix replaces it with one to avoid
+division by zero. Small nonzero scales are kept as they are. NaNs and infinities
+are not filtered out, and missing values are not filled in. They can propagate
+into fitted parameters and results.
+
+Floating-point arithmetic also affects how products are computed. If your
+values are large but differ only slightly, subtracting two large totals can
+lose those small differences. LazyMatrix centers dense values before adding up
+their products to reduce this problem.
 
 ## Choose lazy or eager
 
-| Consideration                 | Lazy                                   | Eager                                            |
-| ----------------------------- | -------------------------------------- | ------------------------------------------------ |
-| Normalized storage            | Original matrix plus fitted parameters | Normalized dense matrix plus fitted parameters   |
-| Sparse input                  | Preserves sparse storage               | Materializes implicit entries into dense storage |
-| Construction                  | Fits statistics                        | Fits statistics and normalizes entries           |
-| Repeated operations           | Applies normalization during products  | Operates on already normalized values            |
-| Existing writable dense input | Keeps normalization implicit           | Can normalize in place with `into_eager`         |
+Lazy normalization is useful when you want to preserve sparse storage or avoid
+allocating another large matrix. Eager normalization stores the normalized
+values in a dense matrix, ready for later operations.
 
-For a dense copy of an $n \times p$ matrix of `f64` values, the values alone
-require $8np$ bytes. A borrowed lazy operator adds fitted parameters and
-operation scratch without copying the design. Overall memory also depends on
-whether the caller retains the source matrix.
+| What you store or compute     | Lazy                                  | Eager                                |
+| ----------------------------- | ------------------------------------- | ------------------------------------ |
+| Matrix storage                | Original data                         | Normalized dense values              |
+| Fitted parameters             | Retained for reuse                    | Retained for reuse                   |
+| Work before the first product | Fit centers and scales                | Fit parameters and normalize entries |
+| Work during each product      | Apply normalization while multiplying | Multiply already normalized values   |
 
-Eager normalization can pay off over repeated operations, but sparse products
-can remain faster than dense products. [Benchmarks](/benchmarks) compare the
-construction and execution phases separately. Lazy and eager arithmetic can also
-differ slightly because the floating-point operation order changes.
+For scale, a dense copy of a matrix with one million rows and 1,000 columns
+needs about 8 GB just for `f64` values. The column centers and scales need only
+2,000 numbers. A lazy operator still needs the original matrix and working
+memory for its operations. Rust can borrow the input; Python keeps its own copy
+of the raw data.
+
+Eager normalization can pay off when you make enough repeated products, but
+sparse products can remain faster than dense ones. In Rust, you can also
+normalize writable dense storage in place. The [matrix operations
+guide](/guide/matrix-operations#choose-lazy-or-eager-storage) shows the conversion
+methods, and [benchmarks](/benchmarks) compare time and memory for a complete fit.
+
+Lazy and eager results can differ slightly because floating-point operations
+happen in a different order.

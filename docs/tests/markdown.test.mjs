@@ -40,8 +40,11 @@ test("serves clean Markdown for every page with equations, code, and tables", as
     if (path === "/") {
       assert.match(body, /^# LazyMatrix\b/);
       assert.match(body, /\$\$\n\\widetilde\{X\}/);
-      assert.match(body, /```rust\nuse lazymatrix/);
       assert.match(response.headers.get("Link"), /llms\.txt/);
+    }
+    if (path === "/guide/getting-started") {
+      assert.match(body, /```rust\nuse lazymatrix/);
+      assert.match(body, /```python\nimport numpy as np/);
     }
     if (path === "/benchmarks") {
       assert.match(

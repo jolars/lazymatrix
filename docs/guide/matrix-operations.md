@@ -164,8 +164,7 @@ rows.matvec_scaled_with_workspace(1., &coefficients, 0., &mut out, &mut scratch)
 
 Forward scratch has length `nrows`; transpose scratch has length `ncols`.
 Sparse traversal and chunk decoding may still allocate internal buffers. See
-[`LazyMatrix`](/reference/rust/lazymatrix.LazyMatrix) for workspace contracts
-and [how it works](/guide/how-it-works#row-and-ordered-normalization) for costs.
+[`LazyMatrix`](/reference/rust/lazymatrix.LazyMatrix) for workspace contracts.
 
 ## Use a PyTorch first layer
 

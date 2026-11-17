@@ -12,17 +12,14 @@ hero:
     alt: A matrix relaxing in a beach chair under a palm tree.
   actions:
     - theme: brand
-      text: Get started with Rust
+      text: What is LazyMatrix?
+      link: /guide/how-it-works
+    - theme: alt
+      text: Get started
       link: /guide/getting-started
     - theme: alt
-      text: Get started with Python
-      link: /guide/python
-    - theme: alt
-      text: Compare lazy and eager
-      link: /benchmarks
-    - theme: alt
-      text: API documentation
-      link: https://docs.rs/lazymatrix
+      text: Source code
+      link: https://github.com/jolars/lazymatrix
 features:
   - title: Preserve sparse storage
     details: Apply centering and scaling through matrix operations without turning structural zeros into stored entries.
