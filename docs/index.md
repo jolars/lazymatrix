@@ -13,7 +13,7 @@ hero:
   actions:
     - theme: brand
       text: What is LazyMatrix?
-      link: /guide/how-it-works
+      link: /guide/what-is-lazymatrix
     - theme: alt
       text: Get started
       link: /guide/getting-started

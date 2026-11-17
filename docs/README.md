@@ -11,6 +11,11 @@ setup, and algebra and numerical behavior in how it works. Keep exhaustive API
 contracts and implementation examples in the source API documentation, which
 generates the reference pages.
 
+The Development pages include the repository's `CONTRIBUTING.md` and
+`CHANGELOG.md` directly. Edit those source files to update their content.
+Repository-relative links in these pages point to GitHub, and the contributing
+page's edit link opens `CONTRIBUTING.md`.
+
 From the repository root:
 
 ```sh

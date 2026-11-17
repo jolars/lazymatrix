@@ -10,6 +10,36 @@ const ogImageAlt =
 const referenceSidebar = JSON.parse(
   readFileSync(new URL("../reference/sidebar.json", import.meta.url), "utf8"),
 );
+const repositoryPages: Record<string, string> = {
+  "development/contributing.md": "CONTRIBUTING.md",
+  "development/changelog.md": "CHANGELOG.md",
+};
+const documentationSidebar = [
+  {
+    text: "Introduction",
+    items: [
+      { text: "What is LazyMatrix?", link: "/guide/what-is-lazymatrix" },
+      { text: "Getting started", link: "/guide/getting-started" },
+      { text: "Backend setup", link: "/guide/installation" },
+    ],
+  },
+  {
+    text: "Guide",
+    items: [
+      { text: "Normalization", link: "/guide/normalization" },
+      { text: "Using normalized matrices", link: "/guide/matrix-operations" },
+      { text: "How it works", link: "/guide/how-it-works" },
+      { text: "Citation", link: "/guide/citation" },
+    ],
+  },
+  {
+    text: "Development",
+    items: [
+      { text: "Contributing", link: "/development/contributing" },
+      { text: "Changelog", link: "/development/changelog" },
+    ],
+  },
+];
 
 export default defineConfig({
   title: "LazyMatrix",
@@ -22,6 +52,22 @@ export default defineConfig({
   markdown: {
     config(md) {
       md.use(katex);
+      // Included repository documents keep links relative to the repository root.
+      const renderLink = md.renderer.rules.link_open!;
+      md.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
+        const href = tokens[index].attrGet("href");
+        if (
+          repositoryPages[env.relativePath] &&
+          href &&
+          !/^(?:[a-z][a-z\d+.-]*:|[\/#])/i.test(href)
+        ) {
+          tokens[index].attrSet(
+            "href",
+            new URL(href, `${repository}/blob/main/`).href,
+          );
+        }
+        return renderLink(tokens, index, options, env, renderer);
+      };
       // Retain the TeX source so Markdown exports preserve equations.
       for (const name of ["math_inline", "math_block"]) {
         const render = md.renderer.rules[name]!;
@@ -66,6 +112,11 @@ export default defineConfig({
     ["meta", { name: "twitter:image", content: ogImage }],
     ["meta", { name: "twitter:image:alt", content: ogImageAlt }],
   ],
+  transformPageData(pageData) {
+    const source =
+      repositoryPages[pageData.filePath] ?? `docs/${pageData.filePath}`;
+    pageData.frontmatter.editUrl = `${repository}/edit/main/${source}`;
+  },
   transformHead({ pageData, title, description }) {
     if (pageData.relativePath === "404.md") return [];
     const path = pageData.relativePath
@@ -95,7 +146,7 @@ export default defineConfig({
       alt: "LazyMatrix logo",
     },
     nav: [
-      { text: "Guide", link: "/guide/getting-started" },
+      { text: "Guide", link: "/guide/what-is-lazymatrix" },
       {
         text: "API",
         items: [
@@ -104,29 +155,16 @@ export default defineConfig({
           { text: "docs.rs", link: "https://docs.rs/lazymatrix" },
         ],
       },
+      { text: "Development", link: "/development/contributing" },
     ],
     sidebar: {
-      "/guide/": [
-        {
-          text: "Guide",
-          items: [
-            { text: "Getting started", link: "/guide/getting-started" },
-            { text: "Normalization", link: "/guide/normalization" },
-            {
-              text: "Using normalized matrices",
-              link: "/guide/matrix-operations",
-            },
-            { text: "Backend setup", link: "/guide/installation" },
-            { text: "How it works", link: "/guide/how-it-works" },
-            { text: "Citation", link: "/guide/citation" },
-          ],
-        },
-      ],
+      "/guide/": documentationSidebar,
+      "/development/": documentationSidebar,
       "/reference/": referenceSidebar,
     },
     socialLinks: [{ icon: "github", link: repository }],
     editLink: {
-      pattern: `${repository}/edit/main/docs/:path`,
+      pattern: (page) => page.frontmatter.editUrl,
       text: "Edit this page on GitHub",
     },
     search: { provider: "local" },
