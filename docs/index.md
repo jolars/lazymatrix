@@ -4,8 +4,8 @@ hero:
   name: LazyMatrix
   text: Give your matrix a break.
   tagline:
-    Normalized design matrices for Rust and Python. Keep sparse matrices sparse,
-    reuse fitted parameters, and choose when to materialize.
+    Normalized design matrices for Rust and Python. Keep sparse matrices sparse
+    and materialize at will.
   image:
     light: /logo.png
     dark: /logo-dark.png
@@ -33,7 +33,7 @@ features:
 ---
 
 <script setup>
-import NormalizationDemo from "./.vitepress/theme/components/NormalizationDemo.vue";
+  import NormalizationDemo from "./.vitepress/theme/components/NormalizationDemo.vue";
 </script>
 
 ## A normalized matrix, used as an operator
@@ -51,48 +51,3 @@ normalization algebraically.
 Here is what each one represents, with $C = \mathbf{1}c^\top$:
 
 <NormalizationDemo />
-
-## Example
-
-First, add the crate to your project with the `ndarray` feature:
-
-```sh
-cargo add lazymatrix --features ndarray
-cargo add ndarray@0.17
-```
-
-Then, use the `LazyMatrix` type to wrap an existing matrix and apply
-normalization. Here, we center by the mean and scale by the maximum absolute
-value of each column. Then, we multiply the normalized matrix by a vector.
-
-```rust
-use lazymatrix::{Centering, LazyMatrix, MatVec, ColumnNormalization, Scaling};
-use ndarray::array;
-
-let x = array![[3.0, 6.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 9.0]];
-let lazy = LazyMatrix::new(
-    x.view(),
-    ColumnNormalization::new(Centering::Mean, Scaling::MaxAbs),
-).unwrap();
-
-let y = lazy.matvec(&array![1.0, 1.0, 1.0]).unwrap();
-assert_eq!(y, array![1.0, -0.5, -0.5]);
-```
-
-## Citation
-
-See [Citing LazyMatrix](/guide/citation) for a text citation and BibLaTeX and
-BibTeX entries.
-
-## Where to go next
-
-Start with [Rust](/guide/getting-started) or [Python](/guide/python) to normalize
-your first matrix, then see [normalization](/guide/normalization) and
-[using normalized matrices](/guide/matrix-operations) for the main workflows.
-Read [how it works](/guide/how-it-works) for the normalization identities. The
-[benchmark comparisons](/benchmarks) explain the costs of construction, repeated
-operations, and additional memory.
-
-LazyMatrix is in early development, and breaking changes are expected. Find
-releases on [crates.io](https://crates.io/crates/lazymatrix) and source code on
-[GitHub](https://github.com/jolars/lazymatrix).

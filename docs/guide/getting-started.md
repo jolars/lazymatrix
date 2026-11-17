@@ -68,3 +68,9 @@ separately and preparing new samples.
   costs.
 - [Rust API reference](/reference/rust/): public types, traits, and backend
   capabilities.
+
+## Citation
+
+If you find LazyMatrix useful in your academic work, please see [citing
+LazyMatrix](/guide/citation) for a text citation and BibLaTeX and BibTeX
+entries.
