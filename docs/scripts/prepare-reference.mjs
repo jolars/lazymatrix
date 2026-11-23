@@ -56,15 +56,6 @@ async function run(binary, args, capture = false) {
   return output;
 }
 
-async function executable() {
-  let binary = process.env.DIPLODOCUS_BIN;
-  if (!binary) {
-    const local = resolve(repository, "../diplodocus/target/debug/diplodocus");
-    binary = (await exists(local)) ? local : "diplodocus";
-  }
-  return binary;
-}
-
 async function files(root) {
   const result = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -227,7 +218,7 @@ async function publish(directories) {
 }
 
 export async function prepareReference(snapshot) {
-  const binary = await executable();
+  const binary = process.env.DIPLODOCUS_BIN ?? "diplodocus";
   const storage = join(repository, ".diplodocus/vitepress");
   await mkdir(storage, { recursive: true });
   const staging = await mkdtemp(join(storage, "generation-"));

@@ -111,11 +111,17 @@ tasks:
       - python ../scripts/python-tool.py maturin sdist --out dist
       - python ../scripts/python-tool.py python ../scripts/check-python-dist.py
 
+  website:python:
+    internal: true
+    cmds:
+      - task: python:torch:build
+      - uv sync --project python --locked --group docs --no-install-project --inexact
+
   website:reference:
     desc: Extract Python and Rust API references for VitePress.
     cmds:
       - task: website:install
-      - task: python:torch:build
+      - task: website:python
       - cargo fetch --locked
       - pnpm --dir docs reference
 
@@ -133,14 +139,14 @@ tasks:
 
   website:dev:
     desc: Serve the website locally with live reload.
-    deps: [website:install, python:torch:build]
+    deps: [website:install, website:python]
     dir: docs
     cmds:
       - pnpm dev
 
   website:check:
     desc: Check formatting, build the website, and validate Worker packaging.
-    deps: [website:install, python:torch:build]
+    deps: [website:install, website:python]
     dir: docs
     cmds:
       - pnpm format:check
@@ -150,7 +156,7 @@ tasks:
 
   website:deploy:
     desc: Deploy the website to Cloudflare Workers.
-    deps: [python:torch:build]
+    deps: [website:python]
     dir: docs
     cmds:
       - pnpm build

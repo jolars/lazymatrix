@@ -66,7 +66,7 @@ jobs:
         env:
           UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.devenv/python
         run: |
-          uv sync --project python --locked --no-install-project
+          uv sync --project python --locked --group docs --no-install-project
           torch_version=$(python -c 'import tomllib; from pathlib import Path; lock = tomllib.loads(Path("python/uv.lock").read_text()); print(next(item["version"] for item in lock["package"] if item["name"] == "torch"))')
           uv pip install --python .devenv/python/bin/python --torch-backend=cpu "torch==$torch_version"
           cd python
@@ -77,8 +77,6 @@ jobs:
           rustup toolchain install nightly-2026-09-28 --profile minimal --no-self-update
           echo "DIPLODOCUS_RUST_TOOLCHAIN=$(rustup run nightly-2026-09-28 rustc --print sysroot)" >> "$GITHUB_ENV"
       - uses: jolars/setup-diplodocus@v1
-        with:
-          version: "0.9.0"
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: docs/package.json

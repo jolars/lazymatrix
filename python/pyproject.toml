@@ -29,6 +29,7 @@ Changelog = "https://github.com/jolars/lazymatrix/blob/main/python/CHANGELOG.md"
 torch = ["torch>=2.9"]
 
 [dependency-groups]
+docs = ["sphinx"]
 dev = ["maturin>=1.15,<2", "pytest>=8", "ruff>=0.12", "twine>=6"]
 
 [tool.maturin]

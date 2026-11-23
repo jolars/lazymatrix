@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  inputs,
   pkgs,
   ...
 }:
@@ -28,6 +29,7 @@ in
   '';
 
   packages = with pkgs; [
+    inputs.diplodocus.packages.${stdenv.hostPlatform.system}.default
     go-task
     llvmPackages.bintools
     liteparse

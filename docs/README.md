@@ -24,15 +24,14 @@ task website:dev
 task website:check
 ```
 
-The development and production builds first extract references with Diplodocus
-0.9.0. Prepare the editable Python extension and optional PyTorch dependency with
-`task python:torch:build` before running `pnpm dev` or `pnpm build` directly.
-The repository tasks do this automatically. PyTorch is needed for the adapter's
-API examples. The environment supplies the separate Rust documentation nightly
-through `DIPLODOCUS_RUST_TOOLCHAIN`. Set `DIPLODOCUS_BIN` to select a CLI binary;
-the adapter also accepts the compiled binary in `../diplodocus/target/debug/`.
-CI installs the pinned prebuilt CLI. Local binaries may use other versions;
-the adapter requires fragment format version 2 and validates the generated output.
+Development and production builds extract references with Diplodocus.
+The website tasks prepare the editable Python extension, PyTorch for the adapter's
+API examples, and Sphinx for extraction. The environment supplies the separate
+Rust documentation nightly through `DIPLODOCUS_RUST_TOOLCHAIN`. Set
+`DIPLODOCUS_BIN` to select a CLI binary or use the CLI on `PATH`. Devenv uses the
+upstream development branch, and CI uses the default release from
+`setup-diplodocus`. The adapter requires fragment format version 2 and
+validates the generated output.
 
 Run `task website:reference` after editing API documentation. Generated reference
 pages, navigation, assets, and snapshots are ignored by Git. A source export
