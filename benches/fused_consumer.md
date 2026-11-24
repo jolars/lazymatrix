@@ -124,8 +124,7 @@ demonstrates that need.
 One run on October 28, 2026, pinned to CPU 10 of an AMD Ryzen 9 7900, compared
 the public intercept workspace methods with the private prototype. It used
 twenty samples, a 0.2-second warmup, and a requested 0.8-second measurement
-window, without `parallel`. Both paths ran in one exclusive `compute bench`
-window. These point estimates are microseconds per ten
+window, without `parallel`. Both paths ran in one exclusive measurement session. These point estimates are microseconds per ten
 steps for standardized 2,000 × 32 CSC predictors at density 1%, with an
 intercept. The [timing records](intercept_workspaces/timings.csv) include the
 reported intervals.

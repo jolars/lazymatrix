@@ -49,8 +49,7 @@ including order and duplicates, without gathering or allocating.
 Run both representations in one exclusive compute window:
 
 ```sh
-compute bench --reason "LazyMatrix indexed rows versus explicit fold copies" -- \
-  cargo bench --locked --features ndarray,sprs --bench indexed_rows
+cargo bench --locked --features ndarray,sprs --bench indexed_rows
 ```
 
 The fixture has 4,096 rows and 64 columns, with every fifth row excluded (3,276

@@ -174,7 +174,7 @@ KKT violation is 3.36e-10, and their maximum coefficient difference is 3.89e-16.
 Every method takes the same number of sweeps as production. Input generation,
 verification, and warmup fits run outside timing.
 
-Both builds and every measurement ran in one exclusive `compute bench` window on
+Both builds and every measurement ran in one exclusive measurement session on
 CPU 2 of an Intel Core Ultra 7 155U, using Rust 1.98.1, faer 0.24.4, and pulp
 0.22.3. Release builds use 16 codegen units and Cargo's default LTO setting. The
 builds explicitly select generic x86-64 or `target-cpu=native`. Eight blocks
@@ -194,8 +194,7 @@ the matrix and vector's allocated leading dimensions and saved parameters.
 Reproduce from the repository root on an AVX2/FMA-capable x86-64 machine:
 
 ```sh
-compute bench --reason "Explain cached column dot gap against native faer" -- \
-    python benches/column_reductions/cached.py target/cached-column-dots
+python benches/column_reductions/cached.py target/cached-column-dots
 ```
 
 The runner preserves emitted assembly, final-binary disassembly, numerical
@@ -332,7 +331,7 @@ and one-billion-row columns make exactly five stored visits and five vector
 reads. Weighted products also make five weight reads. A vector-sum call panics,
 and allocation counts stay zero. The cached sparse products retain O(nnz) work.
 
-All builds, checks, and measurements share one exclusive `compute bench` window
+All builds, checks, and measurements share one exclusive measurement session
 on CPU 2 of an Intel Core Ultra 7 155U, using Rust 1.98.1, release optimization,
 16 codegen units, and default LTO. The pinned core has 48 KiB of L1 data cache,
 2 MiB of L2 cache, and access to 12 MiB of shared L3 cache. The builds
@@ -353,8 +352,7 @@ dot measurements provide no new consumer evidence for changing that API.
 Reproduce from the repository root:
 
 ```sh
-compute bench --reason "Fused uncached column dot evaluation" -- \
-    python benches/column_reductions/uncached.py target/uncached-column-dots
+python benches/column_reductions/uncached.py target/uncached-column-dots
 ```
 
 The runner accepts `--cpu`, `--blocks`, `--samples`, `--elements`, `--bytes`,
@@ -493,7 +491,7 @@ destinations. Sparse checks preserve the saved visit sequence for unsorted
 duplicate rows, explicit zeros, and implicit rows, with finite, zero, and
 nonfinite multipliers.
 
-All builds and measurements share one exclusive `compute bench` window on CPU 2
+All builds and measurements share one exclusive measurement session on CPU 2
 of an Intel Core Ultra 7 155U, using Rust 1.98.1, release optimization, 16
 codegen units, default LTO, and generic x86-64 code generation. Six blocks use
 all six permutations of variant order. Each process records two observations per
@@ -510,8 +508,7 @@ directory with full assembly.
 Reproduce from the repository root with a local Shrinkage Git checkout:
 
 ```sh
-compute bench --reason "Contiguous logical column updates" -- \
-    env CARGO_TARGET_DIR=/dev/shm/lazymatrix-updates-reproduce TMPDIR=/dev/shm \
+env CARGO_TARGET_DIR=/dev/shm/lazymatrix-updates-reproduce TMPDIR=/dev/shm \
     python benches/column_reductions/updates.py \
     target/column-updates --shrinkage ../shrinkage
 ```
@@ -623,9 +620,9 @@ reversed unit strides, positive and negative stride-three views, row-major
 columns, and forward contiguous controls, using the fixtures described in the
 initial investigation below. General strided kernels remain unchanged.
 
-Both builds and all final measurements share one exclusive `compute bench`
-window, CPU 2 of an AMD Ryzen 9 7900, Rust 1.98.1, release optimization, and
-16 codegen units. Four blocks alternate baseline and candidate process order,
+Both builds and all final measurements share one exclusive session on CPU 2
+of an AMD Ryzen 9 7900, with Rust 1.98.1, release optimization, and 16 codegen
+units. Four blocks alternate baseline and candidate process order,
 with three observations per process and case. Kernel operation and method order
 reverse on alternate observations and blocks. Each kernel observation repeats a
 full pass `clamp(10_000_000 / max(rows * cols, 1), 1, 10000)` times. The two
@@ -637,8 +634,7 @@ also retains assembly for every kernel codegen unit.
 Reproduce from the repository root with a local Shrinkage Git checkout:
 
 ```sh
-compute bench --reason "Production reversed-column reductions" -- \
-    python benches/column_reductions/reversed.py \
+python benches/column_reductions/reversed.py \
     target/reversed-column-production --shrinkage ../shrinkage
 ```
 
@@ -772,7 +768,7 @@ logical order can also differ on these fixtures. The investigation accepts the
 library's existing backend-dependent reduction order; it does not assume
 bitwise or IEEE-class agreement for every finite input.
 
-All final methods run in one exclusive `compute bench` window on CPU 2 of an
+All final methods run in one exclusive measurement session on CPU 2 of an
 AMD Ryzen 9 7900, with Rust 1.98.1, release optimization, 16 codegen units, and
 the `faer,nalgebra,ndarray` features. Four processes each collect five
 observations. Operation and method order reverse on alternate observations and
@@ -792,8 +788,7 @@ settings, and the local artifact directory. The runner preserves assembly there.
 Reproduce the investigation from the repository root:
 
 ```sh
-compute bench --reason "Reversed and strided column reductions" -- \
-    python benches/column_reductions/strided.py \
+python benches/column_reductions/strided.py \
     target/strided-column-reductions --blocks 4 --samples 5 \
     --elements 10000000 --shapes 33x7,5000x64,5000x1000,262144x8
 ```
@@ -833,7 +828,7 @@ takes the square root of its self-dot. The core vector control uses sequential
 slice arithmetic.
 
 Both release builds and all final measurements run in one exclusive
-`compute bench` window on CPU 2, with Rust 1.98.1, 16 codegen units, generic
+measurement session on CPU 2, with Rust 1.98.1, 16 codegen units, generic
 x86-64 code generation, and the `faer,nalgebra,ndarray` features. Six blocks
 alternate baseline and candidate process order. Each process collects five
 observations, reversing operation and method order on alternate observations.
@@ -929,8 +924,7 @@ passed Ruff checks.
 Reproduce the comparison and its summary from the repository root:
 
 ```sh
-compute bench --reason "Remaining solver-facing vector reductions" -- \
-    env PROBE_BENCH=vector_reductions \
+env PROBE_BENCH=vector_reductions \
     PROBE_FEATURES=faer,nalgebra,ndarray PROBE_PREFIX=solver_vector \
     PROBE_BLOCKS=6 PROBE_SAMPLES=5 PROBE_ELEMENTS=5000000 PROBE_FITS=30 \
     bash benches/column_reductions/run-adapters.sh \
@@ -960,9 +954,8 @@ weighted squared norms. Weighted norms normalize each entry before multiplying
 and squaring, preserving the existing behavior at extreme scales. No fast path
 allocates, gathers strided inputs, or changes sparse duplicate handling.
 
-Both release builds and all measurements ran in one exclusive `compute bench`
-window on CPU 2, with Rust 1.98.1, 16 codegen units, and the
-`faer,nalgebra,ndarray` features. The backend releases match the adapter
+Both release builds and all measurements ran in one exclusive session on CPU 2,
+with Rust 1.98.1, 16 codegen units, and the `faer,nalgebra,ndarray` features. The backend releases match the adapter
 measurements below. Inputs have 5,000 rows and 1,000 columns. Matrix entries,
 vector entries, and signed weights are drawn uniformly from [-1, 1) with
 `ChaCha8Rng` and seed 8421. Every column has center 0.375 and scale -1.75.
@@ -1009,8 +1002,7 @@ oracle materialization, and verification are outside timed passes.
 Reproduce the comparison from the repository root:
 
 ```sh
-compute bench --reason "Vector sums and weighted column reductions" -- \
-    env PROBE_BENCH=column_vector_reductions \
+env PROBE_BENCH=column_vector_reductions \
     PROBE_FEATURES=faer,nalgebra,ndarray PROBE_PREFIX=vector \
     bash benches/column_reductions/run-adapters.sh \
     target/vector-reductions 52b1bac
@@ -1025,7 +1017,7 @@ features, and output filenames. Sampling overrides are the same as below.
 The adapter comparison uses baseline revision `ac5f2e4`, before these backends
 expose the hooks, and the working source identified in
 [`adapter_metadata.json`](adapter_metadata.json). Both release builds and all
-measurements ran in one exclusive `compute bench` window on CPU 2, with Rust
+measurements ran in one exclusive measurement session on CPU 2, with Rust
 1.98.1, 16 codegen units, and the `faer,nalgebra` features. The measured releases
 are faer 0.24.4 and nalgebra 0.35.0. Correctness tests exercise every supported
 release through the same shared adapter implementations.
@@ -1071,8 +1063,7 @@ fit measurements below remain separate.
 Reproduce the comparison from the repository root:
 
 ```sh
-compute bench --reason "Faer and nalgebra column reductions" -- \
-    bash benches/column_reductions/run-adapters.sh \
+bash benches/column_reductions/run-adapters.sh \
     target/adapter-column-reductions ac5f2e4
 ```
 
@@ -1175,7 +1166,7 @@ normalization parameters, vector copies, correctness checks, and serialization
 are outside timing. Each method receives one additional warmup pass.
 
 All builds use release optimization, generic x86-64 instructions, no BLAS, and
-no parallel feature. One exclusive `compute bench` window contains all four
+no parallel feature. One exclusive measurement session contains all four
 builds and their comparisons, pinned to logical CPU 2 of an AMD Ryzen 9 7900.
 The published crate and checkout share ndarray 0.17.2. The original input hashes,
 toolchain versions, source hashes, and settings are in
@@ -1328,7 +1319,7 @@ Run from the repository root. The kernel probe is a standalone workspace, so it
 does not add production dependencies or change the root lockfile:
 
 ```sh
-compute bench --reason "Dense column reductions" -- env PROBE_LAYOUTS=1 \
+env PROBE_LAYOUTS=1 \
     bash benches/column_reductions/run.sh \
     ../shrinkage/.build/sklearn-gap-20261103/data/original \
     target/column-reductions/reproduce rust-current
@@ -1345,7 +1336,7 @@ Set `PROBE_SUMMARIES=1` to include the separate and fused summary controls.
 Prepare a fresh downstream directory with NumPy available in the interpreter:
 
 ```sh
-compute run -- python scripts/python-tool.py python \
+python scripts/python-tool.py python \
     benches/column_reductions/downstream.py prepare \
     target/column-reductions/reproduce-fits \
     --data ../shrinkage/.build/sklearn-gap-20261103/data
@@ -1360,7 +1351,7 @@ interpreter and native library environment in which NumPy imports successfully.
 The workspaces retain separate lockfiles for reproducible consumer builds.
 
 ```sh
-compute bench --reason "Native column reduction fits" -- bash -c '
+bash -c '
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
     for variant in current candidate; do
         CARGO_TARGET_DIR="$1/$variant-build" cargo build --release --locked \
@@ -1380,7 +1371,7 @@ For the Python comparison, add `--python` when preparing a fresh downstream
 directory, then build the two isolated extension workspaces:
 
 ```sh
-compute run -- bash -c '
+bash -c '
     export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
     export PYO3_PYTHON="$PWD/.devenv/python/bin/python"
     for variant in current candidate; do
@@ -1388,8 +1379,7 @@ compute run -- bash -c '
             --manifest-path "$1/$variant-python/Cargo.toml" || exit
     done
 ' bash target/column-reductions/reproduce-fits
-compute bench --reason "Python column reduction fits" -- \
-    python scripts/python-tool.py python benches/column_reductions/python_fits.py \
+python scripts/python-tool.py python benches/column_reductions/python_fits.py \
     target/column-reductions/reproduce-fits
 ```
 

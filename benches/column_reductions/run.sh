@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reserve one compute bench window around this script, including both builds.
+# Run this script on an idle machine. It includes both builds.
 probe_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 data=${1:--}
 output=${2:?Specify an output directory.}

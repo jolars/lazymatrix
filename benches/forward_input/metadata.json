@@ -82,7 +82,7 @@
       ]
     }
   ],
-  "compute_coordination": "Both complete runs share one exclusive compute bench reservation. Each pair uses the same executable and fixture.",
+  "compute_coordination": "Both complete runs share one exclusive measurement session. Each pair uses the same executable and fixture.",
   "allocation_method": "One warmed untimed call per case and run; count successful allocation and reallocation calls and cumulative requested bytes, excluding setup and deallocation.",
   "timing_records": 558,
   "allocation_records": 558,

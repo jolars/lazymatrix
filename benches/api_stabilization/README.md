@@ -47,7 +47,7 @@ and `zarrs` features. Both initial builds finish before either revision is
 measured, using separate fresh Cargo target directories. The final comparison
 reuses the unchanged baseline executable and rebuilds the final candidate. Its
 focused ABBA confirmation and complete measurement suites share one exclusive
-`compute bench` reservation. Separate Criterion output directories preserve all
+measurement session. Separate Criterion output directories preserve all
 estimates without comparisons against stale history.
 
 Each complete run measures the baseline first, then the candidate, with one
@@ -96,7 +96,7 @@ git archive dc8a0b3b820666b7e9f27d8aa99b75816769cf2e | tar -x -C "$comparison_ba
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 RAYON_NUM_THREADS=1
 export MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_DYNAMIC=FALSE
 unset LAZYMATRIX_BENCH_SMOKE LAZYMATRIX_BENCH_QUICK
-compute bench --reason "Compare API stabilization submatrix and pipeline paths" -- bash -c '
+bash -c '
   set -euo pipefail
   for revision in baseline candidate; do
     source=$2

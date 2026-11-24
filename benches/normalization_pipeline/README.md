@@ -3,8 +3,7 @@
 Run paired eager and lazy comparisons in one exclusive reservation:
 
 ```sh
-compute bench --reason "Compare ordered normalization runtime and workspace" -- \
-  bash scripts/bench-normalization-pipeline.sh
+bash scripts/bench-normalization-pipeline.sh
 ```
 
 The script writes timing estimates, allocation profiles, metadata, and the full
@@ -61,8 +60,7 @@ Compare fused calls with explicit allocating products and output updates in one
 exclusive reservation:
 
 ```sh
-compute bench --reason "Compare fused and manual normalized vector products" -- \
-  env LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked --no-default-features \
+env LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked --no-default-features \
   --features ndarray,sprs --bench normalization_pipeline -- \
   fused_pipeline/256x128/0.01 --noplot --warm-up-time 0.1 \
   --measurement-time 0.3 --sample-size 20 --nresamples 10000
@@ -102,8 +100,7 @@ Compare the existing fused methods with workspace methods in one exclusive
 reservation:
 
 ```sh
-compute bench --reason "Compare fused and caller-workspace row and chain products" -- \
-  env CARGO_INCREMENTAL=0 LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked \
+env CARGO_INCREMENTAL=0 LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked \
   --no-default-features --features ndarray,sprs --bench normalization_pipeline -- \
   workspace_pipeline/256x128/0.01 --noplot --warm-up-time 0.1 \
   --measurement-time 0.3 --sample-size 20 --nresamples 10000
@@ -152,8 +149,7 @@ Compare reusable vector products with batched products in one exclusive
 reservation:
 
 ```sh
-compute bench --reason "Compare vector and batched row and chain products" -- \
-  env CARGO_INCREMENTAL=0 LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked \
+env CARGO_INCREMENTAL=0 LAZYMATRIX_BENCH_SMOKE=1 cargo bench --locked \
   --no-default-features --features ndarray,sprs --bench normalization_pipeline -- \
   batched_pipeline/256x128/0.01/17 --noplot --warm-up-time 0.1 \
   --measurement-time 0.3 --sample-size 20 --nresamples 10000

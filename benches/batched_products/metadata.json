@@ -26,5 +26,5 @@
   "allocation_profiles": "One separate warmed operation per CSV row; peaks exclude resident input, output, and source buffers.",
   "zarr_storage": "Uncompressed MemoryStore with counting reads; 128x32 chunks, 16 chunks per scan.",
   "consumer": "Ten gradient updates plus final evaluation, standardized predictors, implicit intercept, 4 or 16 responses.",
-  "command": "compute bench --reason \"Compare batched products with vector calls\" -- cargo bench --locked --bench batched_products --features faer,nalgebra,ndarray,sprs,zarrs"
+  "command": "cargo bench --locked --bench batched_products --features faer,nalgebra,ndarray,sprs,zarrs"
 }

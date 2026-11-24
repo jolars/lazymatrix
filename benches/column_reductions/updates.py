@@ -1,6 +1,6 @@
 """Compare indexed column updates, a mutable-slice prototype, and complete fits.
 
-Run once inside compute bench to keep all builds and measurements together.
+Run once to keep all builds and measurements together.
 """
 
 import argparse
@@ -398,7 +398,7 @@ lazymatrix = {{ path = "../{variant}-source" }}
         "cargo": command("cargo", "-V"),
         "cpu": command("lscpu"),
         "pinned_cpu": args.cpu,
-        "compute_window": "All three builds, controls, and complete fits in one exclusive compute bench window.",
+        "compute_window": "All three builds, controls, and complete fits in one exclusive measurement session.",
         "profile": "release, 16 codegen units, default LTO",
         "rustflags": environment.get("RUSTFLAGS", ""),
         "features": ["faer", "nalgebra", "ndarray"],

@@ -8,14 +8,13 @@ Both strategies train weights in normalized coordinates.
 Install the adapter and check correctness before measuring:
 
 ```sh
-compute run -- task python:torch:check
+task python:torch:check
 ```
 
 Run all strategies in one exclusive window:
 
 ```sh
-compute bench --reason "Compare PyTorch first-layer throughput and memory" -- \
-  python scripts/python-tool.py python benches/torch_adapter/benchmark.py \
+python scripts/python-tool.py python benches/torch_adapter/benchmark.py \
   --device all --output benches/torch_adapter
 ```
 

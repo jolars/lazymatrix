@@ -1,6 +1,6 @@
 """Compare production reversed-column reductions and complete Shrinkage fits.
 
-Wrap this runner once in compute bench, including all builds and measurements.
+Run the builds and measurements together in one session.
 """
 
 import argparse
@@ -311,7 +311,7 @@ lazymatrix = {{ path = "../{variant}-source" }}
         "cargo": command("cargo", "-V"),
         "cpu": command("lscpu"),
         "pinned_cpu": args.cpu,
-        "compute_window": "Both builds, kernel controls, and complete consumer fits in one exclusive compute bench window.",
+        "compute_window": "Both builds, kernel controls, and complete consumer fits in one exclusive measurement session.",
         "profile": "release, 16 codegen units, default LTO",
         "rustflags": environment.get("RUSTFLAGS", ""),
         "features": ["faer", "nalgebra", "ndarray"],

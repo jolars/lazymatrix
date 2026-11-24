@@ -5,10 +5,9 @@ sums and Gram products with reusable ndarray outputs. Run all cases in one
 exclusive compute window:
 
 ```sh
-compute run -- cargo bench --locked --no-default-features \
+cargo bench --locked --no-default-features \
   --features ndarray,sprs --bench weighted_gram --no-run
-compute bench --reason "Compare normalized weighted operations" -- \
-  cargo bench --locked --no-default-features --features ndarray,sprs \
+cargo bench --locked --no-default-features --features ndarray,sprs \
     --bench weighted_gram -- normalized_weighted
 ```
 

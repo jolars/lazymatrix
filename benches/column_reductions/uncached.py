@@ -1,4 +1,4 @@
-"""Build and compare fused uncached dots inside one compute bench reservation."""
+"""Build and compare fused uncached dots in one session."""
 
 import argparse
 import csv
@@ -228,7 +228,7 @@ def main():
         "cpu": command("lscpu"),
         "cpu_caches": command("lscpu", "-C"),
         "pinned_cpu": args.cpu,
-        "compute_window": "One exclusive compute bench window for both builds and every method.",
+        "compute_window": "One exclusive measurement session for both builds and every method.",
         "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO",
         "builds": {
             name: {

@@ -40,7 +40,7 @@ unchanged. Timing includes allocating and destroying the returned vector. The
 counting allocator forwards to `System` and disables counting during timing,
 although each allocation still checks the counting flag.
 
-Two complete runs share one exclusive `compute bench` reservation and CPU 10 of
+Two complete runs share one exclusive measurement session and CPU 10 of
 an AMD Ryzen 9 7900. Each pair uses the same executable, matrix, coefficients,
 and fitted parameters. The second run reverses the two product methods' order.
 Each timing uses twenty samples, a 0.1-second warmup, a requested 0.4-second
@@ -153,7 +153,7 @@ counts and repeated wide-input results provide the clearest evidence.
 From the repository root, build and smoke-check the benchmark:
 
 ```sh
-compute run -- cargo bench --locked --bench forward_input \
+cargo bench --locked --bench forward_input \
   --features faer,nalgebra,ndarray,sprs -- --test
 ```
 
@@ -161,7 +161,7 @@ Run the complete comparison in one reservation. Change CPU 10 to an available
 CPU on another machine.
 
 ```sh
-compute bench --reason "Validate implemented forward input borrowing against the cloned baseline" -- bash -c '
+bash -c '
 set -euo pipefail
 taskset -c 10 cargo bench --locked --bench forward_input \
   --features faer,nalgebra,ndarray,sprs -- \
@@ -189,7 +189,7 @@ Omitting `--baselines` re-exports the original investigation's records from
 
 ## Validation
 
-After implementation, `compute run -- task ci` passed, including the full
+After implementation, `task ci` passed, including the full
 backend version, parallel, and feature-unification test matrix, Python checks
 and packaging, and website checks. The benchmark smoke run passed all 279 cases.
 Clippy for the benchmark and Ruff for the exporter passed. Re-exporting the

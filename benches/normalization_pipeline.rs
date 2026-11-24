@@ -1,6 +1,6 @@
 //! Fit-and-product comparisons over paired eager and lazy pipelines.
 //!
-//! Run with the memory companion in one compute bench reservation. See
+//! Run with the memory companion in the same measurement session. See
 //! benches/normalization_pipeline/README.md for commands and recorded results.
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};

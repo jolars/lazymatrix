@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reserve one compute bench window around this script, including both builds.
+# Run this script on an idle machine. It includes both builds.
 repository=$(git rev-parse --show-toplevel)
 output=${1:?Specify an output directory.}
 baseline_ref=${2:-ac5f2e4}
@@ -123,7 +123,7 @@ metadata = {
     "platform": platform.platform(),
     "cpu": command("lscpu"),
     "pinned_cpu": int(cpu),
-    "compute_window": "One exclusive compute bench window for both builds and all measurements.",
+    "compute_window": "One exclusive measurement session for both builds and all measurements.",
     "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO, generic x86-64",
     "rustflags": os.environ.get("RUSTFLAGS", ""),
     "features": features.split(","),

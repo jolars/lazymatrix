@@ -44,5 +44,5 @@
     "benches/common/pipeline.rs": "6b3356d9ea12470ca8ce8a43255d98415fa351a46c0528807b00fed11dfa510f",
     "benches/common/normalization.rs": "d134fe1f1ae0ba50dab16c4f03254753636f6986c39fdd434a03af90caca7e71"
   },
-  "reservation": "All baseline and candidate timings in one compute bench window"
+  "reservation": "All baseline and candidate timings in one measurement session"
 }

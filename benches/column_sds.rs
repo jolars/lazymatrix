@@ -2,7 +2,7 @@
 //!
 //! Run the CSC comparison in one exclusive compute window:
 //! ```text
-//! compute bench --reason "Compare faer CSC statistics" -- cargo bench --locked \
+//! cargo bench --locked \
 //!   --no-default-features --features faer_v0_24 --bench column_sds -- \
 //!   faer_csc_sd --sample-size 30 --warm-up-time 1 --measurement-time 2 --noplot
 //! ```

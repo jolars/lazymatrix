@@ -6,8 +6,7 @@ Zarr storage are prepared before measurement. Each method fits the same values
 and checks its parameters against the reference before measuring.
 
 ```sh
-compute bench --reason "Compare exact quantile fitting" -- \
-  cargo bench --locked --bench quantile_fitting --features ndarray,sprs,zarrs
+cargo bench --locked --bench quantile_fitting --features ndarray,sprs,zarrs
 ```
 
 The baseline and candidates run in one exclusive compute window. Set

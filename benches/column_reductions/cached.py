@@ -1,4 +1,4 @@
-"""Diagnose cached dots in one compute bench window, including both builds."""
+"""Diagnose cached dots in one session, including both builds."""
 
 import argparse
 import csv
@@ -296,7 +296,7 @@ def main():
         "cpu": command("lscpu"),
         "cpu_caches": command("lscpu", "-C"),
         "pinned_cpu": args.cpu,
-        "compute_window": "One exclusive compute bench window for both builds, every method, and all fits.",
+        "compute_window": "One exclusive measurement session for both builds, every method, and all fits.",
         "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO",
         "builds": {"generic": "-C target-cpu=x86-64", "native": "-C target-cpu=native"},
         "features": ["faer"],

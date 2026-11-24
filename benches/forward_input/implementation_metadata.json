@@ -82,7 +82,7 @@
       ]
     }
   ],
-  "compute_coordination": "Both complete runs share one exclusive compute bench reservation. The retained reference and public operator use the same executable and fixture.",
+  "compute_coordination": "Both complete runs share one exclusive measurement session. The retained reference and public operator use the same executable and fixture.",
   "allocation_method": "One warmed untimed call per case and run; count successful allocation and reallocation calls and cumulative requested bytes, excluding setup and deallocation.",
   "timing_records": 558,
   "allocation_records": 558,
@@ -92,7 +92,7 @@
     "benches/forward_input.rs": "905dca9b2ab4afd89fa882d63a85acaace4183f0b960924b9bd567587574ccef"
   },
   "validation": {
-    "command": "compute run -- task ci",
+    "command": "task ci",
     "exit_code": 0,
     "benchmark_smoke_cases": 279
   },

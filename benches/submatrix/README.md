@@ -3,8 +3,7 @@
 Run the benchmark and untimed peak heap workspace measurements with:
 
 ```sh
-compute bench --reason "submatrix products and weighted operations" -- \
-  cargo bench --locked --bench submatrix --features ndarray,sprs,zarrs
+cargo bench --locked --bench submatrix --features ndarray,sprs,zarrs
 ```
 
 The source has 4,096 rows and 256 columns, with approximately 1% nonzero entries.
@@ -25,7 +24,7 @@ That baseline assumes unique entries and does not supply a general submatrix
 API or duplicate handling. Both use caller-owned input and output vectors.
 
 `timings.csv`, `allocations.csv`, and `metadata.json` record a short smoke run
-in one exclusive `compute` window. Timings report Criterion's bootstrap means
+in one exclusive measurement session. Timings report Criterion's bootstrap means
 and 95% confidence intervals with 10 samples, 0.1 seconds of warmup, and 0.2
 seconds of measurement. Use Criterion's default settings for performance
 conclusions. Historical Criterion change estimates are not part of these data.

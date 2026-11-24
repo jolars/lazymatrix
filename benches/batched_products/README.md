@@ -7,10 +7,9 @@ The harness verifies their products and consumer updates before timing them.
 Run the comparison in one exclusive compute window:
 
 ```sh
-compute run -- cargo bench --locked --bench batched_products \
+cargo bench --locked --bench batched_products \
   --features faer,nalgebra,ndarray,sprs,zarrs --no-run
-compute bench --reason "Compare batched products with vector calls" -- \
-  bash -c 'cargo bench --locked --bench batched_products \
+bash -c 'cargo bench --locked --bench batched_products \
     --features faer,nalgebra,ndarray,sprs,zarrs > benches/batched_products/timings.csv'
 ```
 

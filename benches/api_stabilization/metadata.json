@@ -250,7 +250,7 @@
     "candidate submatrix",
     "candidate pipeline"
   ],
-  "compute_reservation": "One exclusive compute bench window contains both builds and all measurements.",
+  "compute_reservation": "One exclusive measurement session contains both builds and all measurements.",
   "criterion_history": "Separate fresh target directories; only new estimates included.",
   "memory_measure": "Peak additional live requested Rust heap bytes. Source and caller-owned buffers excluded; pipeline lifecycle includes fitting and one allocating forward/transpose pair.",
   "raw_artifacts": "target/api-stabilization-bench",
@@ -258,7 +258,7 @@
     "started_at_utc": "2026-11-02T21:55:38.522053+00:00",
     "completed_at_utc": "2026-11-02T21:55:59.163739+00:00",
     "reason": "Initial Zarr Gram and sparse CSC product outliers, compared with unchanged native/eager controls.",
-    "compute_reservation": "One additional exclusive compute bench window for all four ABBA rounds.",
+    "compute_reservation": "One additional exclusive measurement session for all four ABBA rounds.",
     "order": [
       {
         "run": "confirmation-1",
@@ -298,7 +298,7 @@
     "started_at_utc": "2026-11-02T22:00:42.887364+00:00",
     "completed_at_utc": "2026-11-02T22:01:18.374148+00:00",
     "reason": "Confirm direct unfused full-operator dispatch and inline hints on selected metadata/weighted forwarding helpers.",
-    "compute_reservation": "One additional exclusive compute bench window for all four ABBA rounds.",
+    "compute_reservation": "One additional exclusive measurement session for all four ABBA rounds.",
     "order": [
       {
         "run": "tuned-confirmation-1",
@@ -341,7 +341,7 @@
     "started_at_utc": "2026-11-02T22:04:34.136925+00:00",
     "completed_at_utc": "2026-11-02T22:05:09.127338+00:00",
     "reason": "Confirm private rectangle/coalescing specialization and direct triangular Gram loop ranges.",
-    "compute_reservation": "One additional exclusive compute bench window for all four ABBA rounds.",
+    "compute_reservation": "One additional exclusive measurement session for all four ABBA rounds.",
     "order": [
       {
         "run": "specialized-confirmation-1",

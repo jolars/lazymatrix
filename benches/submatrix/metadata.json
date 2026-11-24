@@ -4,7 +4,7 @@
   "cpu": "AMD Ryzen 9 7900 12-Core Processor",
   "base_revision": "de360194c980d3fc39570bad18ce142c989d076c",
   "source_state": "Working tree implementing bounded Zarr submatrices and weighted operations.",
-  "command": "compute bench --reason 'verified submatrix products and weighted operations versus native views' -- cargo bench --locked --bench submatrix --features ndarray,sprs,zarrs -- --sample-size 10 --warm-up-time 0.1 --measurement-time 0.2",
+  "command": "cargo bench --locked --bench submatrix --features ndarray,sprs,zarrs -- --sample-size 10 --warm-up-time 0.1 --measurement-time 0.2",
   "timing_statistic": "Criterion bootstrap mean with 95% confidence intervals, in nanoseconds.",
   "source_shape": [
     4096,

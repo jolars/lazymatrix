@@ -1,6 +1,6 @@
 """Build, check, measure, and summarize the strided-column investigation.
 
-Run inside one compute bench reservation so every method shares the same window.
+Measure every method in one session.
 """
 
 import argparse
@@ -196,7 +196,7 @@ def main():
         "platform": platform.platform(),
         "cpu": command("lscpu"),
         "pinned_cpu": args.cpu,
-        "compute_window": "One exclusive compute bench window for the build, validation, and all methods.",
+        "compute_window": "One exclusive measurement session for the build, validation, and all methods.",
         "profile": "release, opt-level=3, 16 codegen units, Cargo default LTO",
         "rustflags": environment.get("RUSTFLAGS", ""),
         "features": ["faer", "nalgebra", "ndarray"],

@@ -24,5 +24,5 @@
     "src/fused_normalization.rs": "9911d9d91c61e59cd577ab9f7d0e0dd42e0586fcf37efa0358a6157bac0d9ce8",
     "benches/normalization_pipeline.rs": "d36ff7587aa3287860779aaf6fbb6081ee9541bb3ba655e3f14ed537fd5b32bf"
   },
-  "reservation": "All baseline and candidate timings in one compute bench window"
+  "reservation": "All baseline and candidate timings in one measurement session"
 }
