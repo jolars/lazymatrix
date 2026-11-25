@@ -16,7 +16,7 @@
     "test": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
-    "@mdit/plugin-katex": "1.2.0",
+    "@mdit/plugin-katex": "1.2.1",
     "@observablehq/plot": "0.6.19",
     "cheerio": "^1.2.0",
     "csv-parse": "^7.0.3",
@@ -26,7 +26,7 @@
     "turndown": "^7.2.5",
     "turndown-plugin-gfm": "^1.0.2",
     "vitepress": "1.6.4",
-    "wrangler": "4.162.0",
+    "wrangler": "4.166.0",
     "yaml": "2.9.1"
   }
 }
