@@ -80,6 +80,37 @@ values when centering is active, including implicit sparse zeros. See the
 [Python normalization reference](/reference/python/lazymatrix.normalize)
 for the complete set of choices.
 
+## Fit a custom min-max range
+
+Choose the output interval when fitting, then reuse the fitted column
+parameters on new samples.
+
+::: code-group
+
+```rust [Rust]
+use lazymatrix::MinMaxNormalization;
+
+let recipe = MinMaxNormalization::new(-2.0, 3.0).unwrap();
+let params = recipe.fit(&x).unwrap();
+let scaled = params.view().apply(&x);
+```
+
+```python [Python]
+from lazymatrix import MinMaxNormalization
+
+recipe = MinMaxNormalization(feature_range=(-2.0, 3.0))
+params = recipe.fit(X)
+scaled = params.transform(X)
+```
+
+:::
+
+Constant training columns map to the lower bound. New values outside the
+training extrema extrapolate beyond the output interval. The bounds and their
+difference must be finite, with the lower bound strictly below the upper bound.
+A large training minimum relative to the column spread can reduce endpoint
+accuracy because the output offset is folded into the fitted center.
+
 ## Fit robust normalization
 
 Robust normalization subtracts medians and divides by the interquartile range.

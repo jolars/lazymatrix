@@ -1,7 +1,9 @@
+mod min_max;
 mod normal;
 pub(crate) mod pipeline;
 pub(crate) mod row;
 
+pub use min_max::{InvalidFeatureRange, MinMaxFitError, MinMaxNormalization};
 pub use pipeline::{
     FittedRowNormalization, NormalizationChain, NormalizationChainParams, PrepareNewSamples,
 };
@@ -86,7 +88,7 @@ pub trait NormalizationParams: private::Params<Self::Scalar> {
 pub trait NormalizationRecipe<M: crate::MatrixErrorType + ?Sized, P: NormalizationParams> {
     /// Failure while fitting this recipe.
     ///
-    /// Built-in recipes use `M::Error`. Custom recipes can use their own error
+    /// Primitive column and row recipes use `M::Error`. Custom recipes can use their own error
     /// type to report invalid recipe settings and wrap backend failures.
     /// Products on the fitted operator still return the backend's error type.
     type Error: std::error::Error;

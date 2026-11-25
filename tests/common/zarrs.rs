@@ -264,6 +264,14 @@ fn rectangular_reads_preserve_fill_values_and_f32_edge_values() {
         .unwrap();
     store_chunk(&array, &[1, 1], &[3.0_f32, f32::NAN, f32::NAN, f32::NAN]).unwrap();
     let matrix = ZarrMatrix::<_, f32>::try_new(array).unwrap();
+    let fitted = lazymatrix::MinMaxNormalization::new(-2.0, 2.0)
+        .unwrap()
+        .fit_apply(&matrix)
+        .unwrap();
+    assert_eq!(
+        fitted.matvec(&vec![0.0, 0.0, 1.0]).unwrap(),
+        [2.0, 2.0, -2.0]
+    );
     let mut buffer = [0.0_f32; 4];
     assert_eq!(
         matrix.read_block(1..3, 1..3, &mut buffer).unwrap().values(),
@@ -786,6 +794,29 @@ fn normalization_and_products_read_each_chunk_once_per_scan() {
             }
         }
     }
+}
+
+#[test]
+fn custom_min_max_uses_one_fitting_scan() {
+    use lazymatrix::{MinMaxFitError, MinMaxNormalization};
+
+    let (matrix, store) = tracked(false);
+    let base = ColumnNormalization::min_max().fit_apply(&matrix).unwrap();
+    store.reset();
+    let recipe = MinMaxNormalization::new(-2.0, 2.0).unwrap();
+    let custom = recipe.fit_apply(&matrix).unwrap();
+    assert_scans(&store, &matrix, 1);
+    let rhs = vec![1.0; 3];
+    let expected = base.matvec(&rhs).unwrap();
+    for (actual, base) in custom.matvec(&rhs).unwrap().into_iter().zip(expected) {
+        approx::assert_relative_eq!(actual, 4.0 * base - 6.0, epsilon = 1e-10);
+    }
+    store.reset();
+    store.fail_after.store(0, Ordering::Relaxed);
+    assert!(matches!(
+        recipe.fit(&matrix),
+        Err(MinMaxFitError::Backend(_))
+    ));
 }
 
 #[test]

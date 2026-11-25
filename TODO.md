@@ -31,12 +31,10 @@ assuming full API or numerical parity.
 - [ ] Consider explicitly approximate quantiles if storage-backed consumers need
   fewer fitting scans. Keep exact quantiles as the default.
 
-- [ ] Extend min-max scaling beyond the default `[0, 1]` range (`MinMaxScaler`).
-  - Evaluate a parameterized `feature_range` recipe that computes explicit
-    centers and scales, including constant-column behavior and reuse on new
-    data.
-  - Evaluate optional clipping for `MinMaxScaler` and `MaxAbsScaler` separately
-    from the affine normalization metadata.
+- [x] Extend min-max scaling beyond the default `[0, 1]` range.
+- [ ] Evaluate a separate entrywise clipping adapter for min-max and max-absolute
+  scaling. Products must clamp logical entries before accumulation, including
+  the transformed implicit zeros in sparse storage.
 
 - [ ] Evaluate weighted and incremental fitting of normalization parameters.
   - Cover weighted means and population standard deviations, as supported by

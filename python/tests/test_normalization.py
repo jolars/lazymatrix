@@ -4,6 +4,7 @@ from lazymatrix import (
     ColumnNormalization,
     ColumnNormalizationParams,
     LazyMatrix,
+    MinMaxNormalization,
     RowNormalization,
     RowNormalizationParams,
     normalize,
@@ -609,3 +610,40 @@ def test_empty_row_normalization_dimensions(storage, constructor):
     assert rows.toarray().shape == (3, 0)
     columns = ColumnNormalizationParams(3).transform(storage(np.empty((0, 3))))
     assert columns.toarray().shape == (0, 3)
+
+
+@pytest.mark.parametrize("storage", STORAGE)
+def test_custom_min_max_range(storage):
+    recipe = MinMaxNormalization(feature_range=(-2.0, 2.0))
+    raw = storage(np.array([[0.0, 2.0], [2.0, 2.0], [4.0, 2.0]]))
+    expected = np.array([[-2.0, -2.0], [0.0, -2.0], [2.0, -2.0]])
+    fitted = recipe.fit_apply(raw)
+    assert_allclose(fitted.toarray(), expected)
+    assert_allclose(fitted @ np.ones(2), expected @ np.ones(2))
+    assert_allclose(fitted.T @ np.ones(3), expected.T @ np.ones(3))
+    validation = recipe.fit(raw).transform(storage(np.array([[8.0, 3.0]])))
+    assert_allclose(validation.toarray(), [[6.0, 2.0]])
+    assert_allclose(
+        MinMaxNormalization().fit_apply(raw).toarray(),
+        normalize(raw, center="min", scale="range").toarray(),
+    )
+
+
+@pytest.mark.parametrize("bounds", [(1, 1), (2, 1), (0, np.inf), (-1e308, 1e308)])
+def test_invalid_feature_range(bounds):
+    with pytest.raises(ValueError, match="feature bounds"):
+        MinMaxNormalization(feature_range=bounds)
+
+
+def test_unrepresentable_min_max_parameters():
+    recipe = MinMaxNormalization(feature_range=(0.0, 1e-308))
+    with pytest.raises(ValueError, match="column 0"):
+        recipe.fit(np.array([[0.0], [10.0]]))
+
+
+def test_custom_min_max_coalesces_duplicates_before_fitting():
+    raw = sparse.csr_matrix(
+        ([3.0, -3.0, 2.0, 4.0], [0, 0, 0, 1], [0, 2, 3, 4]), shape=(3, 2)
+    )
+    fitted = MinMaxNormalization(feature_range=(1.0, 3.0)).fit_apply(raw)
+    assert_allclose(fitted.toarray(), [[1.0, 1.0], [3.0, 1.0], [1.0, 3.0]])

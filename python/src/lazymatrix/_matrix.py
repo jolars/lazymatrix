@@ -21,7 +21,9 @@ def _real_array(value: Any) -> NDArray[np.float64]:
 Centering = bool | Literal["none", "mean", "min", "median"]
 Scaling = bool | Literal["none", "sd", "range", "quantile_range", "maxabs", "l1", "l2"]
 NormalizationAxis = Literal[0, 1]
-Specification = tuple[int, str, str, int, tuple[float, float], bool]
+Specification = tuple[
+    int, str, str, int, tuple[float, float], bool, tuple[float, float] | None
+]
 
 
 def _method(value: Any, name: str, default: str, choices: tuple[str, ...]) -> str:
@@ -72,7 +74,7 @@ def _specification(
             raise ValueError(
                 "unit_variance requires quantile bounds strictly inside (0, 1)"
             )
-    return axis, center, scale, df, (lower, upper), bool(unit_variance)
+    return axis, center, scale, df, (lower, upper), bool(unit_variance), None
 
 
 class _NormalizationParams:
@@ -306,6 +308,43 @@ class ColumnNormalization(_Normalization):
         with ``matrix.normalization.transform(X_new)``.
         """
         return self._fit_apply(X)
+
+
+class MinMaxNormalization(ColumnNormalization):
+    """Fit columns to a finite, increasing feature range.
+
+    Constant training columns map to the lower bound. Fitted parameters
+    extrapolate when reused on new samples. Invalid bounds or unrepresentable
+    fitted parameters raise ValueError. Large training offsets relative to
+    column spread can reduce endpoint accuracy.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, *, feature_range: tuple[float, float] = (0.0, 1.0)) -> None:
+        bounds = _real_array(feature_range)
+        if bounds.shape != (2,):
+            raise ValueError("feature_range must contain two bounds")
+        lower, upper = map(float, bounds)
+        if not (lower < upper and np.isfinite(upper - lower)):
+            raise ValueError(
+                "feature bounds must be finite and increasing with finite width"
+            )
+        self._center, self._scale = "min", "range"
+        self._specification = (
+            0,
+            "min",
+            "range",
+            0,
+            (0.25, 0.75),
+            False,
+            (lower, upper),
+        )
+
+    @property
+    def feature_range(self) -> tuple[float, float]:
+        """Lower and upper bounds of the fitted output interval."""
+        return cast(tuple[float, float], self._specification[6])
 
 
 class RowNormalization(_Normalization):

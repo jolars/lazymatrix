@@ -1803,6 +1803,28 @@ pub fn run_backend_suite<M, V>(
         + SumEntries<f64>
         + ScaledSubSlice<f64>,
 {
+    let training = build(&matrix_from_dense(vec![
+        vec![0.0, 2.0],
+        vec![2.0, 2.0],
+        vec![4.0, 2.0],
+    ]));
+    let recipe = lazymatrix::MinMaxNormalization::new(-2.0, 2.0).unwrap();
+    let fitted = LazyMatrix::new(&training, recipe).unwrap();
+    let x = to_v(&[1.0, 0.5]);
+    let y = to_v(&[2.0, 1.0, 4.0]);
+    let forward = from_v(&fitted.matvec(&x).unwrap());
+    let transpose = from_v(&fitted.mat_transpose_vec(&y).unwrap());
+    assert_eq!(forward, [-3.0, -1.0, 1.0]);
+    assert_eq!(transpose, [4.0, -14.0]);
+    assert_eq!(
+        2.0 * forward[0] + forward[1] + 4.0 * forward[2],
+        transpose[0] + 0.5 * transpose[1]
+    );
+
+    let validation = build(&matrix_from_dense(vec![vec![8.0, 3.0]]));
+    let validation = fitted.normalization().view().apply(&validation);
+    assert_eq!(from_v(&validation.matvec(&x).unwrap()), [7.0]);
+
     column_parameter_application(&build, &to_v, &from_v);
     custom_recipe_products(&build, &to_v, &from_v);
     intercept_products(&build, &to_v, &from_v);

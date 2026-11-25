@@ -702,8 +702,9 @@ pub use intercept::WithIntercept;
 pub use matrix::LazyMatrix;
 pub use normalization::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnNormalizationParamsView,
-    ColumnNormalizationStats, FittedRowNormalization, NormalizationChain, NormalizationChainParams,
-    NormalizationParams, NormalizationRecipe, PrepareNewSamples, QuantileRange, RowNormalization,
+    ColumnNormalizationStats, FittedRowNormalization, InvalidFeatureRange, MinMaxFitError,
+    MinMaxNormalization, NormalizationChain, NormalizationChainParams, NormalizationParams,
+    NormalizationRecipe, PrepareNewSamples, QuantileRange, RowNormalization,
     RowNormalizationParams, RowNormalizationParamsView, RowNormalizationStats, Scaling,
 };
 pub use row::LazyRow;

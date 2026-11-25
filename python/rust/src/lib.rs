@@ -4,8 +4,8 @@ use std::convert::Infallible;
 
 use lazymatrix::{
     Centering, ColumnNormalization, ColumnNormalizationParams, ColumnStats, LazyMatrix,
-    MatTransposeVec, MatVec, QuantileRange, RowNormalization, RowNormalizationParams, RowStats,
-    Scaling,
+    MatTransposeVec, MatVec, MinMaxNormalization, QuantileRange, RowNormalization,
+    RowNormalizationParams, RowStats, Scaling,
 };
 use ndarray::{Array1, Array2, Axis};
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -44,7 +44,15 @@ fn infallible<T>(result: Result<T, Infallible>) -> T {
     }
 }
 
-type Specification = (usize, String, String, usize, (f64, f64), bool);
+type Specification = (
+    usize,
+    String,
+    String,
+    usize,
+    (f64, f64),
+    bool,
+    Option<(f64, f64)>,
+);
 
 fn fitted<M>(
     raw: &M,
@@ -71,13 +79,20 @@ where
             }
             Ok(params.inner.clone())
         }
-        (Some((axis, center, scale, df, (lower, upper), unit_variance)), None) => {
+        (Some((axis, center, scale, df, (lower, upper), unit_variance, feature_range)), None) => {
             validate_axis(axis)?;
             if axis == 0 && raw.nrows() == 0 {
                 return Err(PyValueError::new_err("input must have at least one row"));
             }
             if axis == 1 && raw.ncols() == 0 {
                 return Err(PyValueError::new_err("input must have at least one column"));
+            }
+            if let Some((lower, upper)) = feature_range {
+                return MinMaxNormalization::new(lower, upper)
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?
+                    .fit(raw)
+                    .map(FittedParams::Columns)
+                    .map_err(|error| PyValueError::new_err(error.to_string()));
             }
             let center = match center.as_str() {
                 "none" => Centering::None,
