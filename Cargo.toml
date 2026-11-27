@@ -98,7 +98,7 @@ rand = { version = "0.10", default-features = false, features = [
 ] }
 rand_chacha = "0.10"
 memmap2 = "0.9"
-ndarray-npy = { version = "0.10", default-features = false }
+ndarray-npy = { version = "0.11", default-features = false }
 tempfile = "3"
 
 [[example]]
